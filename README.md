@@ -71,7 +71,7 @@ recommended free sources.
 - **The assault**: drive up the ridge after 9 PM. The Vescari house is a walled estate with
   guards standing posts and walking patrols. Stay unseen and they stay put; get spotted and the
   **alarm** wakes the whole house and (unless Mickey's tow trucks block the road) sends
-  reinforcements. Each ally changes the night: Ingrid's truck rams the front gate, Walt's flares
+  reinforcements. Each ally changes the night: Ingrid's truck rams the front gate (and the two guards behind it), Walt's flares
   pull two guards to the water, Marcus marks every guard for 90 seconds, Ruth waits in the car and
   pulls you out once. Dante Ruggiero carries the key to Leo's study.
 - **Four endings**, chosen in Leo's study: *The Long Arm* (only if Agent Reyes is on your side),

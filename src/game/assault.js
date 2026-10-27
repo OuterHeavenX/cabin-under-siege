@@ -18,7 +18,7 @@ export const allies = () => (G.s.allies || []);
 export const hasAlly = (id) => allies().includes(id);
 
 const POSTS = [
-  ['gunman', 'g_gate1', 'g_gate2'], ['scout', 'g_gate2', 'g_gate1'], ['gunman', 'g_drive', 'g_terrace'],
+  ['gunman', 'g_gate1', 'g_gate2', 'ingrid'], ['scout', 'g_gate2', 'g_gate1', 'ingrid'], ['gunman', 'g_drive', 'g_terrace'],
   ['handler', 'g_west1', 'g_west2'], ['gunman', 'g_east1', 'g_east2'], ['sniper', 'g_south1', 'g_south2'],
   ['enforcer', 'g_pool', null, 'walt'], ['scout', 'g_garage', 'g_east1', 'walt'],
   ['gunman', 'g_hall1', 'g_hall2'], ['enforcer', 'g_kitchen', null], ['scout', 'g_dining', 'g_hall1'],
@@ -49,7 +49,7 @@ export function startAssault() {
   boss.guard = { pts: [d], i: 0, wait: 0 };
   setMusic('night');
   const notes = [];
-  if (hasAlly('ingrid')) notes.push('Ingrid\'s truck took the front gate off its hinges');
+  if (hasAlly('ingrid')) notes.push('Ingrid\'s truck took the front gate off its hinges, and both gate guards with it');
   if (hasAlly('walt')) notes.push('Walt\'s flares drew the pool guards down to the water');
   if (hasAlly('marcus')) notes.push('Marcus is reading you their radio chatter — every guard is marked');
   if (hasAlly('mickey')) notes.push('Mickey\'s tow trucks are blocking the road: no reinforcements');
