@@ -15,6 +15,7 @@ import { dailyAllow } from './progression.js';
 import { chapter, workMapId, homeMapId } from './chapters.js';
 import { ruthJoined, companionSchedule, updateAlly, COMPANION_LINES } from './ally.js';
 import { questOffer, questTalk } from './quests.js';
+import { errandTalk, offerErrand } from './errands.js';
 
 function npcCost(cx, cy) {
   const m = G.map;
@@ -123,6 +124,7 @@ export function updateNpcs(dt) {
 /* ---------------- talking ---------------- */
 export function interactNpc(n) {
   if (n.folk) {
+    if (errandTalk(n.id) || offerErrand(n.id)) return;
     playDialogue([{ who: n.def.name, text: choose(FOLK_LINES[G.map.id] || FOLK_LINES.town) }]);
     if (dailyAllow('folk:' + n.id)) addJP('neighbor', 1);
     return;
@@ -133,6 +135,7 @@ export function interactNpc(n) {
   // Story conversations take priority over the menu.
   const story = storyDialogue(n.id);
   if (story) { playDialogue(story.lines, story.onEnd); firstTalkBonus(n.id); return; }
+  if (errandTalk(n.id)) return;
   if (questTalk(n.id)) return;
   openNpcMenu(n);
 }

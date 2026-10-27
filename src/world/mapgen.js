@@ -102,6 +102,10 @@ export function buildCabinMap(home) {
   addProp(m, { id: 'stove', kind: 'stove', x: 28.5 * TILE, y: 19.4 * TILE, label: 'Stove', r: 38 });
   m.decor.push({ kind: 'phone', x: 26, y: 18, w: 1, h: 1 });
 
+  // An old hunting blind on the hill in the north woods (someone has been using it).
+  m.fillSolid(8, 5, 3, 2, SO.FURN); m.decor.push({ kind: 'blind', x: 8, y: 5, w: 3, h: 2 });
+  m.fillGround(11, 8, 13, 1, GR.DIRT);
+
   // Woodpile beside the cabin (cover)
   m.fillSolid(31, 23, 1, 3, SO.LOGS);
   m.decor.push({ kind: 'logs', x: 31, y: 23, w: 1, h: 3 });
@@ -149,6 +153,7 @@ export function buildCabinMap(home) {
     [0, 37, 59, 43], // road band
     [36, 15, 57, 37], // Ruth's farm
     [23, 2, 25, 16], // north trail
+    [6, 3, 12, 9], [11, 7, 24, 9], // hunting-blind clearing and the deer trail to it
     [30, 27, 46, 29], // east trail
     [22, 0, 26, 2], // north spawn
     [0, 20, 2, 24], // west spawn

@@ -20,7 +20,7 @@ export function derived() {
     spreadMult: (1 - 0.06 * lvlBonus(a.pre)) * (sk('steady_hands') ? 0.7 : 1),
     moveSpreadMult: sk('steady_hands') ? 0.5 : 1,
     reloadTime: 1.45 * (sk('quick_reload') ? 0.7 : 1),
-    healMult: (1 + 0.05 * lvlBonus(a.res)) * (sk('field_recovery') ? 1.35 : 1),
+    healMult: (1 + 0.05 * lvlBonus(a.res)) * (sk('field_recovery') ? 1.35 : 1) * ((G.s.unlocks || {}).firstAid ? 1.15 : 1),
     regenCap: 0.3 + 0.05 * lvlBonus(a.res),
     graceTime: 0.55 + 0.05 * lvlBonus(a.res),
     seeRadius: (170 + 20 * lvlBonus(a.awa) + (sk('keen_eye') ? 60 : 0)) * weatherMods().see,

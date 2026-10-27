@@ -213,7 +213,7 @@ export function offerQuest(npc) {
   }]);
 }
 
-function startQuest(id) {
+export function startQuest(id) {
   const q = QUESTS[id];
   const rec = { state: 'active', progress: 0 };
   if (q.spots) rec.spot = choose(q.spots);

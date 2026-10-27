@@ -10,6 +10,7 @@ import { activeLights, darkness, inFloodlight } from './lights.js';
 import { derived } from '../game/progression.js';
 import { jobProps } from '../game/jobs.js';
 import { questProps } from '../game/quests.js';
+import { errandProps } from '../game/errands.js';
 import { homeMapId } from '../game/chapters.js';
 import { ITEMS } from '../data/items.js';
 
@@ -344,6 +345,12 @@ function drawDecor(g, d) {
       g.fillStyle = '#9aa0a6'; g.fillRect(x + 13, y + 2, 4, 28);
       g.strokeStyle = '#c9cdd2'; g.lineWidth = 2; g.beginPath(); g.moveTo(x + 3, y + 8); g.lineTo(x + 27, y + 8); g.moveTo(x + 6, y + 14); g.lineTo(x + 24, y + 14); g.stroke();
       break;
+    case 'blind':
+      g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(x + 4, y + 6, w, h);
+      g.fillStyle = '#5a4a2e'; g.fillRect(x + 2, y + 2, w - 4, h - 4);
+      g.fillStyle = '#3e5a2a'; for (let k = 0; k < 7; k++) { g.beginPath(); g.arc(x + 6 + k * 13, y + 4 + (k % 2) * 4, 7, 0, Math.PI * 2); g.fill(); }
+      g.fillStyle = '#1a1410'; g.fillRect(x + w / 2 - 14, y + h - 12, 28, 6);
+      break;
     case 'statue':
       g.fillStyle = 'rgba(0,0,0,0.3)'; g.beginPath(); g.ellipse(x + 19, y + 22, 12, 7, 0, 0, Math.PI * 2); g.fill();
       g.fillStyle = '#8d8a84'; g.fillRect(x + 6, y + 18, 20, 10);
@@ -666,10 +673,11 @@ export function render(ctx) {
   }
 
   // Favor props
-  for (const pr of questProps(m.id)) {
+  for (const pr of [...questProps(m.id), ...errandProps(m.id)]) {
     if (!inView(pr.x, pr.y)) continue;
     if (pr.kind === 'quest_find' && pr.dog) drawDog(ctx, pr.x, pr.y, t);
-    if (pr.kind === 'quest_find' && pr.animal === 'calf') drawCalf(ctx, pr.x, pr.y, t);
+    if (pr.kind === 'quest_find' && pr.animal === 'cat') drawCat(ctx, pr.x, pr.y, t);
+    else if (pr.kind === 'quest_find' && pr.animal === 'calf') drawCalf(ctx, pr.x, pr.y, t);
     else if (pr.kind === 'quest_find') {
       const tw = (Math.sin(t * 5) + 1) / 2;
       ctx.fillStyle = `rgba(255,240,180,${0.5 + tw * 0.5})`;
@@ -1411,6 +1419,16 @@ function drawAttackDog(ctx, e, t) {
   ctx.beginPath(); ctx.arc(e.x, e.y, 13, 0, Math.PI * 2); ctx.stroke();
   dogShape(ctx, e.x, e.y, e.angle, e.walkPhase, e.hitT > 0 ? '#fff' : '#3a3a3a', '#111', 0.9);
   void t;
+}
+
+function drawCat(ctx, x, y, t) {
+  // A fat orange cat on a branch.
+  ctx.strokeStyle = '#5a3f22'; ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(x - 22, y + 8); ctx.lineTo(x + 20, y + 2); ctx.stroke();
+  ctx.fillStyle = '#e08a2e'; ctx.beginPath(); ctx.ellipse(x, y, 9, 6, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.arc(x + 8, y - 5, 5, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(x + 5, y - 9); ctx.lineTo(x + 6, y - 14); ctx.lineTo(x + 9, y - 10); ctx.moveTo(x + 9, y - 9); ctx.lineTo(x + 12, y - 13); ctx.lineTo(x + 12, y - 8); ctx.fill();
+  ctx.strokeStyle = '#e08a2e'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(x - 8, y); ctx.quadraticCurveTo(x - 16, y + 8 + Math.sin(t * 3) * 3, x - 12, y + 14); ctx.stroke();
+  ctx.fillStyle = '#ffd166'; ctx.font = 'bold 12px system-ui'; ctx.textAlign = 'center'; ctx.fillText('?', x, y - 18 + Math.sin(t * 4) * 2);
 }
 
 function drawCalf(ctx, x, y, t) {

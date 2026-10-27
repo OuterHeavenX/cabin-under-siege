@@ -79,6 +79,8 @@ export function newSave() {
     story: { step: 'arrive', flags: {}, chapterComplete: false, done: {} },
     rel: { ruth: 0, dee: 0, gus: 0, marcus: 0, rosa: 0, pete: 0, ingrid: 0, bo: 0, tess: 0, eleanor: 0, theo: 0, walt: 0 },
     quests: {},
+    errands: {},
+    unlocks: {},
     companion: { ruth: { joined: false, declined: false } },
     choices: {},
     difficulty: 'normal',

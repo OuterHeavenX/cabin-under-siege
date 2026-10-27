@@ -5,6 +5,9 @@ import { ITEMS, SHOPS, RECIPES, COOK_RECIPES } from '../data/items.js';
 import { cook, canCook } from '../game/activities.js';
 import { DIFFICULTY } from '../game/difficulty.js';
 import { endlessData, ENDLESS_SITES } from '../game/endless.js';
+import { ERRANDS, errandState, errandDone, stageLabel, activeErrands } from '../game/errands.js';
+import { TOWNSFOLK } from '../data/npcs.js';
+const errandGiverName = (id) => (NPCS[id] ? NPCS[id].name : (Object.values(TOWNSFOLK).flat().find((f) => f.id === id) || {}).name || id);
 import { ATTRIBUTES, MAX_ATTR, PATHS, SKILLS, xpForLevel } from '../data/skills.js';
 import { NPCS, relLevel } from '../data/npcs.js';
 import { HOMES } from '../data/homes.js';
@@ -326,6 +329,9 @@ function journalTab() {
     return `<div class="rel-row"><div class="rel-main"><b>${escapeHtml(n.name)}</b> <span class="muted">${escapeHtml(n.title)}</span><div class="small muted">${escapeHtml(n.bio)}</div><div class="small">${[...roleBenefits[role], ...extra].map((b) => `<span class="${lv >= Number(b[2]) ? 'hl' : 'muted'}">${b}</span>`).join(' · ')} · <span class="${lv >= 1 ? 'hl' : 'muted'}">Lv1: asks you for a favor</span></div></div><div class="hearts" aria-label="Friendship ${lv} of 5">${'♥'.repeat(lv)}${'♡'.repeat(5 - lv)}</div></div>`;
   }).join('');
   const favors = activeQuests().map((q) => `<div class="objective-box favor"><b>🙋 ${escapeHtml(q.title)}</b> <span class="muted">for ${escapeHtml(NPCS[q.npc].name)}</span><br>${escapeHtml(questHint(q))}</div>`).join('');
+  const chores = Object.entries(ERRANDS).filter(([id, e]) => e.chore && e.chapter === G.s.chapter && errandState(id));
+  const choreBox = chores.length ? `<div class="objective-box chores"><b>🏠 Settling in</b> <span class="muted">(${chores.filter(([id]) => errandDone(id)).length}/${chores.length} — four are enough)</span>${chores.map(([id, e]) => `<div class="chore ${errandDone(id) ? 'done' : ''}">${errandDone(id) ? '☑' : '☐'} <b>${escapeHtml(e.title)}</b> — ${escapeHtml(errandDone(id) ? e.desc : stageLabel(id))}</div>`).join('')}</div>` : '';
+  const errands = activeErrands().filter((e) => !e.chore).map((e) => `<div class="objective-box favor"><b>${e.story ? '🔎' : '🤝'} ${escapeHtml(e.title)}</b>${e.giver && !e.story ? ` <span class="muted">for ${escapeHtml(errandGiverName(e.giver))}</span>` : ''}<br>${escapeHtml(stageLabel(e.id))}</div>`).join('');
   const doneFavors = Object.entries(G.s.quests || {}).filter(([id, st]) => st.state === 'done' && QUESTS[id]).map(([id]) => QUESTS[id].title);
   const homes = HOMES.map((h) => {
     const done = (G.s.story.done || {})[h.chapter] || (h.chapter === 1 && G.s.story.chapterComplete);
@@ -335,6 +341,7 @@ function journalTab() {
   return `<h3>Chapter ${ch.id} — ${escapeHtml(ch.name)}</h3>
     <div class="objective-box"><b>Objective:</b> ${escapeHtml(objectiveText())}</div>
     ${j ? `<div class="objective-box job"><b>${JOB_TYPES[j.type].icon} Job: ${JOB_TYPES[j.type].name}</b> ($${j.pay})<br>${escapeHtml(jobHint())}<div class="row-btns"><button class="btn sm" data-act="abandon">Abandon job</button></div></div>` : `<p class="muted">No active job. Visit the job board at ${escapeHtml(ch.jobPlace)} (7 AM – 5 PM).</p>`}
+    ${choreBox}${errands}
     ${favors || '<p class="muted small">No favors in progress. Friends (♥1+) sometimes ask for help — talk to them.</p>'}
     ${doneFavors.length ? `<p class="small muted">Favors done: ${doneFavors.map(escapeHtml).join(', ')}</p>` : ''}
     <h3>People</h3>${rel}
@@ -493,6 +500,7 @@ export function openShop(shopId, tab = 'buy') {
         if (ITEMS[s.id].install === 'extMag') installUpgrade('ext_mag');
         if (ITEMS[s.id].weapon) toast(`${ITEMS[s.id].name} bought! Switch with ${s.id === 'shotgun' ? '2' : '3'}, Tab, the mouse wheel or the SWAP button.`, 'level', 4);
         if (G.s.rel[shop.owner] !== undefined && pr >= 25) addRel(shop.owner, 1);
+        G.events.emit('itemBought', s.id, got, shop.owner);
       }
       render();
       return;
@@ -559,7 +567,8 @@ export function openCraft() {
   const el = openModal('craft', '', { cls: 'small' });
   const entry = stack[stack.length - 1];
   const render = () => {
-    const rows = RECIPES.map((r) => {
+    const carpentry = (G.s.unlocks || {}).carpentry || G.s.chapter > 1 || (G.s.story.done || {})[1];
+    const rows = RECIPES.filter((r) => r.id !== 'barricade' || carpentry).map((r) => {
       const cost = recipeCost(r);
       return `<div class="item-row"><div class="item-icon">${ITEMS[r.id].icon}</div><div class="item-main"><div class="item-name">${escapeHtml(r.label)} <span class="muted">(have ${count(r.id)})</span></div><div class="item-desc">${escapeHtml(ITEMS[r.id].desc)}</div></div><button class="btn" data-craft="${r.id}" ${count('wood') >= cost ? '' : 'disabled'}>${cost} wood</button></div>`;
     }).join('');

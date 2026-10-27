@@ -321,6 +321,7 @@ export const TOWNSFOLK = {
     { id: 'folk1', name: 'Mr. Henderson', body: '#8a7a5a', hair: '#bbbbbb', skin: '#e0b08f', route: ['walk_a', 'walk_e', 'walk_f'] },
     { id: 'folk2', name: 'Pastor Abe', body: '#2e2e2e', hair: '#5a4632', skin: '#a8754f', route: ['walk_e', 'walk_c', 'walk_a'] },
     { id: 'folk3', name: 'Jenny Miller', body: '#c98c3a', hair: '#e6c26a', skin: '#f0c7a5', route: ['walk_d', 'walk_a', 'walk_b'] },
+    { id: 'folk11', name: 'Old Man Tibbs', body: '#5a5a3a', hair: '#e8e8e8', skin: '#d8a888', route: ['walk_c', 'walk_e', 'walk_b'] },
   ],
   farm: [
     { id: 'folk7', name: 'Pastor Lund', body: '#2e2e2e', hair: '#d0d0d0', skin: '#f0c7a5', route: ['walk_a', 'walk_b', 'walk_c'] },

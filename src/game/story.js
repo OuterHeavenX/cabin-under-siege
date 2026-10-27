@@ -14,6 +14,8 @@ import { addPickup } from './combat.js';
 import { jobWaypoint } from './jobs.js';
 import { scheduleSpot } from './npcs.js';
 import { NPCS } from '../data/npcs.js';
+import { choresStatus, errandWaypoint, errandGiverWaypoint, startErrand, townErrandsDone } from './errands.js';
+import { startQuest } from './quests.js';
 
 const ME = 'Frank';
 
@@ -21,11 +23,17 @@ export const STEPS = {
   arrive: { obj: 'Look around your new cabin — step inside.' },
   meet_ruth: { obj: 'Meet your neighbor at the farm to the east.' },
   go_town: { obj: 'Drive to Pine Hollow: use your car on the driveway.' },
-  find_work: { obj: 'Find Gus Okafor at the lumber yard and ask about work.' },
+  settle_in: { obj: () => `Settle in: finish 4 of the 5 chores (${choresStatus().done}/4 done) — the Journal lists them.` },
+  find_work: { obj: 'Find Gus Okafor at the lumber yard in Pine Hollow and ask about work.' },
+  town_trust: { obj: () => `Earn Pine Hollow's trust: jobs for Gus (${Math.min(3, jobsSinceTrust())}/3) · help townsfolk (${Math.min(2, townErrandsDone())}/2)` },
+  rest: { obj: 'Pine Hollow is warming up to you. Head home and get some sleep.' },
+  trail: { obj: 'Someone\'s been watching the cabin. Follow the boot prints.' },
+  probe: { obj: 'Someone will test the cabin tonight. Be home after dark — and stay alive.' },
+  prepare: { obj: () => { const f = G.s.story.flags; return `Prepare: first aid from Ruth ${f.firstAid ? '✓' : '·'} · carpentry from Gus ${f.carpentry ? '✓' : '·'} · find Harold's pocket watch ${questDoneFn('ruth_watch') ? '✓' : '·'}`; } },
   first_job: { obj: 'Take and complete a job from the board at Okafor Lumber.' },
   see_dee: { obj: 'Dee at Marsh General wants a word.' },
   stranger: { obj: 'Find the man in the grey coat near the diner (daytime).' },
-  reinforce: { obj: 'Reinforce the cabin: board a window, brace a door, or place cover.' },
+  reinforce: { obj: () => `Fortify the cabin: install three defenses (${Math.min(3, G.s.story.flags.fortified || 0)}/3) — boards, braces, cover, traps.` },
   first_siege: { obj: 'They\'re coming tonight. Be at the cabin by 10 PM — and survive.' },
   search_body: { obj: 'Search the big man for anything useful.' },
   show_ruth: { obj: 'Show the note to Ruth.' },
@@ -69,15 +77,18 @@ export const STEPS = {
   ch4_free: { obj: 'Chapter 4 complete. Work, fortify, and stay alive. (Chapter 5 — the mansion in Short Hills — is planned for a future update.)' },
 };
 
+const objOf = (s) => (typeof s.obj === 'function' ? s.obj() : s.obj);
 export function objectiveText() {
   const st = G.s.story;
-  return (STEPS[st.step] || STEPS.free).obj;
+  return objOf(STEPS[st.step] || STEPS.free);
 }
+const jobsSinceTrust = () => (G.s.jobsDone || 0) - (G.s.story.flags.jobsBase || 0);
+const questDoneFn = (id) => ((G.s.quests || {})[id] || {}).state === 'done';
 
 function setStep(step) {
   G.s.story.step = step;
   G.events.emit('storyStep', step);
-  banner(`New objective: ${STEPS[step].obj}`, 'objective', 5);
+  banner(`New objective: ${objOf(STEPS[step])}`, 'objective', 5);
   sfx('chime');
   saveGame('story', { force: false });
 }
@@ -99,6 +110,21 @@ export function storyWaypoint() {
     case 'arrive': return { map: 'cabin', ...cab.points.cabin_front, label: 'Cabin' };
     case 'meet_ruth': return { ...npcPoint('ruth'), label: 'Ruth' };
     case 'go_town': return { map: 'cabin', ...cab.points.car, label: 'Car' };
+    case 'settle_in': return errandWaypoint((e) => e.chore);
+    case 'town_trust': {
+      if (G.s.job) return jobWaypoint();
+      if (jobsSinceTrust() < 3) { const jb = town.props.find((p) => p.id === 'jobboard'); return { map: 'town', x: jb.x, y: jb.y, label: 'Job board' }; }
+      return errandWaypoint((e) => !e.chore && !e.story) || errandGiverWaypoint();
+    }
+    case 'rest': return { map: 'cabin', ...cab.points.bed, label: 'Bed' };
+    case 'trail': return errandWaypoint((e) => e.story);
+    case 'probe': return { map: 'cabin', ...cab.points.cabin_in, label: 'Cabin' };
+    case 'prepare': {
+      const f = st.flags;
+      if (!f.firstAid) return { ...npcPoint('ruth'), label: 'Ruth' };
+      if (!f.carpentry) return { ...npcPoint('gus'), label: 'Gus' };
+      return null; // the favor waypoint (Harold's watch) takes over
+    }
     case 'find_work': return { ...npcPoint('gus'), label: 'Gus' };
     case 'first_job': {
       if (G.s.job) return jobWaypoint();
@@ -173,12 +199,18 @@ export function storyDialogue(id) {
       lines: [
         { who: 'Ruth Calloway', text: 'So you\'re the one who bought Harold\'s cabin. Cash, the realtor said. Nobody pays cash anymore.' },
         { who: ME, text: 'Frank. Frank Lowe. I like things simple.' },
-        { who: 'Ruth Calloway', text: 'Ruth. Simple I can respect. That cabin\'s drafty and the back door sticks. Harold always meant to fix it.' },
-        { who: 'Ruth Calloway', text: 'You\'ll want groceries and work. Dee Marsh runs the general store in Pine Hollow, and Gus Okafor at the lumber yard always needs hands.' },
-        { who: 'Ruth Calloway', text: 'Here — bandages. Thirty years a nurse, I can spot a man who\'s going to need them.' },
-        { who: ME, text: '...Thanks, Ruth.' },
+        { who: 'Ruth Calloway', text: 'Ruth. Simple I can respect. That cabin\'s drafty, the roof leaks and the back door sticks. Harold always meant to fix it.' },
+        { who: 'Ruth Calloway', text: 'And a pine came down across your driveway in last night\'s wind, so you\'ll be walking to town till you cut it up.' },
+        { who: 'Ruth Calloway', text: 'While you\'ve got an axe out — my stove went cold two days ago and my hands won\'t hold a maul anymore. Ten logs would see me through the week.' },
+        { who: ME, text: 'Ten logs. I can do that.' },
+        { who: 'Ruth Calloway', text: 'Dee Marsh runs the general store in Pine Hollow — your cupboards are bare, I\'d bet. Here: bandages. Thirty years a nurse, I can spot a man who\'s going to need them.' },
       ],
-      onEnd: () => { addItem('bandage', 2); addRel('ruth', 6); addXP(20, 'Met Ruth'); setStep('go_town'); },
+      onEnd: () => {
+        addItem('bandage', 2); addRel('ruth', 6); addXP(20, 'Met Ruth');
+        for (const id of choresStatus().ids) startErrand(id, true);
+        setStep('settle_in');
+        toast('Five chores added — finish any four. Open the Journal to see them.', 'info', 4);
+      },
     };
   }
   if (id === 'gus' && st.step === 'find_work') {
@@ -189,16 +221,17 @@ export function storyDialogue(id) {
         { who: 'Gus Okafor', text: 'Honest work I\'ve got. Honest pay too. Jobs go up on the board by the office, seven to five.' },
         { who: 'Gus Okafor', text: 'Woodcutting, deliveries, repairs. You bring me wood, you fix what\'s broken, you don\'t make me chase you. Deal?' },
         { who: ME, text: 'Deal.' },
-        { who: 'Gus Okafor', text: 'Good. The woodlot\'s east of the yard. Use that axe of yours. I also sell lumber, tools and hardware if you\'re fixing up the cabin.' },
+        { who: 'Gus Okafor', text: 'Good. The woodlot\'s east of the yard. Do three jobs for me and I\'ll tell folks you\'re all right. In a town this size, that matters.' },
+        { who: 'Gus Okafor', text: 'And help a few people while you\'re at it. Pastor Abe, the Miller girl, old Henderson, Tibbs — they all need something. Folks remember.' },
       ],
-      onEnd: () => { addRel('gus', 6); addXP(20, 'Met Gus'); setStep('first_job'); },
+      onEnd: () => { addRel('gus', 6); addXP(20, 'Met Gus'); f.townOpen = true; f.jobsBase = G.s.jobsDone || 0; setStep('town_trust'); },
     };
   }
   if (id === 'dee' && st.step === 'see_dee') {
     return {
       lines: [
         { who: 'Dee Marsh', text: 'There he is. Frank, right? Gus says you actually finished a job. That\'s a town record.' },
-        { who: 'Dee Marsh', text: 'Listen, honey. A man came in yesterday. Grey coat, Jersey plates, bought nothing. Asked if any city fellas moved in lately.' },
+        { who: 'Dee Marsh', text: 'Listen, honey. A man came in yesterday. Grey coat, Jersey plates. Bought two packs of Parliaments — nobody in Pine Hollow smokes Parliaments. Asked if any city fellas moved in lately.' },
         { who: ME, text: '...What did you tell him?' },
         { who: 'Dee Marsh', text: 'That the only city fella in Pine Hollow is my ex-husband, and he\'s in the cemetery. But he\'s still around. Hangs by the diner.' },
         { who: 'Dee Marsh', text: 'Whatever this is, it\'s none of my business. But you might want to look him in the eye.' },
@@ -373,6 +406,39 @@ export function storyDialogue(id) {
       },
     };
   }
+  if (id === 'ruth' && st.step === 'prepare' && !f.firstAid) {
+    return {
+      lines: [
+        { who: 'Ruth Calloway', text: 'Two men in my orchard last night with pistols, and you walk over here like it\'s Sunday. Sit down. You\'re going to learn something.' },
+        { who: 'Ruth Calloway', text: 'Pressure first, then pack it, then wrap it. Tight but not cruel. Again. Faster. Again.' },
+        { who: ME, text: '...Where\'d you learn to do it this fast?' },
+        { who: 'Ruth Calloway', text: 'Field hospital, 1968. Same as you, Frank, I don\'t talk about it. Take these. And find Harold\'s pocket watch for me, would you — I lost it by the pond. I\'ll make it worth your while.' },
+      ],
+      onEnd: () => {
+        f.firstAid = true; (G.s.unlocks || (G.s.unlocks = {})).firstAid = true;
+        addItem('bandage', 3, true); addRel('ruth', 6); addJP('survivor', 8);
+        toast('First aid learned: all healing is 15% stronger.', 'level', 3.5);
+        if (!(G.s.quests || {}).ruth_watch) startQuest('ruth_watch');
+        checkPrepared();
+      },
+    };
+  }
+  if (id === 'gus' && st.step === 'prepare' && !f.carpentry) {
+    return {
+      lines: [
+        { who: 'Gus Okafor', text: 'Heard about your visitors. Whole town has. You want my advice? Don\'t make the house a fortress. Make it a maze.' },
+        { who: 'Gus Okafor', text: 'Barricades. Lumber cross-braced, screws not nails. Put \'em where you want people to go around. I\'ll show you once.' },
+        { who: ME, text: '(Gus walks you through it twice, then makes you build one while he drinks coffee and criticizes.)' },
+        { who: 'Gus Okafor', text: 'Good enough. Take a door brace too. No charge. Army engineers look after their own, even the ones who never enlisted.' },
+      ],
+      onEnd: () => {
+        f.carpentry = true; (G.s.unlocks || (G.s.unlocks = {})).carpentry = true;
+        addItem('door_brace', 1, true); addItem('wood', 4, true); addRel('gus', 8); addJP('handyman', 10);
+        toast('Carpentry learned: build Wood Barricades at your workbench.', 'level', 3.5);
+        checkPrepared();
+      },
+    };
+  }
   if (id === 'ruth' && st.step === 'show_ruth') {
     return {
       lines: [
@@ -397,7 +463,34 @@ export function initStoryEvents() {
       setStep('find_work');
     }
   });
+  ev.on('errandDone', (id) => {
+    const st = G.s.story;
+    if (st.step === 'settle_in' && choresStatus().done >= 4) {
+      playDialogue([
+        { who: ME, text: 'Roof patched, pantry stocked, wood stacked. The place almost feels like a home.' },
+        { who: ME, text: 'Money\'s running thin, though. Gus Okafor at the lumber yard always needs hands, Ruth said.' },
+      ], () => setStep('find_work'));
+    }
+    if (st.step === 'town_trust') checkTrust();
+    if (id === 'trail' && st.step === 'trail') {
+      playDialogue([{ who: ME, text: 'Leo\'s people. Here. Already. Dee hears everything in this town — if somebody new has been around, she\'ll know.' }], () => setStep('see_dee'));
+    }
+  });
+  ev.on('questDone', (id) => { if (id === 'ruth_watch') checkPrepared(); });
+  ev.on('recovered', () => {
+    if (G.s.story.step === 'probe' && !G.s.world.siege) scheduleProbe();
+  });
+  ev.on('siegeWon', (sg) => {
+    if (sg.plan.kind !== 'probe' || G.s.story.step !== 'probe') return;
+    setTimeout(() => {
+      playDialogue([
+        { who: ME, text: 'Two of them. Pistols, no plan, ran at the first shot. That wasn\'t an attack. That was a test.' },
+        { who: ME, text: 'Next time they\'ll send real people. I need to be ready: Ruth knows medicine, Gus knows wood. And Harold had a rifle somewhere.' },
+      ], () => setStep('prepare'));
+    }, 2600);
+  });
   ev.on('jobDone', () => {
+    if (G.s.story.step === 'town_trust') checkTrust();
     if (G.s.story.step === 'first_job') setStep('see_dee');
     if (G.s.story.step === 'ch2_job') setStep('ch2_rosa');
     if (G.s.story.step === 'ch3_job') setStep('ch3_deputy');
@@ -453,6 +546,9 @@ export function initStoryEvents() {
   ev.on('talkStranger', (n) => strangerTalk(n));
   ev.on('defenseInstalled', () => {
     if (G.s.story.step === 'reinforce') {
+      const fl = G.s.story.flags;
+      fl.fortified = (fl.fortified || 0) + 1;
+      if (fl.fortified < 3) { toast(`Defense ${fl.fortified}/3 done.`, 'info', 2.5); return; }
       const t = G.s.time;
       const day = t.minute < 20 * 60 + 30 ? t.day : t.day + 1;
       scheduleSiege(storyPlan(), day, 22 * 60);
@@ -554,6 +650,30 @@ function readBurner() {
     const st = G.s.story.step;
     if (st === 'ch2_phone' || st === 'ch2_siege') setStep('ch2_marcus_truth');
   });
+}
+
+function checkTrust() {
+  if (G.s.story.step !== 'town_trust') return;
+  if (jobsSinceTrust() < 3 || townErrandsDone() < 2) { banner(`New objective: ${objectiveText()}`, 'objective', 3); return; }
+  const f = G.s.story.flags;
+  f.trailDay = G.s.time.day + 1;
+  playDialogue([
+    { who: 'Gus Okafor', text: '(Gus catches you on Main Street.) Folks are talking about you, Frank. Good things, for once. Go home and get some sleep — you look like a man who hasn\'t slept in a year.' },
+  ], () => setStep('rest'));
+}
+
+function scheduleProbe() {
+  const t = G.s.time;
+  const day = t.minute < 22 * 60 ? t.day : t.day + 1;
+  scheduleSiege({ kind: 'probe', hpMult: 0.9, waves: [{ dir: 'north', types: ['scout', 'scout'], delay: 0 }] }, day, 23 * 60);
+}
+
+function checkPrepared() {
+  const f = G.s.story.flags;
+  if (G.s.story.step !== 'prepare' || !f.firstAid || !f.carpentry || !questDoneFn('ruth_watch')) return;
+  playDialogue([
+    { who: ME, text: 'Bandages, barricades, and Harold\'s rifle. Now the cabin.' },
+  ], () => setStep('reinforce'));
 }
 
 function checkFarmReady() {
@@ -711,7 +831,7 @@ function strangerTalk(n) {
       playDialogue([
         { who: 'Dee Marsh', text: '(Dee hurries out of the store.) I saw that. Frank, whatever he wants, it isn\'t good.' },
         { who: 'Dee Marsh', text: 'Take these window boards from my back room. On the house. Go home and lock that cabin up tight.' },
-      ], () => { addItem('board_kit', 2); addRel('dee', 6); addXP(30, 'Faced the stranger'); setStep('reinforce'); });
+      ], () => { addItem('board_kit', 2); addRel('dee', 6); addXP(30, 'Faced the stranger'); scheduleProbe(); setStep('probe'); });
     }
   });
 }
@@ -719,6 +839,14 @@ function strangerTalk(n) {
 /** Called when the player first enters the cabin, and other location triggers. */
 export function updateStory(dt) {
   const st = G.s.story;
+  if (st.step === 'rest' && G.s.time.day >= (st.flags.trailDay || 0) && G.s.time.minute >= 6 * 60 && !G.sleeping && !G.modal) {
+    startErrand('trail', true);
+    setStep('trail');
+    playDialogue([
+      { who: 'Ruth Calloway', text: '(Ruth is on your porch at dawn, coffee in hand.) Frank. Somebody\'s been standing outside your west window at night. I saw a cigarette glowing at two in the morning.' },
+      { who: 'Ruth Calloway', text: 'Boot prints in the grass. Go look before the dew burns off.' },
+    ]);
+  }
   if (st.step === 'arrive' && G.map.id === 'cabin') {
     const b = G.map.buildingAt(G.player.x, G.player.y);
     if (b && b.id === 'cabin') {

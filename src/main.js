@@ -35,6 +35,7 @@ import { addPickup, damageEnemy } from './game/combat.js';
 import { updateFire, startFire } from './game/fire.js';
 import { spawnEnemy, openingStrength } from './game/enemies.js';
 import { initActivityEvents } from './game/activities.js';
+import { initErrandEvents, ERRANDS } from './game/errands.js';
 import { spawnDog, updateDog, dogMorning } from './game/dog.js';
 import { setWeather } from './game/weather.js';
 import { initAtmosphere, updateAtmosphere } from './world/atmosphere.js';
@@ -93,9 +94,10 @@ function buildMaps() {
     for (const b of m.buildings) b.roofCanvas = buildRoofCanvas(b);
     G.maps[id] = m;
     // Keep favor spots reachable: no trees on them.
-    for (const q of Object.values(QUESTS)) {
-      if (q.map !== id) continue;
-      for (const [x, y] of [...(q.spots || []), ...(q.target ? [q.target] : [])]) {
+    const spotsOf = [...Object.values(QUESTS).filter((q) => q.map === id).map((q) => [...(q.spots || []), ...(q.target ? [q.target] : [])]),
+      ...Object.values(ERRANDS).flatMap((e) => e.stages.filter((s) => s.map === id).map((s) => [...(s.spots || []), ...(s.at ? [s.at] : [])]))];
+    for (const spots of spotsOf) {
+      for (const [x, y] of spots) {
         const cx = Math.floor(x), cy = Math.floor(y);
         for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
           const i = m.idx(cx + ox, cy + oy);
@@ -379,6 +381,7 @@ function initEvents() {
   initEnemyEvents();
   initSiegeEvents();
   initActivityEvents();
+  initErrandEvents();
   initAtmosphere();
   G.events.on('qualityChanged', () => { G.autoLow = false; perf.slow = 0; resize(); });
   initTimeEvents();

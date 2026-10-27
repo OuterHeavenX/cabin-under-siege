@@ -8,6 +8,7 @@ import { chopTree, jobProps, onDeliver, onLogDrop, onRepairTarget, onShed, onSto
 import { installBoards, installBrace, installShutters, pickUpCover, repairNeed, startRepair, trapAt, rearmTrap, pickUpTrap } from './home.js';
 import { atHome, chapter, LAST_CHAPTER } from './chapters.js';
 import { questProps, questPropAction } from './quests.js';
+import { errandProps, errandPropAction, errandState } from './errands.js';
 import { answerPhone, storyMail } from './story.js';
 import { openBedMenu, openCraft, openActions, openShop, openJobBoard, openCook, openFishingGame } from '../ui/menus.js';
 import { gardenNear, pickGarden, waterNear, landFish } from './activities.js';
@@ -38,7 +39,7 @@ function candidates() {
     add(n.x, n.y, n.folk ? 50 : 64, `Talk to ${n.def.name}`, 'TALK', () => interactNpc(n), n.folk ? -1 : 2);
   }
 
-  const props = [...m.props, ...jobProps(m.id), ...questProps(m.id)];
+  const props = [...m.props, ...jobProps(m.id), ...questProps(m.id), ...errandProps(m.id)];
   for (const pr of props) {
     const a = propAction(pr);
     if (a) add(pr.x, pr.y, pr.r, a.label, a.short, a.action, a.prio || 0);
@@ -76,6 +77,7 @@ function candidates() {
 
 function propAction(pr) {
   const s = G.s;
+  if (pr.errand) return { label: pr.label, short: pr.kind === 'quest_chop' ? 'CHOP' : pr.kind === 'quest_repair' ? 'FIX' : pr.kind === 'quest_find' ? 'LOOK' : 'ACT', action: () => errandPropAction(pr), prio: 3 };
   if (G.endless && ['bed', 'car', 'exit', 'jobboard', 'phone', 'mailbox', 'phonepole'].includes(pr.kind)) return null;
   switch (pr.kind) {
     case 'bed': return { label: 'Use bed (sleep / save)', short: 'REST', action: () => openBedMenu() };
@@ -121,6 +123,10 @@ function propAction(pr) {
 
 function carAction() {
   const ch = chapter();
+  const drive = errandState('chore_drive');
+  if (G.s.chapter === 1 && G.map.id === 'cabin' && drive && drive.state === 'active') {
+    return { label: 'A fallen pine blocks the driveway — chop it, or walk the east road to town', short: 'CAR', action: () => toast('The pine across the driveway has to go before the car can. (Or walk: the road east leads to Pine Hollow.)', 'warn', 3.5) };
+  }
   const opts = [];
   if (ch.maps.length > 1) {
     const toWork = G.map.id === ch.homeMap;

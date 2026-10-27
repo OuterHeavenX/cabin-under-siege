@@ -405,3 +405,6 @@ body.touch .prompt kbd { display: none; }
 @keyframes lbcard { 0% { opacity: 0; letter-spacing: 16px; } 40% { opacity: 1; } 100% { opacity: 1; letter-spacing: 6px; } }
 body.cine #hud > *:not(#center-msg), body.cine #touch { opacity: 0; pointer-events: none; transition: opacity 0.4s; }
 body.cine #dialogue { z-index: 19; }
+
+.objective-box.chores .chore { margin-top: 4px; font-size: 13px; }
+.objective-box.chores .chore.done { opacity: 0.6; }
