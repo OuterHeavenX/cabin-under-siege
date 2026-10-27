@@ -1,0 +1,205 @@
+// Procedural Web Audio: sound effects, ambient beds and a simple generative
+// music pad. Nothing is downloaded; the context starts after a user gesture.
+
+let ctx = null;
+let master, sfxGain, musicGain, ambGain;
+let noiseBuf = null;
+let musicMode = 'off';
+let musicTimer = 0;
+let ambMode = 'off';
+let ambTimer = 0;
+let vol = { sfx: 0.8, music: 0.45 };
+let lastPlayed = {};
+
+export function initAudio() {
+  if (ctx) { if (ctx.state === 'suspended') ctx.resume().catch(() => {}); return; }
+  const AC = window.AudioContext || window.webkitAudioContext;
+  if (!AC) return;
+  try {
+    ctx = new AC();
+  } catch (e) { ctx = null; return; }
+  master = ctx.createGain(); master.gain.value = 0.9; master.connect(ctx.destination);
+  sfxGain = ctx.createGain(); sfxGain.connect(master);
+  musicGain = ctx.createGain(); musicGain.connect(master);
+  ambGain = ctx.createGain(); ambGain.connect(master);
+  applyVolumes();
+  noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 1.5, ctx.sampleRate);
+  const d = noiseBuf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+}
+
+export function setVolumes(sfxV, musicV) { vol.sfx = sfxV; vol.music = musicV; applyVolumes(); }
+function applyVolumes() {
+  if (!ctx) return;
+  sfxGain.gain.value = vol.sfx;
+  ambGain.gain.value = vol.sfx * 0.6;
+  musicGain.gain.value = vol.music * 0.5;
+}
+
+export function suspendAudio() { if (ctx && ctx.state === 'running') ctx.suspend().catch(() => {}); }
+export function resumeAudio() { if (ctx && ctx.state === 'suspended') ctx.resume().catch(() => {}); }
+
+function env(g, t, a, peak, dcy) {
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(peak, t + a);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + a + dcy);
+}
+
+function tone(type, f0, f1, dur, peak, dest = sfxGain, delay = 0) {
+  const t = ctx.currentTime + delay;
+  const o = ctx.createOscillator();
+  const g = ctx.createGain();
+  o.type = type;
+  o.frequency.setValueAtTime(f0, t);
+  if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(Math.max(1, f1), t + dur);
+  env(g, t, 0.005, peak, dur);
+  o.connect(g); g.connect(dest);
+  o.start(t); o.stop(t + dur + 0.05);
+}
+
+function noise(dur, peak, filterType, freq, q = 1, dest = sfxGain, delay = 0, attack = 0.002) {
+  const t = ctx.currentTime + delay;
+  const src = ctx.createBufferSource();
+  src.buffer = noiseBuf;
+  const f = ctx.createBiquadFilter();
+  f.type = filterType; f.frequency.value = freq; f.Q.value = q;
+  const g = ctx.createGain();
+  env(g, t, attack, peak, dur);
+  src.connect(f); f.connect(g); g.connect(dest);
+  src.start(t, Math.random() * 0.5); src.stop(t + dur + attack + 0.05);
+}
+
+/** Play a named effect. `opts.vol` scales loudness (e.g. distance falloff). */
+export function sfx(name, opts = {}) {
+  if (!ctx || ctx.state !== 'running') return;
+  const now = ctx.currentTime;
+  // Light rate limiting so overlapping identical sounds don't clip.
+  if (lastPlayed[name] && now - lastPlayed[name] < 0.03) return;
+  lastPlayed[name] = now;
+  const v = opts.vol ?? 1;
+  switch (name) {
+    case 'shot':
+      noise(0.12, 0.7 * v, 'lowpass', 2600, 0.7);
+      tone('square', 160, 50, 0.1, 0.35 * v);
+      break;
+    case 'enemyShot':
+      noise(0.14, 0.45 * v, 'lowpass', 1500, 0.7);
+      tone('square', 120, 40, 0.12, 0.25 * v);
+      break;
+    case 'rifle':
+      noise(0.2, 0.55 * v, 'lowpass', 1900, 0.6);
+      tone('sawtooth', 110, 35, 0.18, 0.3 * v);
+      break;
+    case 'empty': tone('square', 900, 900, 0.03, 0.15); break;
+    case 'reload':
+      tone('square', 420, 380, 0.04, 0.18); tone('square', 700, 650, 0.04, 0.15, sfxGain, 0.18);
+      noise(0.05, 0.2, 'highpass', 3000, 1, sfxGain, 0.3);
+      break;
+    case 'reloadDone': tone('square', 900, 1100, 0.05, 0.16); break;
+    case 'hit': noise(0.08, 0.5 * v, 'bandpass', 900, 2); tone('sine', 200, 80, 0.08, 0.3 * v); break;
+    case 'hurt': tone('sawtooth', 220, 90, 0.22, 0.35); noise(0.15, 0.3, 'lowpass', 600); break;
+    case 'thud': noise(0.12, 0.5 * v, 'lowpass', 400, 1); tone('sine', 90, 50, 0.15, 0.4 * v); break;
+    case 'swing': noise(0.12, 0.3, 'bandpass', 1600, 0.8, sfxGain, 0, 0.04); break;
+    case 'ricochet': tone('sine', 2400, 900, 0.12, 0.12 * v); break;
+    case 'glass': for (let i = 0; i < 4; i++) tone('triangle', 2000 + Math.random() * 3000, 1500, 0.15, 0.1 * v, sfxGain, i * 0.03); noise(0.2, 0.3 * v, 'highpass', 4000); break;
+    case 'wood': noise(0.18, 0.5 * v, 'bandpass', 500, 1.2); tone('triangle', 140, 70, 0.12, 0.3 * v); break;
+    case 'chop': noise(0.1, 0.55, 'bandpass', 700, 1.5); tone('triangle', 180, 90, 0.1, 0.3); break;
+    case 'treefall': noise(0.7, 0.5, 'lowpass', 500, 0.8, sfxGain, 0, 0.1); tone('sine', 70, 40, 0.6, 0.4, sfxGain, 0.3); break;
+    case 'door': tone('triangle', 300, 180, 0.18, 0.2); noise(0.1, 0.2, 'bandpass', 800, 1); break;
+    case 'doorBreak': noise(0.4, 0.7, 'lowpass', 900, 0.7); tone('sawtooth', 90, 40, 0.4, 0.4); break;
+    case 'blip': tone('sine', 660, 880, 0.06, 0.18); break;
+    case 'ui': tone('sine', 520, 520, 0.04, 0.12); break;
+    case 'coin': tone('square', 988, 988, 0.06, 0.12); tone('square', 1319, 1319, 0.12, 0.12, sfxGain, 0.06); break;
+    case 'chime': [523, 659, 784].forEach((f, i) => tone('sine', f, f, 0.3, 0.15, sfxGain, i * 0.08)); break;
+    case 'jobDone': [523, 659, 784, 1047].forEach((f, i) => tone('triangle', f, f, 0.25, 0.2, sfxGain, i * 0.09)); break;
+    case 'levelup': [392, 523, 659, 784, 1047].forEach((f, i) => tone('square', f, f, 0.18, 0.12, sfxGain, i * 0.08)); tone('triangle', 1047, 1047, 0.6, 0.15, sfxGain, 0.4); break;
+    case 'warning':
+      for (let i = 0; i < 3; i++) { tone('sawtooth', 440, 440, 0.18, 0.18, sfxGain, i * 0.4); tone('sawtooth', 330, 330, 0.18, 0.18, sfxGain, i * 0.4 + 0.2); }
+      break;
+    case 'alarm': for (let i = 0; i < 6; i++) tone('square', i % 2 ? 1200 : 900, i % 2 ? 1200 : 900, 0.12, 0.13, sfxGain, i * 0.14); break;
+    case 'victory': [392, 494, 587, 784].forEach((f, i) => tone('triangle', f, f, 0.4, 0.2, sfxGain, i * 0.14)); break;
+    case 'defeat': [392, 330, 262, 196].forEach((f, i) => tone('triangle', f, f, 0.5, 0.2, sfxGain, i * 0.25)); break;
+    case 'heal': tone('sine', 440, 880, 0.25, 0.15); break;
+    case 'eat': noise(0.08, 0.2, 'bandpass', 1200, 2); noise(0.08, 0.2, 'bandpass', 1000, 2, sfxGain, 0.12); break;
+    case 'hammer': tone('square', 300, 200, 0.05, 0.2); noise(0.06, 0.4, 'bandpass', 2000, 2); break;
+    case 'miss': tone('sine', 200, 150, 0.12, 0.15); break;
+    case 'phone': for (let i = 0; i < 2; i++) { for (let k = 0; k < 8; k++) tone('sine', k % 2 ? 480 : 440, k % 2 ? 480 : 440, 0.05, 0.12, sfxGain, i * 0.9 + k * 0.05); } break;
+    case 'car': noise(1.2, 0.25, 'lowpass', 220, 1, sfxGain, 0, 0.2); tone('sawtooth', 50, 70, 1.0, 0.12); break;
+    case 'step': noise(0.04, 0.08 * v, 'lowpass', 500); break;
+    case 'dodge': noise(0.18, 0.25, 'bandpass', 600, 0.8, sfxGain, 0, 0.03); break;
+    case 'pickup': tone('sine', 780, 1170, 0.08, 0.15); break;
+    default: break;
+  }
+}
+
+/* ---------------- ambient + music ---------------- */
+export function setAmbient(mode) { ambMode = mode; }
+export function setMusic(mode) {
+  if (mode === musicMode) return;
+  musicMode = mode;
+  musicTimer = 0;
+}
+
+const CHORDS = {
+  day: [[196, 247, 294], [175, 220, 262], [165, 208, 247], [175, 220, 294]],
+  night: [[147, 175, 220], [131, 165, 196], [123, 147, 185], [131, 156, 196]],
+  tense: [[110, 131, 165], [104, 131, 156], [110, 139, 165], [98, 123, 147]],
+};
+let chordIdx = 0;
+
+function playPad(freqs, dur, peak) {
+  const t = ctx.currentTime;
+  const f = ctx.createBiquadFilter();
+  f.type = 'lowpass'; f.frequency.value = musicMode === 'tense' ? 900 : 700;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.linearRampToValueAtTime(peak, t + dur * 0.3);
+  g.gain.linearRampToValueAtTime(0.0001, t + dur);
+  f.connect(g); g.connect(musicGain);
+  for (const fr of freqs) {
+    for (const det of [-4, 4]) {
+      const o = ctx.createOscillator();
+      o.type = musicMode === 'tense' ? 'sawtooth' : 'triangle';
+      o.frequency.value = fr; o.detune.value = det;
+      o.connect(f); o.start(t); o.stop(t + dur + 0.1);
+    }
+  }
+}
+
+/** Called every frame with dt; schedules music chords and ambient sounds. */
+export function updateAudio(dt) {
+  if (!ctx || ctx.state !== 'running') return;
+  if (musicMode !== 'off') {
+    musicTimer -= dt;
+    if (musicTimer <= 0) {
+      const set = CHORDS[musicMode] || CHORDS.day;
+      chordIdx = (chordIdx + 1) % set.length;
+      const dur = musicMode === 'tense' ? 4 : 8;
+      playPad(set[chordIdx], dur + 1.5, musicMode === 'tense' ? 0.05 : 0.06);
+      if (musicMode === 'tense') {
+        for (let i = 0; i < 8; i++) tone('sine', 55, 50, 0.25, 0.25, musicGain, i * 0.5);
+      }
+      musicTimer = dur;
+    }
+  }
+  ambTimer -= dt;
+  if (ambTimer <= 0) {
+    if (ambMode === 'day') {
+      // birdsong chirps
+      const base = 2200 + Math.random() * 1600;
+      const n = 2 + Math.floor(Math.random() * 3);
+      for (let i = 0; i < n; i++) tone('sine', base, base * (0.8 + Math.random() * 0.5), 0.07, 0.05, ambGain, i * 0.1);
+      ambTimer = 1.5 + Math.random() * 3;
+    } else if (ambMode === 'night') {
+      // crickets
+      const f = 4200 + Math.random() * 400;
+      for (let i = 0; i < 6; i++) tone('sine', f, f, 0.02, 0.03, ambGain, i * 0.045);
+      if (Math.random() < 0.15) noise(1.5, 0.05, 'lowpass', 300, 0.5, ambGain, 0, 0.6); // wind
+      ambTimer = 0.6 + Math.random() * 0.9;
+    } else if (ambMode === 'town') {
+      if (Math.random() < 0.5) noise(0.6, 0.03, 'lowpass', 400, 0.5, ambGain, 0, 0.3);
+      else { const b = 1800 + Math.random() * 1200; tone('sine', b, b * 1.1, 0.06, 0.035, ambGain); }
+      ambTimer = 2 + Math.random() * 3;
+    } else ambTimer = 1;
+  }
+}

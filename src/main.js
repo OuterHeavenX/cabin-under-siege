@@ -1,0 +1,440 @@
+// Boot, main loop, map loading, travel, pause handling and the title screen.
+import { G, newSave, isNight } from './game/state.js';
+import { TILE } from './config.js';
+import { clamp, dist, fmtClock, escapeHtml } from './util.js';
+import { buildCabinMap, buildTownMap } from './world/mapgen.js';
+import { buildGroundCanvas, buildRoofCanvas, render } from './world/render.js';
+import { initInput, consume, endFrame, resetInput, setTouchMode, input } from './input.js';
+import { initAudio, setVolumes, updateAudio, setMusic, setAmbient, suspendAudio, resumeAudio, sfx } from './audio.js';
+import { initHud, updateHud, toast, banner } from './ui/hud.js';
+import { initDialogue, updateDialogue, playDialogue } from './ui/dialogue.js';
+import { openMenu, closeModal, topModal, setMenuHooks, openHelp, confirmBox, pickImport, modalOpen, closeAllModals } from './ui/menus.js';
+import { createPlayer, updatePlayer, inCombat } from './game/player.js';
+import { updateBullets, updateEffects } from './game/combat.js';
+import { updateEnemies, initEnemyEvents } from './game/enemies.js';
+import { updateSiege, updateThreatClock, initSiegeEvents, handleDefeat, maybeAmbushOnArrival, refreshSignProps, absNow, absOf } from './game/siege.js';
+import { updateTime, initTimeEvents, advanceMinutes } from './game/time.js';
+import { spawnNpcs, updateNpcs } from './game/npcs.js';
+import { updateJobs, applyChopped, jobHint, JOB_TYPES } from './game/jobs.js';
+import { initStoryEvents, updateStory, objectiveText, storyWaypoint, newGameIntro } from './game/story.js';
+import { initHomeEvents, syncCovers, updateRepair } from './game/home.js';
+import { findTarget, doInteract, setTravel } from './game/interact.js';
+import { derived, addXP, addJP } from './game/progression.js';
+import { quickItem, count, addItem } from './game/inventory.js';
+import { ITEMS } from './data/items.js';
+import { saveGame, hasSave, readSaveRaw, migrate, validateSave, deleteSave, loadSettings, canSaveNow } from './game/save.js';
+import { addPickup, damageEnemy } from './game/combat.js';
+import { spawnEnemy } from './game/enemies.js';
+import { startSiege, makeRaidPlan, scheduleSiege, addSign } from './game/siege.js';
+import { buySkill } from './game/progression.js';
+import { damagePlayer } from './game/player.js';
+
+/* ---------------- tiny event bus ---------------- */
+class Emitter {
+  constructor() { this.h = {}; }
+  on(n, f) { (this.h[n] = this.h[n] || []).push(f); }
+  emit(n, ...a) { (this.h[n] || []).forEach((f) => { try { f(...a); } catch (e) { console.error(`[event ${n}]`, e); } }); }
+}
+G.events = new Emitter();
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d', { alpha: false });
+let last = performance.now();
+let hudInfoT = 0;
+let hudInfo = { maxHp: 100, maxStamina: 100, objective: '', reloadTime: 1.4, quickLabel: 'USE' };
+let autosaveT = 0;
+
+/* ---------------- sizing ---------------- */
+function resize() {
+  const vv = window.visualViewport;
+  const w = Math.round(vv ? vv.width : window.innerWidth);
+  const h = Math.round(vv ? vv.height : window.innerHeight);
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  G.view = { w, h, dpr };
+  canvas.width = Math.round(w * dpr);
+  canvas.height = Math.round(h * dpr);
+  canvas.style.width = `${w}px`;
+  canvas.style.height = `${h}px`;
+  G.camera.zoom = clamp(Math.min(w / 900, h / 480), 0.82, 2.4);
+  document.body.classList.toggle('portrait', h > w);
+}
+
+/* ---------------- maps ---------------- */
+function buildMaps() {
+  const cabin = buildCabinMap(G.s.home);
+  const town = buildTownMap();
+  for (const m of [cabin, town]) {
+    m.groundCanvas = buildGroundCanvas(m);
+    for (const b of m.buildings) b.roofCanvas = buildRoofCanvas(b);
+  }
+  G.maps = { cabin, town };
+  syncCovers();
+  applyChopped(cabin);
+  applyChopped(town);
+}
+
+export function loadMap(id, pos) {
+  G.map = G.maps[id];
+  G.enemies = [];
+  G.bullets = [];
+  G.pickups = G.pickups.filter((p) => p.kind === 'note' && p.map === id);
+  G.particles = [];
+  G.floaters = [];
+  applyChopped(G.map);
+  if (id === 'cabin') refreshSignProps();
+  const p = G.player;
+  if (pos) { p.x = pos.x; p.y = pos.y; }
+  G.map.pushOut(p, p.radius, 'player');
+  G.camera.x = p.x; G.camera.y = p.y;
+  spawnNpcs();
+  G.events.emit('mapLoaded', id);
+  updateMood(true);
+}
+
+function travel(target, mode) {
+  if (G.transition) return;
+  if (G.siegeActive || inCombat() || G.enemies.some((e) => !e.dead && !e.gone)) { toast('You can\'t leave while you\'re under attack!', 'danger'); return; }
+  const mins = mode === 'car' ? 20 : 60;
+  if (mode === 'car') sfx('car');
+  const text = target === 'town' ? 'Driving to Pine Hollow…' : 'Heading home…';
+  G.transition = {
+    t: 0, fade: 0, text, phase: 'out',
+    mid: () => {
+      advanceMinutes(mins);
+      const m = G.maps[target];
+      let pos;
+      if (mode === 'car') pos = target === 'town' ? m.points.car : m.points.car;
+      else pos = target === 'town' ? { x: 1.6 * TILE, y: 21 * TILE } : { x: 57.5 * TILE, y: 39.5 * TILE };
+      loadMap(target, pos);
+      if (mode === 'walk') addJP('survivor', 2, 'walk', 2);
+      saveGame('travel');
+    },
+    done: () => { if (target === 'cabin') maybeAmbushOnArrival(); },
+  };
+}
+setTravel(travel);
+
+function updateTransition(dt) {
+  const tr = G.transition;
+  tr.t += dt;
+  if (tr.phase === 'hold') return; // e.g. defeat screen: wait for the player
+  if (tr.phase === 'out') {
+    tr.fade = Math.min(1, tr.t / 0.5);
+    if (tr.t >= 0.9) { tr.phase = 'in'; tr.t = 0; tr.mid && tr.mid(); }
+  } else if (tr.phase === 'in') {
+    tr.fade = Math.max(0, 1 - tr.t / 0.5);
+    if (tr.t >= 0.5) { const done = tr.done; G.transition = null; done && done(); }
+  }
+}
+
+/* ---------------- mood (music & ambience) ---------------- */
+let moodT = 0;
+function updateMood(force) {
+  moodT -= 1 / 60;
+  if (!force && moodT > 0) return;
+  moodT = 1;
+  if (G.siegeActive || G.enemies.some((e) => !e.dead && e.alerted)) setMusic('tense');
+  else setMusic(isNight() ? 'night' : 'day');
+  if (isNight()) setAmbient('night');
+  else setAmbient(G.map && G.map.id === 'town' ? 'town' : 'day');
+}
+
+/* ---------------- game update ---------------- */
+function update(dt) {
+  updateTime(dt);
+  updateThreatClock();
+  if (G.sleeping) { G.clockText = `Day ${G.s.time.day} · ${fmtClock(G.s.time.minute)}`; return; }
+  updatePlayer(dt);
+
+  G.interactTarget = findTarget();
+  if (consume('interact') && !G.repairHold) doInteract(G.interactTarget);
+  updateRepair(dt);
+
+  updateEnemies(dt);
+  updateSiege(dt);
+  updateBullets(dt);
+  updateEffects(dt);
+  updateNpcs(dt);
+  updateJobs(dt);
+  updateStory(dt);
+  checkDiscovery();
+
+  G.hitFlash = Math.max(0, G.hitFlash - dt);
+  if (G.hurtDir) G.hurtDir.t -= dt;
+  // trees / doors hit timers
+  for (const b of G.map.blockers.values()) if (b.hitT > 0) b.hitT -= dt;
+
+  autosaveT += dt;
+  if (autosaveT > 90 && !canSaveNow()) { autosaveT = 0; saveGame('periodic'); }
+}
+
+function checkDiscovery() {
+  const p = G.player;
+  const disc = G.s.world.discovered;
+  for (const d of G.map.discover || []) {
+    if (disc.includes(d.id)) continue;
+    if (dist(p.x, p.y, d.x, d.y) < d.r) {
+      disc.push(d.id);
+      toast(`Discovered: ${d.name}`, 'level', 3);
+      addXP(10, null);
+      addJP('survivor', 5);
+    }
+  }
+}
+
+function updateCamera(dt) {
+  const p = G.player;
+  const c = G.camera;
+  const lead = 30;
+  const tx = p.x + Math.cos(p.angle) * lead * (input.aim.active || input.mouse.inside ? 1 : 0.3);
+  const ty = p.y + Math.sin(p.angle) * lead * (input.aim.active || input.mouse.inside ? 1 : 0.3);
+  const k = 1 - Math.pow(0.0015, dt);
+  c.x += (tx - c.x) * k;
+  c.y += (ty - c.y) * k;
+  // clamp to map
+  const m = G.map;
+  const hw = G.view.w / 2 / c.zoom, hh = G.view.h / 2 / c.zoom;
+  const mw = m.w * TILE, mh = m.h * TILE;
+  c.x = mw > hw * 2 ? clamp(c.x, hw, mw - hw) : mw / 2;
+  c.y = mh > hh * 2 ? clamp(c.y, hh - 60 / c.zoom, mh - hh) : mh / 2;
+  if (c.shake > 0) {
+    c.shakeX = (Math.random() - 0.5) * c.shake * 2;
+    c.shakeY = (Math.random() - 0.5) * c.shake * 2;
+    c.shake = Math.max(0, c.shake - dt * 30);
+  } else { c.shakeX = 0; c.shakeY = 0; }
+}
+
+function computeHudInfo(dt) {
+  hudInfoT -= dt;
+  if (hudInfoT > 0) return;
+  hudInfoT = 0.2;
+  const d = derived();
+  const s = G.s;
+  let jobLine = '';
+  if (s.job) {
+    jobLine = `${JOB_TYPES[s.job.type].icon} ${jobHint()}`;
+    if (s.job.type === 'delivery' && s.job.stage === 'deliver') jobLine += s.job.timeLeft > 0 ? ` ⏱ ${Math.ceil(s.job.timeLeft)}s` : ' (late)';
+  }
+  let danger = null;
+  const alive = G.enemies.filter((e) => !e.dead && !e.gone).length;
+  if (G.siegeActive) {
+    const pending = G.siege ? G.siege.plan.waves.slice(G.siege.waveIdx).reduce((a, w) => a + w.types.length, 0) : 0;
+    danger = `UNDER ATTACK — ${alive} attacker${alive === 1 ? '' : 's'}${pending ? ` (+${pending} coming)` : ''}`;
+  } else if (alive) danger = `${alive} attacker${alive === 1 ? '' : 's'} nearby`;
+  else if (s.world.siege && s.world.siege.warned) danger = `Attack expected ~${fmtClock(s.world.siege.minute)}. Get ready!`;
+  const q = quickItem();
+  // Waypoint
+  let wp = storyWaypoint();
+  if (wp && wp.map !== G.map.id) {
+    const car = G.map.props.find((p) => p.kind === 'car');
+    wp = car ? { x: car.x, y: car.y, label: wp.map === 'town' ? 'Car → Town' : 'Car → Home' } : null;
+  }
+  G.waypoint = wp && !G.siegeActive ? wp : null;
+  hudInfo = {
+    maxHp: d.maxHp, maxStamina: d.maxStamina, reloadTime: d.reloadTime, objective: objectiveText(), jobLine, danger,
+    quickLabel: q ? `${ITEMS[q].icon}×${count(q)}` : 'USE', night: isNight(), combat: inCombat(), target: null,
+  };
+}
+
+/* ---------------- frame ---------------- */
+function frame(ts) {
+  const dt = Math.min(0.05, Math.max(0, (ts - last) / 1000));
+  last = ts;
+  G.time += dt;
+  try {
+    if (G.running) {
+      handleGlobalKeys();
+      if (G.transition) updateTransition(dt);
+      else if (!G.paused && !G.modal) update(dt);
+      if (G.modal === 'dialogue') updateDialogue(dt);
+      if (G.player) {
+        updateCamera(dt);
+        computeHudInfo(dt);
+        hudInfo.target = G.modal ? null : G.interactTarget;
+        updateHud(dt, hudInfo);
+        updateMood(false);
+      }
+      render(ctx);
+    }
+    updateAudio(G.paused || (G.modal && G.modal !== 'dialogue') ? 0 : dt);
+  } catch (e) {
+    console.error(e);
+  }
+  endFrame();
+  requestAnimationFrame(frame);
+}
+
+function handleGlobalKeys() {
+  const top = topModal();
+  if (top && top.name === 'repair' && G.repairGameHit) {
+    if (consume('interact') || consume('dodge') || consume('advance')) G.repairGameHit();
+  }
+  if (consume('pause')) {
+    if (top) { if (top.el.querySelector('[data-close]')) closeModal(); }
+    else if (!G.transition) openMenu();
+    return;
+  }
+  const map = { inv: 'inv', char: 'char', skills: 'skills', map: 'map', journal: 'journal', home: 'home' };
+  if (top && top.name === 'menu') { for (const k of Object.keys(map)) if (consume(k)) { openMenu(map[k]); return; } }
+  if (top || G.transition) return;
+  for (const k of Object.keys(map)) if (consume(k)) { openMenu(map[k]); return; }
+  if (consume('help')) openHelp();
+}
+
+/* ---------------- pause / interruptions ---------------- */
+function pauseForInterruption() {
+  if (!G.running) return;
+  resetInput();
+  suspendAudio();
+  if (!modalOpen() && !G.transition && !G.player?.dead) openMenu();
+  // Save if it's safe, in case the OS discards the tab while hidden.
+  if (!canSaveNow()) saveGame('background');
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) pauseForInterruption();
+  else resumeAudio();
+});
+window.addEventListener('pagehide', pauseForInterruption);
+window.addEventListener('blur', () => { if (G.running && input.touchMode) pauseForInterruption(); else resetInput(); });
+window.addEventListener('focus', () => resumeAudio());
+
+/* ---------------- events ---------------- */
+function initEvents() {
+  initEnemyEvents();
+  initSiegeEvents();
+  initTimeEvents();
+  initHomeEvents();
+  initStoryEvents();
+  G.events.on('playerDown', () => handleDefeat());
+  G.events.on('recovered', ({ onCabin, gifts, story }) => {
+    G.transition = null;
+    const m = onCabin ? G.maps.cabin : G.maps.town;
+    loadMap(m.id, m.points.recovery);
+    const who = onCabin ? 'Ruth Calloway' : 'Dee Marsh';
+    const lines = [{ who, text: onCabin ? 'Easy, easy. You\'ve got stitches in places you don\'t want to know about. You\'ll live.' : 'Morning, sunshine. You owe me a mop.' }];
+    if (gifts.length) lines.push({ who, text: `I left you some things: ${gifts.join(' and ')}. Don't argue.` });
+    if (story) lines.push({ who: 'Frank', text: 'They\'ll come back tonight. This time I\'ll be ready.' });
+    playDialogue(lines);
+    saveGame('recover', { force: true });
+  });
+  G.events.on('newDay', (day) => {
+    applyChopped(G.map);
+    if (G.map.id === 'cabin') refreshSignProps();
+    if (!G.sleeping) banner(`Day ${day} begins.`, 'info', 3);
+  });
+  G.events.on('mapLoaded', (id) => {
+    // Never lose the story note when leaving the cabin.
+    if (id === 'cabin' && G.s.story.step === 'search_body' && count('note') === 0 && !G.pickups.some((p) => p.kind === 'note')) {
+      const p = G.maps.cabin.points.porch;
+      addPickup('note', p.x + 30, p.y + 20, 1, { map: 'cabin' });
+    }
+  });
+}
+
+/* ---------------- start / title ---------------- */
+function startGame(isNew) {
+  closeAllModals();
+  G.enemies = []; G.bullets = []; G.pickups = []; G.particles = []; G.floaters = [];
+  G.siegeActive = false; G.siege = null; G.sleeping = null; G.transition = null; G.repairHold = null;
+  buildMaps();
+  G.player = createPlayer();
+  const d = derived();
+  G.player.hp = Math.min(G.player.hp, d.maxHp);
+  loadMap(G.s.player.map, { x: G.s.player.x, y: G.s.player.y });
+  document.getElementById('title').classList.add('hidden');
+  document.getElementById('hud').classList.remove('hidden');
+  G.running = true;
+  G.paused = false;
+  setTouchMode(G.settings.touchControls === 'on' || (G.settings.touchControls === 'auto' && (input.touchMode || matchMedia('(pointer: coarse)').matches)));
+  if (isNew) {
+    saveGame('new', { force: true });
+    newGameIntro();
+  } else {
+    banner(`Welcome back. Day ${G.s.time.day}, ${fmtClock(G.s.time.minute)}.`, 'info', 3);
+  }
+  // If a siege time already passed while saved, give a moment before it triggers.
+  const s = G.s.world.siege;
+  if (s && absOf(s) <= absNow()) { s.minute = (G.s.time.minute + 3) % 1440; s.day = G.s.time.day + (G.s.time.minute + 3 >= 1440 ? 1 : 0); }
+}
+
+function newGame() {
+  G.s = newSave();
+  startGame(true);
+}
+
+function continueGame() {
+  const raw = readSaveRaw();
+  const err = validateSave(raw);
+  if (err) { toast(`Save could not be loaded: ${err}`, 'warn', 4); return; }
+  G.s = migrate(raw);
+  startGame(false);
+}
+
+function quitToTitle() {
+  G.running = false;
+  G.player = null;
+  closeAllModals();
+  setTouchMode(input.touchMode);
+  document.getElementById('touch').classList.add('hidden');
+  document.getElementById('hud').classList.add('hidden');
+  showTitle();
+}
+
+function showTitle() {
+  const t = document.getElementById('title');
+  t.classList.remove('hidden');
+  const raw = hasSave() ? readSaveRaw() : null;
+  const ok = raw && !validateSave(raw);
+  const cont = document.getElementById('t-continue');
+  cont.classList.toggle('hidden', !ok);
+  if (ok) cont.innerHTML = `Continue <span class="sub">Day ${raw.time.day} · Level ${raw.stats.level}${raw.story && raw.story.chapterComplete ? ' · Ch.1 complete' : ''}</span>`;
+}
+
+function initTitle() {
+  const go = (fn) => () => { initAudio(); setVolumes(G.settings.sfxVolume, G.settings.musicVolume); fn(); };
+  document.getElementById('t-continue').addEventListener('click', go(continueGame));
+  document.getElementById('t-new').addEventListener('click', go(() => {
+    if (hasSave()) {
+      const raw = readSaveRaw();
+      const desc = raw && raw.time ? ` (Day ${raw.time.day}, Level ${raw.stats?.level ?? '?'})` : '';
+      confirmBox(`Starting a new game will overwrite your existing save${desc}. This can't be undone. (Tip: export your save from Settings first.)`, 'Start over', () => { deleteSave(); newGame(); }, 'Keep my save');
+    } else newGame();
+  }));
+  document.getElementById('t-import').addEventListener('click', go(() => pickImport(() => showTitle())));
+  document.getElementById('t-help').addEventListener('click', go(() => openHelp()));
+  document.getElementById('menu-btn').addEventListener('click', (e) => { e.preventDefault(); if (!modalOpen()) openMenu(); });
+  document.getElementById('objective').addEventListener('click', () => { if (!modalOpen()) openMenu('journal'); });
+  const rh = document.getElementById('rotate-hint');
+  rh.addEventListener('click', () => rh.classList.add('dismissed'));
+}
+
+/* ---------------- boot ---------------- */
+function boot() {
+  loadSettings();
+  setVolumes(G.settings.sfxVolume, G.settings.musicVolume);
+  resize();
+  window.addEventListener('resize', resize);
+  window.addEventListener('orientationchange', () => setTimeout(resize, 150));
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', resize);
+  initInput(canvas);
+  initHud();
+  initDialogue();
+  initEvents();
+  setMenuHooks({ quitToTitle, reloadFromSave: () => continueGame() });
+  initTitle();
+  showTitle();
+  if (G.settings.touchControls === 'on' || (G.settings.touchControls === 'auto' && matchMedia('(pointer: coarse)').matches)) setTouchMode(true);
+  document.getElementById('touch').classList.add('hidden');
+  requestAnimationFrame(frame);
+  if ('serviceWorker' in navigator && location.protocol === 'https:') {
+    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  }
+  // Test/debug handle (harmless in production; used by the automated smoke test).
+  window.__cus = {
+    G, newGame, continueGame, travel, loadMap, saveGame, quitToTitle,
+    dbg: { damageEnemy, spawnEnemy, startSiege, makeRaidPlan, scheduleSiege, addSign, addItem, addXP, addJP, buySkill, derived, damagePlayer, count },
+  };
+}
+
+boot();

@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#14110e">
+  <meta name="description" content="Cabin Under Siege — a top-down survival action RPG. You left the family. The family didn't leave you.">
+  <title>Cabin Under Siege</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="app">
+    <canvas id="game" aria-label="Game view"></canvas>
+
+    <!-- HUD -->
+    <div id="hud" class="hidden">
+      <div class="hud-tl">
+        <div class="bar hp" aria-label="Health"><div id="hp-fill" class="fill"></div><span class="bar-lbl">HP <span id="hp-txt">100 / 100</span></span></div>
+        <div class="bar st" aria-label="Stamina"><div id="st-fill" class="fill"></div><span class="bar-lbl">STAMINA</span></div>
+        <div class="money" id="money">$0</div>
+      </div>
+      <div class="hud-tc">
+        <div class="clock"><span id="day">Day 1</span> · <span id="clock">9:00 AM</span></div>
+        <button id="objective" class="objective" aria-label="Objective (open journal)">…</button>
+        <div id="jobline" class="jobline hidden"></div>
+      </div>
+      <div class="hud-tr">
+        <div class="ammo-box"><div id="ammo" class="ammo">8 / 32</div><div id="ammo-sub" class="ammo-sub">9mm handgun</div><div class="reload-track"><div id="reload-bar"></div></div></div>
+        <button id="menu-btn" class="menu-btn" aria-label="Pause menu">☰</button>
+      </div>
+      <div id="danger" class="danger hidden" role="alert"></div>
+      <div id="banner" class="banner hidden" role="status"></div>
+      <div id="cover-tag" class="cover-tag hidden">🛡 IN COVER</div>
+      <div id="toasts" class="toasts" aria-live="polite"></div>
+      <div id="prompt" class="prompt hidden"></div>
+      <div id="center-msg" class="center-msg hidden"></div>
+      <div id="quick-item" class="hidden"></div>
+    </div>
+
+    <!-- Touch controls -->
+    <div id="touch" class="hidden">
+      <div id="joy-zone" aria-label="Movement area"><div id="joy-base"><div id="joy-knob"></div></div><div class="joy-hint">MOVE</div></div>
+      <div id="aim-zone" aria-label="Aim stick"><div id="aim-base"></div><div id="aim-knob"></div><span class="aim-lbl">AIM</span></div>
+      <button id="btn-fire" class="tbtn fire">FIRE</button>
+      <button id="btn-interact" class="tbtn act"><span id="btn-interact-label">ACT</span></button>
+      <button id="btn-reload" class="tbtn small">RELOAD</button>
+      <button id="btn-melee" class="tbtn small">MELEE</button>
+      <button id="btn-dodge" class="tbtn small">DODGE</button>
+      <button id="btn-use" class="tbtn small"><span id="btn-use-label">USE</span></button>
+    </div>
+
+    <!-- Dialogue -->
+    <div id="dialogue" class="dialogue hidden">
+      <div class="dlg-box">
+        <div id="dlg-who" class="dlg-who"></div>
+        <div id="dlg-text" class="dlg-text"></div>
+        <div id="dlg-choices" class="dlg-choices hidden"></div>
+        <div class="dlg-foot"><span class="dlg-tap">Tap / Space to continue</span><button id="dlg-skip" class="dlg-skip">Skip ⏭</button></div>
+      </div>
+    </div>
+
+    <div id="modal-root"></div>
+
+    <!-- Title -->
+    <div id="title" class="title">
+      <div class="title-inner">
+        <div class="title-kicker">A survival story</div>
+        <h1>CABIN<br>UNDER SIEGE</h1>
+        <p class="tagline">“You left the family. The family didn’t leave you.”</p>
+        <div class="title-btns">
+          <button id="t-continue" class="btn big primary hidden">Continue</button>
+          <button id="t-new" class="btn big">New Game</button>
+          <button id="t-import" class="btn big">Import Save</button>
+          <button id="t-help" class="btn big">Controls</button>
+        </div>
+        <p class="title-note">Best in landscape on phones. Sound starts when you tap a button.</p>
+      </div>
+    </div>
+
+    <div id="rotate-hint" class="rotate-hint">↻ Rotate your phone to landscape for the best experience <span>(tap to dismiss)</span></div>
+    <noscript><div class="noscript">Cabin Under Siege needs JavaScript enabled.</div></noscript>
+  </div>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

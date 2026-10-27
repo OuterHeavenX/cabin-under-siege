@@ -1,0 +1,16 @@
+{
+  "name": "cabin-under-siege",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Top-down survival action RPG for mobile and desktop browsers. You left the family. The family didn't leave you.",
+  "type": "module",
+  "scripts": {
+    "start": "node tools/serve.mjs 8080",
+    "test": "node tools/smoke-test.mjs",
+    "icons": "node tools/make-icons.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.47.0"
+  },
+  "license": "MIT"
+}
