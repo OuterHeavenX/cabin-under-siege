@@ -3,10 +3,11 @@ import { G } from '../game/state.js';
 import { escapeHtml } from '../util.js';
 import { sfx } from '../audio.js';
 import { consume } from '../input.js';
+import { portraitFor } from './portraits.js';
 
 const queue = [];
 let cur = null; // {lines, idx, onEnd}
-let el, whoEl, textEl, choicesEl, skipBtn;
+let el, whoEl, textEl, choicesEl, skipBtn, portraitEl;
 let typeT = 0;
 let fullText = '';
 let shown = 0;
@@ -17,6 +18,7 @@ export function initDialogue() {
   textEl = document.getElementById('dlg-text');
   choicesEl = document.getElementById('dlg-choices');
   skipBtn = document.getElementById('dlg-skip');
+  portraitEl = document.getElementById('dlg-portrait');
   el.addEventListener('pointerdown', (e) => {
     if (e.target.closest('button')) return;
     e.preventDefault();
@@ -49,6 +51,9 @@ function show() {
   const line = cur.lines[cur.idx];
   whoEl.textContent = line.who || '';
   whoEl.classList.toggle('hidden', !line.who);
+  const pic = portraitFor(line.who);
+  portraitEl.classList.toggle('hidden', !pic);
+  if (pic && portraitEl.getAttribute('src') !== pic) portraitEl.src = pic;
   fullText = line.text;
   shown = 0;
   typeT = 0;

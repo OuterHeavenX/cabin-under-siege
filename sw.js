@@ -45,6 +45,7 @@ const ASSETS = [
   "./src/ui/dialogue.js",
   "./src/ui/hud.js",
   "./src/ui/menus.js",
+  "./src/ui/portraits.js",
   "./src/util.js",
   "./src/world/blockers.js",
   "./src/world/lights.js",

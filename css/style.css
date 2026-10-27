@@ -167,6 +167,12 @@ body.portrait.touch .rotate-hint:not(.dismissed) { display: block; position: abs
 /* ---------------- Dialogue ---------------- */
 .dialogue { position: absolute; left: 0; right: 0; bottom: 0; padding: 0 calc(12px + var(--sar)) calc(12px + var(--sab)) calc(12px + var(--sal)); z-index: 20; display: flex; justify-content: center; }
 .dlg-box { width: min(760px, 100%); background: var(--panel); border: 2px solid var(--line); border-radius: 12px; padding: 12px 16px 8px; box-shadow: 0 8px 30px rgba(0,0,0,0.6); cursor: pointer; }
+.dlg-box { display: grid; grid-template-columns: auto 1fr; column-gap: 12px; }
+.dlg-portrait { grid-row: 1; width: 84px; height: 84px; border-radius: 8px; border: 2px solid #5e1c1c; box-shadow: 0 0 0 1px #000, 0 4px 14px rgba(0,0,0,0.6); align-self: start; }
+.dlg-body { grid-column: 2; min-width: 0; }
+.dlg-portrait.hidden + .dlg-body { grid-column: 1 / -1; }
+.dlg-foot { grid-column: 1 / -1; }
+.dlg-who { font-family: var(--serif); letter-spacing: 0.5px; }
 .dlg-who { font-weight: 800; color: var(--accent); font-size: 14px; margin-bottom: 4px; }
 .dlg-text { font-size: 16px; line-height: 1.4; min-height: 2.8em; }
 .dlg-choices { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
@@ -175,7 +181,7 @@ body.portrait.touch .rotate-hint:not(.dismissed) { display: block; position: abs
 .dlg-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; }
 .dlg-tap { font-size: 11px; color: var(--muted); }
 .dlg-skip { background: transparent; border: 1px solid var(--line); border-radius: 6px; padding: 6px 12px; font-size: 13px; cursor: pointer; min-height: 36px; }
-@media (max-height: 400px) { .dlg-text { font-size: 14px; min-height: 2.4em; } .dlg-box { padding: 8px 12px 6px; } }
+@media (max-height: 400px) { .dlg-text { font-size: 14px; min-height: 2.4em; } .dlg-box { padding: 8px 12px 6px; } .dlg-portrait { width: 60px; height: 60px; } }
 
 /* ---------------- Modals ---------------- */
 #modal-root { position: absolute; inset: 0; z-index: 30; pointer-events: none; }
