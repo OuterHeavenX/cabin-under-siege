@@ -29,7 +29,20 @@ export const STEPS = {
   search_body: { obj: 'Search the big man for anything useful.' },
   show_ruth: { obj: 'Show the note to Ruth.' },
   phone_call: { obj: 'The cabin phone is ringing. Answer it.' },
-  free: { obj: 'Chapter 1 complete. Work, fortify, and stay alive. (Chapter 2 is coming in a future update.)' },
+  free: { obj: 'Chapter 1 complete. Work, fortify, and stay alive.' },
+  leave_town: { obj: 'Chapter 1 complete. Keep playing — or, when you\'re ready, use your car at the cabin to leave Pine Hollow for good (Chapter 2).' },
+  // ---- Chapter 2: Larch Street ----
+  ch2_arrive: { obj: 'Look around the new house on Larch Street — step inside.' },
+  ch2_meet_marcus: { obj: 'Say hello to your neighbor across the street.' },
+  ch2_find_work: { obj: 'Find Pete Kowalski at Kowalski Moving (Main Street) and ask about work.' },
+  ch2_job: { obj: 'Take and complete a job from Pete\'s job board.' },
+  ch2_rosa: { obj: 'Rosa at Delgado Hardware wants to talk to you.' },
+  ch2_letter: { obj: 'Check your mailbox.' },
+  ch2_fortify: { obj: 'Fortify the house: install two defenses (shutters, boards, braces, traps or cover).' },
+  ch2_siege: { obj: 'Sal Benedetto is coming. Be home by 10 PM — and survive.' },
+  ch2_phone: { obj: 'Search Sal for anything useful.' },
+  ch2_marcus_truth: { obj: 'Show Marcus what you found.' },
+  ch2_free: { obj: 'Chapter 2 complete. Work, fortify, and stay alive. (Chapter 3 is planned for a future update.)' },
 };
 
 export function objectiveText() {
@@ -44,6 +57,8 @@ function setStep(step) {
   sfx('chime');
   saveGame('story', { force: false });
 }
+
+const mb = () => G.maps.millbrook;
 
 const npcPoint = (id) => {
   const def = NPCS[id];
@@ -76,6 +91,24 @@ export function storyWaypoint() {
     }
     case 'show_ruth': return { ...npcPoint('ruth'), label: 'Ruth' };
     case 'phone_call': return { map: 'cabin', x: 26.5 * 32, y: 18.6 * 32, label: 'Phone' };
+    case 'leave_town': return G.s.job ? jobWaypoint() : null;
+    case 'ch2_arrive': return { map: 'millbrook', ...mb().points.cabin_front, label: 'House' };
+    case 'ch2_meet_marcus': return { ...npcPoint('marcus'), label: 'Marcus' };
+    case 'ch2_find_work': return { ...npcPoint('pete'), label: 'Pete' };
+    case 'ch2_job': {
+      if (G.s.job) return jobWaypoint();
+      const jb = mb().props.find((p) => p.id === 'jobboard');
+      return { map: 'millbrook', x: jb.x, y: jb.y, label: 'Job board' };
+    }
+    case 'ch2_rosa': return { ...npcPoint('rosa'), label: 'Rosa' };
+    case 'ch2_letter': { const mx = mb().props.find((p) => p.id === 'mailbox'); return { map: 'millbrook', x: mx.x, y: mx.y, label: 'Mailbox' }; }
+    case 'ch2_fortify': return { map: 'millbrook', ...mb().points.cabin_front, label: 'House' };
+    case 'ch2_siege': return { map: 'millbrook', ...mb().points.cabin_in, label: 'House' };
+    case 'ch2_phone': {
+      const pk = G.pickups.find((p) => p.kind === 'burner');
+      return pk ? { map: G.map.id, x: pk.x, y: pk.y, label: 'Phone' } : null;
+    }
+    case 'ch2_marcus_truth': return { ...npcPoint('marcus'), label: 'Marcus' };
     default: return G.s.job ? jobWaypoint() : null;
   }
 }
@@ -122,6 +155,65 @@ export function storyDialogue(id) {
       onEnd: () => { f.strangerInTown = true; addRel('dee', 5); setStep('stranger'); },
     };
   }
+  if (id === 'marcus' && st.step === 'ch2_meet_marcus') {
+    return {
+      lines: [
+        { who: 'Marcus Bell', text: 'You\'re the cash buyer. Pulled in at 4:12 yesterday, Ohio dealer plates, no moving truck. Packs light.' },
+        { who: ME, text: '...Frank Lowe. You always clock your neighbors like that?' },
+        { who: 'Marcus Bell', text: 'Marcus Bell. Thirty-one years with the postal service. Habits stick.' },
+        { who: 'Marcus Bell', text: 'Pete Kowalski\'s always hiring down on Main Street. Rosa Delgado runs the hardware store — tell her I sent you, she\'ll only overcharge you a little.' },
+        { who: 'Marcus Bell', text: 'And Frank? Whatever you\'re not telling me — I don\'t need to know. Just don\'t bring it to Larch Street.' },
+      ],
+      onEnd: () => { addRel('marcus', 6); addXP(25, 'Met Marcus'); setStep('ch2_find_work'); },
+    };
+  }
+  if (id === 'pete' && st.step === 'ch2_find_work') {
+    return {
+      lines: [
+        { who: 'Pete Kowalski', text: 'New guy! Marcus radioed ahead. That man radios everything ahead.' },
+        { who: ME, text: 'I need work. Honest work.' },
+        { who: 'Pete Kowalski', text: 'Honest is the only kind I got, buddy. Firewood, deliveries, fix-it jobs. Board\'s by the office, seven to five.' },
+        { who: 'Pete Kowalski', text: 'The park\'s got deadfall you can split for firewood. Bring it to the drop-off in my yard. Easy money.' },
+      ],
+      onEnd: () => { addRel('pete', 6); addXP(25, 'Met Pete'); setStep('ch2_job'); },
+    };
+  }
+  if (id === 'rosa' && st.step === 'ch2_rosa') {
+    return {
+      lines: [
+        { who: 'Rosa Delgado', text: 'Frank. Come here. Lower your voice.' },
+        { who: 'Rosa Delgado', text: 'Man came in this morning. Expensive coat, Chicago accent, bought four boxes of buckshot and asked if anybody new moved onto Larch Street.' },
+        { who: ME, text: 'What did you tell him?' },
+        { who: 'Rosa Delgado', text: 'That Larch Street is all retirees and dogs. He didn\'t believe me.' },
+        { who: 'Rosa Delgado', text: 'Take these shutters. Steel. My grandfather put them on this store in \'68 after the riots. Go check your mail — he asked about a mailbox number.' },
+      ],
+      onEnd: () => { addItem('shutter_kit', 2); addRel('rosa', 8); addXP(30, 'Warned'); setStep('ch2_letter'); },
+    };
+  }
+  if (id === 'marcus' && st.step === 'ch2_marcus_truth') {
+    return {
+      lines: [
+        { who: 'Marcus Bell', text: 'I watched the whole thing from my window with a rifle across my knees. You fight like a man who\'s done it before.' },
+        { who: ME, text: 'This was on the one in the good coat. Sal Benedetto. The phone has one number saved — "L." And a text: "Wisconsin next if Ohio fails."' },
+        { who: 'Marcus Bell', text: '...Sit down, Frank.' },
+        { who: 'Marcus Bell', text: 'I wasn\'t a mail carrier. Deputy U.S. Marshal, Witness Security, twenty-six years. I know what a man on the run looks like. I\'ve built a hundred of you.' },
+        { who: 'Marcus Bell', text: 'The Vescaris don\'t send a Benedetto for a nobody. You know something Leo is afraid of.' },
+        { who: ME, text: 'I know where the money goes. All of it.' },
+        { who: 'Marcus Bell', text: 'Then you can\'t outrun them. Not forever. But you can outlast them — with the right friends and the right place.' },
+        { who: 'Marcus Bell', text: 'There\'s a farm in Wisconsin. Off every book I ever kept. When you\'re ready, I\'ll make a call.' },
+      ],
+      onEnd: () => {
+        st.done[2] = true;
+        st.step = 'ch2_free';
+        G.s.world.threat = Math.max(G.s.world.threat, 50);
+        G.s.world.quietUntilDay = G.s.time.day + 2;
+        addRel('marcus', 12);
+        addXP(120, 'Chapter 2 complete');
+        saveGame('chapter');
+        showChapterEnd(2);
+      },
+    };
+  }
   if (id === 'ruth' && st.step === 'show_ruth') {
     return {
       lines: [
@@ -148,6 +240,34 @@ export function initStoryEvents() {
   });
   ev.on('jobDone', () => {
     if (G.s.story.step === 'first_job') setStep('see_dee');
+    if (G.s.story.step === 'ch2_job') setStep('ch2_rosa');
+  });
+  ev.on('defenseInstalled', () => {
+    const st = G.s.story;
+    if (st.step !== 'ch2_fortify') return;
+    st.flags.fortified = (st.flags.fortified || 0) + 1;
+    if (st.flags.fortified < 2) { toast('One defense done — install one more.', 'info', 2.5); return; }
+    const t = G.s.time;
+    const day = t.minute < 20 * 60 + 30 ? t.day : t.day + 1;
+    scheduleSiege(storyPlan(), day, 22 * 60);
+    addSign('strange_car');
+    setStep('ch2_siege');
+    playDialogue([
+      { who: ME, text: 'Two down. If Sal Benedetto is in town, he won\'t wait long. Sal never waits.' },
+      { who: ME, text: 'He\'ll bring firebugs — Sal always liked fire. Keep moving, and keep them off the walls.' },
+    ]);
+  });
+  ev.on('bossDropped', (e) => {
+    const kind = e.carriesNote;
+    const f = G.s.story.flags;
+    if (kind === 'note' && !f.noteRead && count('note') === 0) addPickup('note', e.x, e.y + 6, 1, { map: G.map.id });
+    if (kind === 'burner' && !f.burnerRead && count('burner') === 0) addPickup('burner', e.x, e.y + 6, 1, { map: G.map.id });
+  });
+  ev.on('burnerFound', () => {
+    const f = G.s.story.flags;
+    if (f.burnerRead) return;
+    if (G.siegeActive) { f.burnerPending = true; toast('You pocket Sal\'s phone. Check it when it\'s safe.', 'info', 3); return; }
+    readBurner();
   });
   ev.on('talkStranger', (n) => strangerTalk(n));
   ev.on('defenseInstalled', () => {
@@ -168,6 +288,18 @@ export function initStoryEvents() {
   ev.on('siegeWon', (sg) => {
     if (sg.plan.kind !== 'story') return;
     const f = G.s.story.flags;
+    if (G.s.chapter === 2) {
+      f.firstSiegeDone = true;
+      if (f.burnerPending) { f.burnerPending = false; setTimeout(readBurner, 2500); return; }
+      if (f.burnerRead) return;
+      if (!G.pickups.some((p) => p.kind === 'burner') && count('burner') === 0) {
+        const p = G.map.points.porch;
+        addPickup('burner', p.x + 30, p.y + 20, 1, { map: G.map.id });
+        toast('Sal dropped something by the porch as he ran.', 'info', 4);
+      }
+      setTimeout(() => { if (G.s.story.step === 'ch2_siege') setStep('ch2_phone'); }, 3800);
+      return;
+    }
     f.firstSiegeDone = true;
     if (f.notePending) { f.notePending = false; setTimeout(readNote, 2500); return; }
     if (f.noteRead) return;
@@ -201,6 +333,34 @@ function readNote() {
     const st = G.s.story.step;
     if (st === 'search_body' || st === 'first_siege') setStep('show_ruth');
   });
+}
+
+function readBurner() {
+  const f = G.s.story.flags;
+  if (f.burnerRead) return;
+  f.burnerRead = true;
+  playDialogue([
+    { who: ME, text: 'Sal\'s burner. One contact, saved as "L."' },
+    { who: 'Text from L', text: '"Confirm Frankie. If Ohio fails, Wisconsin next. He has a friend who builds new lives. Find the friend."' },
+    { who: ME, text: 'A friend who builds new lives...' },
+    { who: ME, text: 'Marcus. He was watching the whole time. Time I asked him some questions.' },
+  ], () => {
+    addXP(40, 'Clue'); addJP('shadow', 14);
+    const st = G.s.story.step;
+    if (st === 'ch2_phone' || st === 'ch2_siege') setStep('ch2_marcus_truth');
+  });
+}
+
+/** Mailbox hook for story letters. Returns true if the story handled it. */
+export function storyMail() {
+  if (G.s.story.step !== 'ch2_letter') return false;
+  playDialogue([
+    { who: ME, text: 'No stamp. Hand-delivered. A Polaroid of the cabin in Pine Hollow — taken from the treeline.' },
+    { who: 'Back of the photo', text: '"Nice place you had. Nicer place you got. — S.B."' },
+    { who: ME, text: 'Sal Benedetto. Leo\'s cleanup man. He doesn\'t do warnings unless he wants you scared.' },
+    { who: ME, text: 'Fine. Let him come to a house that\'s ready for him.' },
+  ], () => { addJP('shadow', 8); addThreat(10); setStep('ch2_fortify'); });
+  return true;
 }
 
 /** The scripted (and repeatable sign) conversation with the stranger. */
@@ -246,6 +406,17 @@ export function updateStory(dt) {
       ], () => setStep('meet_ruth'));
     }
   }
+  if (st.step === 'ch2_arrive' && G.map.id === 'millbrook') {
+    const b = G.map.buildingAt(G.player.x, G.player.y);
+    if (b && b.id === 'house') {
+      st.step = 'ch2_meet_marcus';
+      playDialogue([
+        { who: ME, text: 'Millbrook, Ohio. Three bedrooms, a chain-link fence, a mailbox with a name on it that isn\'t mine.' },
+        { who: ME, text: 'Ruth cried when I left. Told me to write. I won\'t. Letters can be followed.' },
+        { who: ME, text: 'The man across the street has been watching me unload the car for twenty minutes. Might as well say hello.' },
+      ], () => setStep('ch2_meet_marcus'));
+    }
+  }
   if (st.step === 'phone_call' && G.map.id === 'cabin') {
     G.phoneRingT = (G.phoneRingT || 0) - dt;
     if (G.phoneRingT <= 0) { sfx('phone'); G.phoneRingT = 3; }
@@ -267,12 +438,13 @@ export function answerPhone() {
       { who: ME, text: '(Click. Dial tone.)' },
     ], () => {
       st.chapterComplete = true;
-      st.step = 'free';
+      st.done[1] = true;
+      st.step = 'leave_town';
       G.s.world.threat = Math.max(G.s.world.threat, 45);
       G.s.world.quietUntilDay = G.s.time.day + 2;
       addXP(80, 'Chapter 1 complete');
       saveGame('chapter');
-      showChapterEnd();
+      showChapterEnd(1);
     });
     return true;
   }

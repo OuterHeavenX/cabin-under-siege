@@ -53,6 +53,8 @@ export function saveGame(reason = 'auto', { force = false, quiet = true } = {}) 
     G.s.player.hp = Math.max(1, Math.round(p.hp));
     G.s.player.stamina = Math.round(p.stamina);
     G.s.player.mag = p.mag;
+    G.s.player.weapon = p.weapon;
+    G.s.player.mags = { ...p.mags, [p.weapon]: p.mag };
     G.s.player.facing = p.angle;
   }
   G.s.savedAt = Date.now();
@@ -87,7 +89,20 @@ export function migrate(data) {
   // Version-specific upgrades go here as the format evolves, e.g.:
   // if (v < 2) { d.newField = ...; }
   if (v < 1) { d.version = 1; }
+  if (v < 2) {
+    // v2: numbered chapters, per-weapon magazines, weapon mods, favors, multi-home saves.
+    d.chapter = 1;
+    d.weaponMods = { extMag: !!(d.home && d.home.upgrades && d.home.upgrades.extMag) };
+    if (d.home && d.home.upgrades) delete d.home.upgrades.extMag;
+    if (d.player) { d.player.weapon = 'pistol'; d.player.mags = { pistol: d.player.mag || 0, shotgun: 0, rifle: 0 }; }
+    if (d.home) d.home.id = d.home.id || 'cabin';
+    if (d.story) { d.story.done = d.story.done || {}; if (d.story.chapterComplete) { d.story.done[1] = true; if (d.story.step === 'free') d.story.step = 'leave_town'; } }
+  }
   fillDefaults(d, newSave());
+  // Make sure every opening record has all current fields.
+  for (const o of Object.values(d.home.openings || {})) {
+    if (o.kind === 'window') { if (o.shutters === undefined) o.shutters = false; if (o.shutterHp === undefined) o.shutterHp = 0; }
+  }
   d.version = SAVE_VERSION;
   // Sanitize
   for (const k of Object.keys(d.inv)) {
@@ -95,7 +110,11 @@ export function migrate(data) {
     else d.inv[k] = Math.min(ITEMS[k].cap, Math.floor(d.inv[k]));
   }
   d.skills = Array.isArray(d.skills) ? [...new Set(d.skills.filter((s) => SKILLS[s]))] : [];
-  if (!['cabin', 'town'].includes(d.player.map)) d.player.map = 'cabin';
+  const mapsByChapter = { 1: ['cabin', 'town'], 2: ['millbrook'] };
+  if (!mapsByChapter[d.chapter]) d.chapter = 1;
+  if (!mapsByChapter[d.chapter].includes(d.player.map)) d.player.map = mapsByChapter[d.chapter][0];
+  if (!Array.isArray(d.home.traps)) d.home.traps = [];
+  d.home.traps = d.home.traps.filter((t) => t && Number.isInteger(t.cx) && Number.isInteger(t.cy));
   d.money = Math.max(0, Math.floor(Number(d.money) || 0));
   if (!Array.isArray(d.home.covers)) d.home.covers = [];
   d.home.covers = d.home.covers.filter((c) => c && Number.isInteger(c.cx) && Number.isInteger(c.cy) && c.hp > 0 && (c.type === 'sandbags' || c.type === 'barricade'));

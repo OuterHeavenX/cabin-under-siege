@@ -5,7 +5,6 @@ let ctx = null;
 let master, sfxGain, musicGain, ambGain;
 let noiseBuf = null;
 let musicMode = 'off';
-let musicTimer = 0;
 let ambMode = 'off';
 let ambTimer = 0;
 let vol = { sfx: 0.8, music: 0.45 };
@@ -90,6 +89,21 @@ export function sfx(name, opts = {}) {
       noise(0.2, 0.55 * v, 'lowpass', 1900, 0.6);
       tone('sawtooth', 110, 35, 0.18, 0.3 * v);
       break;
+    case 'shotgun':
+      noise(0.28, 0.9 * v, 'lowpass', 1800, 0.6);
+      tone('square', 110, 35, 0.2, 0.45 * v);
+      noise(0.08, 0.3, 'bandpass', 900, 1.5, sfxGain, 0.35); // pump
+      break;
+    case 'rifleShot':
+      noise(0.35, 0.8 * v, 'lowpass', 3200, 0.5);
+      tone('sawtooth', 180, 40, 0.3, 0.35 * v);
+      tone('sine', 900, 600, 0.05, 0.1, sfxGain, 0.6); // bolt
+      break;
+    case 'shell': tone('square', 500, 420, 0.04, 0.15); noise(0.04, 0.2, 'bandpass', 2500, 2, sfxGain, 0.05); break;
+    case 'swap': tone('square', 300, 260, 0.04, 0.12); tone('square', 600, 600, 0.03, 0.1, sfxGain, 0.08); break;
+    case 'molotov': noise(0.5, 0.6, 'lowpass', 1200, 0.6); tone('triangle', 2400, 800, 0.15, 0.12); break;
+    case 'fire': noise(0.6, 0.15 * v, 'bandpass', 600, 0.6, sfxGain, 0, 0.1); break;
+    case 'trap': tone('square', 900, 200, 0.08, 0.3); noise(0.12, 0.6, 'highpass', 2000); break;
     case 'empty': tone('square', 900, 900, 0.03, 0.15); break;
     case 'reload':
       tone('square', 420, 380, 0.04, 0.18); tone('square', 700, 650, 0.04, 0.15, sfxGain, 0.18);
@@ -137,49 +151,91 @@ export function setAmbient(mode) { ambMode = mode; }
 export function setMusic(mode) {
   if (mode === musicMode) return;
   musicMode = mode;
-  musicTimer = 0;
+  seqStep = 0;
+  seqNext = ctx ? ctx.currentTime + 0.15 : 0;
 }
 
-const CHORDS = {
-  day: [[196, 247, 294], [175, 220, 262], [165, 208, 247], [175, 220, 294]],
-  night: [[147, 175, 220], [131, 165, 196], [123, 147, 185], [131, 156, 196]],
-  tense: [[110, 131, 165], [104, 131, 156], [110, 139, 165], [98, 123, 147]],
-};
-let chordIdx = 0;
+/* ---- Step-sequenced music: three looping themes built from synth voices ---- */
+const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
+let seqStep = 0, seqNext = 0;
 
-function playPad(freqs, dur, peak) {
-  const t = ctx.currentTime;
-  const f = ctx.createBiquadFilter();
-  f.type = 'lowpass'; f.frequency.value = musicMode === 'tense' ? 900 : 700;
+function voice(type, freq, t, dur, peak, filterFreq, attack = 0.005) {
+  const o = ctx.createOscillator();
   const g = ctx.createGain();
+  const f = ctx.createBiquadFilter();
+  o.type = type; o.frequency.setValueAtTime(freq, t);
+  f.type = 'lowpass'; f.frequency.setValueAtTime(filterFreq, t);
+  f.frequency.exponentialRampToValueAtTime(Math.max(120, filterFreq * 0.35), t + dur);
   g.gain.setValueAtTime(0.0001, t);
-  g.gain.linearRampToValueAtTime(peak, t + dur * 0.3);
-  g.gain.linearRampToValueAtTime(0.0001, t + dur);
-  f.connect(g); g.connect(musicGain);
-  for (const fr of freqs) {
-    for (const det of [-4, 4]) {
-      const o = ctx.createOscillator();
-      o.type = musicMode === 'tense' ? 'sawtooth' : 'triangle';
-      o.frequency.value = fr; o.detune.value = det;
-      o.connect(f); o.start(t); o.stop(t + dur + 0.1);
-    }
+  g.gain.exponentialRampToValueAtTime(peak, t + attack);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(f); f.connect(g); g.connect(musicGain);
+  o.start(t); o.stop(t + dur + 0.05);
+  return o;
+}
+const pluck = (t, m, v = 0.09) => voice('triangle', mtof(m), t, 0.45, v, 2600);
+const keys = (t, m, v = 0.08, d = 1.4) => { voice('sine', mtof(m), t, d, v, 3000, 0.01); voice('triangle', mtof(m + 12), t, d * 0.6, v * 0.25, 2000); };
+const bass = (t, m, v = 0.12, d = 0.4) => voice('triangle', mtof(m), t, d, v, 600);
+const flute = (t, m, v = 0.05, d = 0.5) => {
+  const o = voice('sine', mtof(m), t, d, v, 4000, 0.06);
+  const lfo = ctx.createOscillator(); const lg = ctx.createGain();
+  lfo.frequency.value = 5.5; lg.gain.value = mtof(m) * 0.006;
+  lfo.connect(lg); lg.connect(o.frequency); lfo.start(t); lfo.stop(t + d);
+};
+function kick(t) {
+  const o = ctx.createOscillator(); const g = ctx.createGain();
+  o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.14);
+  g.gain.setValueAtTime(0.5, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+  o.connect(g); g.connect(musicGain); o.start(t); o.stop(t + 0.25);
+}
+const drum = (t, filt, freq, dur, v) => noise(dur, v, filt, freq, 1, musicGain, Math.max(0, t - ctx.currentTime));
+
+// Chord progressions as [bassMidi, [chord tones]]
+const SONGS = {
+  day: { bpm: 96, bars: [[43, [55, 59, 62, 67]], [40, [52, 55, 59, 64]], [48, [55, 60, 64, 67]], [50, [54, 57, 62, 66]]],
+    melody: [[0, 74], [3, 71], [4, 72], [6, 74], [8, 76], [12, 74], [16, 71], [19, 67], [20, 69], [24, 71], [28, 67], [32, 72], [35, 71], [36, 69], [40, 67], [44, 64], [48, 66], [52, 69], [56, 67], [60, 62]] },
+  night: { bpm: 68, bars: [[45, [57, 60, 64, 69]], [41, [57, 60, 65, 69]], [48, [55, 60, 64, 67]], [43, [55, 59, 62, 67]]],
+    melody: [[0, 76], [6, 72], [8, 74], [16, 72], [22, 69], [24, 71], [32, 67], [38, 69], [40, 72], [48, 74], [54, 71], [56, 67]] },
+  tense: { bpm: 128, bars: [[40, [52, 55, 59]], [40, [52, 55, 59]], [36, [48, 52, 55]], [38, [50, 54, 57]]], melody: [] },
+};
+SONGS.town = SONGS.day;
+
+function scheduleStep(song, step, t) {
+  const bar = Math.floor(step / 16) % song.bars.length;
+  const s16 = step % 16;
+  const [root, chord] = song.bars[bar];
+  const sixteenth = 60 / song.bpm / 4;
+  if (musicMode === 'tense') {
+    const pat = [0, 0, 12, 0, 3, 0, 7, 0, 0, 0, 12, 0, 5, 0, 7, 3];
+    bass(t, root + pat[s16], 0.11, sixteenth * 1.6);
+    if (s16 === 0 || s16 === 8 || s16 === 10) kick(t);
+    if (s16 === 4 || s16 === 12) { drum(t, 'bandpass', 1800, 0.14, 0.22); }
+    if (s16 % 2 === 0) drum(t, 'highpass', 7000, 0.03, 0.06);
+    if (s16 === 0 && bar % 2 === 1) for (const n of chord) voice('sawtooth', mtof(n), t, 0.35, 0.03, 1400);
+    return;
   }
+  if (s16 === 0 || s16 === 8) bass(t, root, 0.11, sixteenth * 7);
+  if (musicMode === 'night') {
+    const arp = { 0: 0, 3: 1, 6: 2, 8: 3, 11: 2, 14: 1 };
+    if (arp[s16] !== undefined) keys(t, chord[arp[s16]], 0.06, 1.6);
+  } else {
+    if (s16 % 2 === 0) pluck(t, chord[[0, 1, 2, 3, 2, 1, 2, 1][s16 / 2]], 0.07);
+  }
+  const loopStep = step % (song.bars.length * 16);
+  for (const [at, m] of song.melody) if (at * 1 === loopStep) (musicMode === 'night' ? keys(t, m, 0.05, 2) : flute(t, m, 0.045, sixteenth * 4));
 }
 
-/** Called every frame with dt; schedules music chords and ambient sounds. */
+/** Called every frame with dt; schedules music and ambient sounds. */
 export function updateAudio(dt) {
   if (!ctx || ctx.state !== 'running') return;
-  if (musicMode !== 'off') {
-    musicTimer -= dt;
-    if (musicTimer <= 0) {
-      const set = CHORDS[musicMode] || CHORDS.day;
-      chordIdx = (chordIdx + 1) % set.length;
-      const dur = musicMode === 'tense' ? 4 : 8;
-      playPad(set[chordIdx], dur + 1.5, musicMode === 'tense' ? 0.05 : 0.06);
-      if (musicMode === 'tense') {
-        for (let i = 0; i < 8; i++) tone('sine', 55, 50, 0.25, 0.25, musicGain, i * 0.5);
-      }
-      musicTimer = dur;
+  const song = SONGS[musicMode];
+  if (song) {
+    if (seqNext < ctx.currentTime) seqNext = ctx.currentTime + 0.05;
+    const sixteenth = 60 / song.bpm / 4;
+    while (seqNext < ctx.currentTime + 0.2) {
+      scheduleStep(song, seqStep, seqNext);
+      seqStep++;
+      seqNext += sixteenth;
     }
   }
   ambTimer -= dt;

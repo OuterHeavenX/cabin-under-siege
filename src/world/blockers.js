@@ -6,6 +6,7 @@ export const DOOR_BASE_HP = 100;
 export const DOOR_BRACE_HP = 150;
 export const GLASS_HP = 20;
 export const BOARD_HP = 90;
+export const SHUTTER_HP = 160;
 export const COVER_HP = { sandbags: 200, barricade: 120 };
 
 export const defenseMult = () => (hasSkill('strong_foundations') ? 1.35 : 1);
@@ -46,17 +47,20 @@ export class Window {
     this.hitT = 0;
   }
   get boardMax() { return Math.round(BOARD_HP * defenseMult()); }
+  get shutterMax() { return Math.round(SHUTTER_HP * defenseMult()); }
   get boarded() { return this.rec.boards && this.rec.boardHp > 0; }
-  get broken() { return this.rec.glass <= 0 && !this.boarded; }
+  get shuttered() { return !!this.rec.shutters && this.rec.shutterHp > 0; }
+  get broken() { return this.rec.glass <= 0 && !this.boarded && !this.shuttered; }
   blocksMove() { return !this.broken; }
   blocksSight() { return false; }
   onBullet(b) {
-    if (this.boarded) {
-      if (Math.random() < 0.6) {
-        if (b.owner === 'enemy') this.damage(b.dmg * 0.4);
-        return true;
-      }
-      return false;
+    if (this.shuttered && Math.random() < 0.9) {
+      if (b.owner === 'enemy') this.damage(b.dmg * 0.4);
+      return true;
+    }
+    if (this.boarded && Math.random() < 0.6) {
+      if (b.owner === 'enemy') this.damage(b.dmg * 0.4);
+      return true;
     }
     if (this.rec.glass > 0) {
       this.rec.glass = 0;
@@ -66,6 +70,11 @@ export class Window {
   }
   damage(n) {
     this.hitT = 0.2;
+    if (this.shuttered) {
+      this.rec.shutterHp = Math.max(0, this.rec.shutterHp - n);
+      if (this.rec.shutterHp <= 0) { this.rec.shutters = false; G.events?.emit('boards_broken', this); }
+      return;
+    }
     if (this.boarded) {
       this.rec.boardHp = Math.max(0, this.rec.boardHp - n);
       if (this.rec.boardHp <= 0) { this.rec.boards = false; G.events?.emit('boards_broken', this); }
@@ -77,8 +86,8 @@ export class Window {
     }
   }
   get condition() {
-    const max = GLASS_HP + (this.rec.boards ? this.boardMax : 0);
-    return (this.rec.glass + (this.rec.boards ? this.rec.boardHp : 0)) / max;
+    const max = GLASS_HP + (this.rec.boards ? this.boardMax : 0) + (this.rec.shutters ? this.shutterMax : 0);
+    return (this.rec.glass + (this.rec.boards ? this.rec.boardHp : 0) + (this.rec.shutters ? this.rec.shutterHp : 0)) / max;
   }
 }
 

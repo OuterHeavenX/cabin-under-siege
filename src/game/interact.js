@@ -5,8 +5,10 @@ import { dist, angleDiff, angleTo } from '../util.js';
 import { count } from './inventory.js';
 import { interactNpc, npcPresent } from './npcs.js';
 import { chopTree, jobProps, onDeliver, onLogDrop, onRepairTarget, onShed, onStoreCounter, onSupplyDrop } from './jobs.js';
-import { installBoards, installBrace, pickUpCover, repairNeed, startRepair } from './home.js';
-import { answerPhone } from './story.js';
+import { installBoards, installBrace, installShutters, pickUpCover, repairNeed, startRepair, trapAt, rearmTrap, pickUpTrap } from './home.js';
+import { atHome, chapter } from './chapters.js';
+import { questProps, questPropAction } from './quests.js';
+import { answerPhone, storyMail } from './story.js';
 import { openBedMenu, openCraft, openActions, openShop, openJobBoard } from '../ui/menus.js';
 import { playDialogue } from '../ui/dialogue.js';
 import { toast } from '../ui/hud.js';
@@ -32,10 +34,10 @@ function candidates() {
 
   for (const n of G.npcs) {
     if (!n.present) continue;
-    add(n.x, n.y, 64, `Talk to ${n.def.name}`, 'TALK', () => interactNpc(n), 2);
+    add(n.x, n.y, n.folk ? 50 : 64, `Talk to ${n.def.name}`, 'TALK', () => interactNpc(n), n.folk ? -1 : 2);
   }
 
-  const props = [...m.props, ...jobProps(m.id)];
+  const props = [...m.props, ...jobProps(m.id), ...questProps(m.id)];
   for (const pr of props) {
     const a = propAction(pr);
     if (a) add(pr.x, pr.y, pr.r, a.label, a.short, a.action, a.prio || 0);
@@ -50,6 +52,11 @@ function candidates() {
         const a = blockerAction(b);
         if (a) add(cx * TILE + 16, cy * TILE + 16, 46, a.label, a.short, a.action, a.prio || 0);
       }
+      const trap = atHome() ? trapAt(cx, cy) : null;
+      if (trap && !inCombat()) {
+        if (!trap.armed) add(cx * TILE + 16, cy * TILE + 16, 44, 'Re-arm bear trap', 'ARM', () => rearmTrap(trap), 1);
+        else add(cx * TILE + 16, cy * TILE + 16, 40, 'Pick up bear trap', 'TAKE', () => pickUpTrap(trap), -2);
+      }
       const t = m.inBounds(cx, cy) ? m.trees.get(m.idx(cx, cy)) : null;
       if (t && !t.chopped) add(cx * TILE + 16, cy * TILE + 16, 42, `Chop tree (${3 - t.chops} swings left)`, 'CHOP', () => chopTree(t), -1);
     }
@@ -63,12 +70,12 @@ function propAction(pr) {
     case 'bed': return { label: 'Use bed (sleep / save)', short: 'REST', action: () => openBedMenu() };
     case 'workbench': return { label: 'Use workbench (craft)', short: 'CRAFT', action: () => openCraft() };
     case 'phone': return { label: s.story.step === 'phone_call' ? 'Answer the ringing phone' : 'Use telephone', short: 'PHONE', action: () => answerPhone(), prio: s.story.step === 'phone_call' ? 3 : 0 };
-    case 'car': return { label: G.map.id === 'cabin' ? 'Drive to Pine Hollow (20 min)' : 'Drive home to the cabin (20 min)', short: 'DRIVE', action: () => travelFn && travelFn(G.map.id === 'cabin' ? 'town' : 'cabin', 'car') };
+    case 'car': return carAction();
     case 'exit': return { label: G.map.id === 'cabin' ? 'Walk to Pine Hollow (1 hr)' : 'Walk home (1 hr)', short: 'WALK', action: () => travelFn && travelFn(pr.target, 'walk') };
     case 'phonepole':
       if (s.home.phoneLine) return { label: 'Phone line (working)', short: 'LOOK', action: () => toast('The phone line hums. All good.', 'info') };
       return { label: 'Repair the cut phone line (Toolkit + 1 wood)', short: 'FIX', action: () => startRepair(null, 'phone'), prio: 2 };
-    case 'mailbox': return { label: 'Check mailbox', short: 'MAIL', action: () => checkMail() };
+    case 'mailbox': return { label: 'Check mailbox', short: 'MAIL', action: () => checkMail(), prio: G.s.story.step === 'ch2_letter' ? 4 : 0 };
     case 'jobboard': return { label: 'Read the job board', short: 'JOBS', action: () => openJobBoard() };
     case 'logdrop': return { label: s.job && s.job.type === 'woodcut' ? `Drop off wood (${count('wood')}/${s.job.need})` : 'Log drop-off', short: 'DROP', action: () => onLogDrop(), prio: s.job && s.job.type === 'woodcut' ? 2 : 0 };
     case 'shed': {
@@ -79,17 +86,35 @@ function propAction(pr) {
     case 'counter': {
       const j = s.job;
       if (j && j.type === 'delivery' && j.stage === 'pickup') return { label: 'Pick up the parcel', short: 'TAKE', action: () => onStoreCounter(), prio: 3 };
-      const dee = G.npcs.find((n) => n.id === 'dee' && n.present && n.spot === 'dee_store');
+      const sk = chapter().shopkeeper;
+      const keeper = G.npcs.find((n) => n.id === sk && n.present && n.spot === `${sk}_store`);
       const open = s.time.minute >= 8 * 60 && s.time.minute < 20 * 60;
-      return { label: dee && open ? 'Shop at the counter' : 'Counter (closed)', short: 'SHOP', action: () => { if (dee && open) openShop('dee'); else toast('The store is closed. Open 8 AM – 8 PM.', 'info'); } };
+      return { label: keeper && open ? 'Shop at the counter' : 'Counter (closed)', short: 'SHOP', action: () => { if (keeper && open) openShop(sk); else toast('The store is closed. Open 8 AM – 8 PM.', 'info'); } };
     }
     case 'footprints': return { label: 'Examine footprints', short: 'LOOK', action: () => examineSign('footprints'), prio: 2 };
     case 'strange_car': return { label: 'Approach the dark sedan', short: 'LOOK', action: () => examineSign('strange_car'), prio: 2 };
     case 'job_deliver': return { label: pr.label, short: 'GIVE', action: () => onDeliver(), prio: 3 };
     case 'job_repair': return { label: pr.label, short: 'FIX', action: () => onRepairTarget(), prio: 3 };
     case 'job_supply': return { label: pr.label, short: 'DROP', action: () => onSupplyDrop(), prio: 3 };
+    case 'quest_find': return { label: pr.label, short: pr.dog ? 'CALL' : 'LOOK', action: () => questPropAction(pr), prio: 3 };
+    case 'quest_done': return { label: pr.label, short: 'GIVE', action: () => questPropAction(pr), prio: 3 };
+    case 'quest_chop': return { label: pr.label, short: 'CHOP', action: () => questPropAction(pr), prio: 3 };
+    case 'quest_repair': return { label: pr.label, short: 'FIX', action: () => questPropAction(pr), prio: 3 };
     default: return null;
   }
+}
+
+function carAction() {
+  const ch = chapter();
+  const opts = [];
+  if (ch.maps.length > 1) {
+    const toWork = G.map.id === ch.homeMap;
+    opts.push({ label: toWork ? `Drive to ${ch.place} (20 min)` : 'Drive home (20 min)', action: () => travelFn && travelFn(toWork ? ch.workMap : ch.homeMap, 'car') });
+  }
+  if (G.s.story.step === 'leave_town' && G.map.id === ch.homeMap) opts.push({ label: 'Leave for good — start the next chapter', action: () => G.events.emit('requestMove') });
+  if (!opts.length) return { label: 'Your car (everything here is within walking distance)', short: 'CAR', action: () => toast('Everything in Millbrook is within walking distance.', 'info') };
+  if (opts.length === 1) return { label: opts[0].label, short: 'DRIVE', action: opts[0].action, prio: G.s.story.step === 'leave_town' ? 3 : 0 };
+  return { label: 'Your car: 2 options', short: 'DRIVE', action: () => openActions('Your Car', opts), prio: 3 };
 }
 
 function blockerAction(b) {
@@ -109,8 +134,9 @@ function blockerAction(b) {
     const need = repairNeed(b);
     if (need && !combat) opts.push({ label: `${need.label} — ${need.cost} wood`, action: () => startRepair(b, 'window'), disabled: count('wood') < need.cost });
     if (!b.rec.boards && count('board_kit') > 0 && !combat) opts.push({ label: 'Board up with a Window Board Kit', action: () => installBoards(b) });
+    if (!b.rec.shutters && count('shutter_kit') > 0 && !combat) opts.push({ label: 'Bolt on Steel Shutters', action: () => installShutters(b) });
     if (!opts.length) {
-      const st = b.boarded ? 'boarded' : b.rec.glass > 0 ? 'intact' : 'smashed';
+      const st = b.shuttered ? 'shuttered' : b.boarded ? 'boarded' : b.rec.glass > 0 ? 'intact' : 'smashed';
       return { label: `${b.label} (${st})`, short: 'LOOK', action: () => toast(b.rec.boards ? 'Boarded tight.' : 'Board kits from Marsh General, Okafor Lumber or the workbench can reinforce this window.', 'info', 2.5), prio: -2 };
     }
   }
@@ -166,6 +192,7 @@ const MAIL = [
 ];
 
 function checkMail() {
+  if (storyMail()) return;
   const day = G.s.time.day;
   if (G.s.world.mailDay === day) { toast('Nothing new today.', 'info'); return; }
   G.s.world.mailDay = day;

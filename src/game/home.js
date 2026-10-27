@@ -10,14 +10,16 @@ import { sfx } from '../audio.js';
 import { inCombat } from './player.js';
 import { saveGame } from './save.js';
 import { dist } from '../util.js';
+import { homeMap, atHome } from './chapters.js';
+import { damageEnemy } from './combat.js';
 
 export const MAX_COVERS = 4;
 
 const effWood = (n) => Math.max(1, n - (hasSkill('efficient_repairs') ? 1 : 0));
 
-/** Rebuild placed-cover blockers on the cabin map from the save. */
+/** Rebuild placed-cover blockers on the home map from the save. */
 export function syncCovers() {
-  const m = G.maps.cabin;
+  const m = homeMap();
   if (!m) return;
   for (const [k, b] of [...m.blockers]) if (b.kind === 'cover') m.blockers.delete(k);
   for (const rec of G.s.home.covers) {
@@ -48,6 +50,7 @@ export function repairNeed(b) {
     let n = 0;
     if (b.rec.glass < GLASS_HP) n++;
     if (b.rec.boards && b.rec.boardHp < b.boardMax) n++;
+    if (b.rec.shutters && b.rec.shutterHp < b.shutterMax) n++;
     if (!n) return null;
     return { cost: effWood(n), label: `Repair ${b.label} (${Math.round(b.condition * 100)}%)` };
   }
@@ -55,7 +58,7 @@ export function repairNeed(b) {
 }
 
 export function homeBlockers() {
-  const m = G.maps.cabin;
+  const m = homeMap();
   return [...m.blockers.values()].filter((b) => (b.kind === 'door' || b.kind === 'window') && !b.rec.npc);
 }
 
@@ -93,7 +96,7 @@ export function updateRepair(dt) {
   } else {
     const b = r.target;
     if (b.kind === 'door') { b.rec.hp = b.maxHp; b.rec.open = false; }
-    else { b.rec.glass = GLASS_HP; if (b.rec.boards) b.rec.boardHp = b.boardMax; }
+    else { b.rec.glass = GLASS_HP; if (b.rec.boards) b.rec.boardHp = b.boardMax; if (b.rec.shutters) b.rec.shutterHp = b.shutterMax; }
     toast(`${b.label} repaired.`, 'info', 2);
     addJP('handyman', 3, 'repair', 8);
   }
@@ -114,6 +117,66 @@ export function installBoards(w) {
   saveGame('install');
 }
 
+export function installShutters(w) {
+  if (w.rec.shutters) { toast('Already shuttered.', 'warn'); return; }
+  if (!removeItem('shutter_kit', 1)) { toast('You need a Steel Shutter Kit.', 'warn'); return; }
+  w.rec.shutters = true;
+  w.rec.shutterHp = w.shutterMax;
+  sfx('hammer'); sfx('door');
+  toast(`${w.label}: steel shutters bolted on.`, 'info');
+  addJP('handyman', 7, 'install', 6);
+  G.events.emit('defenseInstalled', 'shutters');
+  saveGame('install');
+}
+
+/* ---------------- bear traps ---------------- */
+export const MAX_TRAPS = 6;
+
+function placeTrap() {
+  const traps = G.s.home.traps || (G.s.home.traps = []);
+  if (traps.length >= MAX_TRAPS) { toast(`Trap limit reached (${MAX_TRAPS}).`, 'warn'); return false; }
+  if (count('bear_trap') < 1) return false;
+  const p = G.player;
+  const m = G.map;
+  const cx = Math.floor((p.x + Math.cos(p.angle) * 30) / TILE), cy = Math.floor((p.y + Math.sin(p.angle) * 30) / TILE);
+  if (!m.inBounds(cx, cy) || m.blocksMove(cx, cy, 'enemy') || m.blockerAt(cx, cy) || traps.some((t) => t.cx === cx && t.cy === cy) || m.buildingAt(cx * TILE + 16, cy * TILE + 16)) {
+    toast('Can\'t set a trap there. Face open ground outside.', 'warn'); return false;
+  }
+  removeItem('bear_trap', 1);
+  traps.push({ cx, cy, armed: true });
+  sfx('trap');
+  toast('Bear trap set. Attackers who step on it get pinned.', 'info', 2.5);
+  addJP('handyman', 3, 'install', 6);
+  G.events.emit('defenseInstalled', 'trap');
+  saveGame('install');
+  return true;
+}
+
+/** Called for each attacker every frame: spring armed traps they step on. */
+export function checkTrap(e) {
+  if (!atHome() || !G.s.home.traps) return;
+  const cx = Math.floor(e.x / TILE), cy = Math.floor(e.y / TILE);
+  for (const t of G.s.home.traps) {
+    if (!t.armed || t.cx !== cx || t.cy !== cy) continue;
+    t.armed = false;
+    e.stun = Math.max(e.stun, 2.6);
+    e.trapped = 2.6;
+    damageEnemy(e, 45, 0, 'trap', 0);
+    sfx('trap');
+    G.events.emit('trapSprung', e);
+    addJP('handyman', 2, 'trapjp', 6);
+  }
+}
+
+export function trapAt(cx, cy) { return (G.s.home.traps || []).find((t) => t.cx === cx && t.cy === cy) || null; }
+
+export function rearmTrap(t) { t.armed = true; sfx('trap'); toast('Trap re-armed.', 'info', 1.2); }
+export function pickUpTrap(t) {
+  if (inCombat()) { toast('Not during a fight!', 'warn'); return; }
+  G.s.home.traps = G.s.home.traps.filter((x) => x !== t);
+  addItem('bear_trap', 1);
+}
+
 export function installBrace(d) {
   if (d.rec.reinforced) { toast('Already reinforced.', 'warn'); return; }
   if (!removeItem('door_brace', 1)) { toast('You need a Door Brace Kit (Okafor Lumber).', 'warn'); return; }
@@ -131,12 +194,14 @@ export function installBrace(d) {
 export function installUpgrade(id) {
   const def = ITEMS[id];
   if (!def || !def.install) return false;
-  if (def.install !== 'extMag' && G.map.id !== 'cabin') { toast('Install this at your cabin.', 'warn'); return false; }
-  if (G.s.home.upgrades[def.install]) { toast('Already installed.', 'warn'); return false; }
+  if (def.install !== 'extMag' && !atHome()) { toast('Install this at home.', 'warn'); return false; }
+  const mods = G.s.weaponMods || (G.s.weaponMods = {});
+  const has = def.install === 'extMag' ? mods.extMag || G.s.home.upgrades.extMag : G.s.home.upgrades[def.install];
+  if (has) { toast('Already installed.', 'warn'); return false; }
   if (!removeItem(id, 1)) return false;
-  G.s.home.upgrades[def.install] = true;
+  if (def.install === 'extMag') mods.extMag = true; else G.s.home.upgrades[def.install] = true;
   sfx('hammer'); sfx('chime');
-  const msg = { floodlight: 'Floodlight mounted over the porch.', alarm: 'Tripwires strung through the treeline. You\'ll hear them coming.', extMag: 'Extended magazine fitted: 12 rounds.' }[def.install];
+  const msg = { camera: 'Cameras mounted on every corner. Nobody sneaks up on you now.', floodlight: 'Floodlight mounted over the porch.', alarm: 'Tripwires strung through the treeline. You\'ll hear them coming.', extMag: 'Extended magazine fitted: 12 rounds.' }[def.install];
   toast(msg, 'info', 3);
   if (def.install !== 'extMag') { addJP('handyman', 8, 'install', 6); G.events.emit('defenseInstalled', def.install); }
   saveGame('install');
@@ -144,7 +209,8 @@ export function installUpgrade(id) {
 }
 
 export function placeCover(type) {
-  if (G.map.id !== 'cabin') { toast('You can only place cover on your property.', 'warn'); return false; }
+  if (!atHome()) { toast('You can only place this on your own property.', 'warn'); return false; }
+  if (type === 'trap' || type === 'bear_trap') return placeTrap();
   if (G.s.home.covers.length >= MAX_COVERS) { toast(`Cover limit reached (${MAX_COVERS}). Pick one up first.`, 'warn'); return false; }
   if (count(type) < 1) return false;
   const p = G.player;
@@ -208,6 +274,7 @@ export function homeStatus() {
     const extras = [];
     if (b.kind === 'door' && b.rec.reinforced) extras.push('Braced');
     if (b.kind === 'window' && b.rec.boards) extras.push('Boarded');
+    if (b.kind === 'window' && b.rec.shutters) extras.push('Shutters');
     rows.push({ label: b.label, kind: b.kind, cond: b.condition, status, extras, repair: need ? need.cost : 0 });
   }
   return rows;

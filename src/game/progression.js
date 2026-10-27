@@ -4,6 +4,7 @@ import { G, hasSkill } from './state.js';
 import { ATTRIBUTES, ATTR_POINTS_PER_LEVEL, MAX_ATTR, PATHS, SKILLS, xpForLevel } from '../data/skills.js';
 import { NPCS, relLevel } from '../data/npcs.js';
 import { toast } from '../ui/hud.js';
+import { chapter } from './chapters.js';
 import { sfx } from '../audio.js';
 
 export function derived() {
@@ -31,7 +32,7 @@ export function derived() {
     repairSpeed: sk('quick_fix') ? 1.6 : 1,
     woodBonus: sk('resourceful') ? 1 : 0,
     flinchMult: sk('composure') ? 0.25 : 1,
-    magSize: G.s.home.upgrades.extMag ? 12 : 8,
+    magSize: (G.s.weaponMods && G.s.weaponMods.extMag) || G.s.home.upgrades.extMag ? 12 : 8,
     jobPayMult: sk('good_reputation') ? 1.15 : 1,
   };
 }
@@ -39,7 +40,7 @@ export function derived() {
 export function shopDiscount(owner) {
   let d = 0;
   if (hasSkill('local_discount')) d += 0.1;
-  if (owner === 'dee') {
+  if (owner === chapter().shopkeeper) {
     const lv = relLevel(G.s.rel.dee);
     if (lv >= 4) d += 0.1; else if (lv >= 2) d += 0.05;
   }

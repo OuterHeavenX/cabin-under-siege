@@ -22,4 +22,18 @@ export const ENEMY_TYPES = {
     preferDist: [210, 380], breachDamage: 12, retreatAt: 0.3, bravery: 0.6,
     xp: 22, cash: [8, 16], ammoDrop: [4, 8],
   },
+  arsonist: {
+    name: 'Arsonist', hp: 70, speed: 88, radius: 10,
+    color: '#5b3a1e', trim: '#ff9f1c',
+    weapon: 'molotov', damage: 0, fireCooldown: 4.5, telegraph: 0.75, spread: 0.12, range: 270,
+    preferDist: [130, 240], breachDamage: 8, retreatAt: 0.45, bravery: 0.3,
+    xp: 22, cash: [8, 18], ammoDrop: [2, 5],
+  },
+  lieutenant: {
+    name: 'Lieutenant', hp: 320, speed: 76, radius: 14, boss: true,
+    color: '#1b1b22', trim: '#d4af37',
+    weapon: 'eshotgun', damage: 7, pellets: 5, fireCooldown: 1.7, telegraph: 0.6, spread: 0.2, range: 210,
+    preferDist: [60, 170], breachDamage: 35, retreatAt: 0, bravery: 1,
+    xp: 90, cash: [40, 70], ammoDrop: [6, 10],
+  },
 };

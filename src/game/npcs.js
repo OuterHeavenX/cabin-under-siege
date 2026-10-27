@@ -12,6 +12,8 @@ import { openNpcMenu } from '../ui/menus.js';
 import { toast } from '../ui/hud.js';
 import { hasSkill } from './state.js';
 import { dailyAllow } from './progression.js';
+import { chapter, workMapId } from './chapters.js';
+import { questOffer, questTalk } from './quests.js';
 
 function npcCost(cx, cy) {
   const m = G.map;
@@ -37,8 +39,8 @@ export function spawnNpcs() {
     const p = m.points[spot.pt];
     G.npcs.push({ id, def, named: true, x: p.x, y: p.y, radius: 10, angle: Math.PI / 2, spot: spot.pt, path: null, walkPhase: 0, idleT: 0 });
   }
-  if (m.id === 'town') {
-    for (const f of TOWNSFOLK) {
+  if (m.id === workMapId()) {
+    for (const f of TOWNSFOLK[m.id] || []) {
       const p = m.points[f.route[0]];
       G.npcs.push({ id: f.id, def: f, folk: true, x: p.x, y: p.y, radius: 10, angle: 0, routeIdx: 0, path: null, walkPhase: 0, idleT: Math.random() * 3, spot: f.route[0] });
     }
@@ -106,7 +108,7 @@ export function updateNpcs(dt) {
 /* ---------------- talking ---------------- */
 export function interactNpc(n) {
   if (n.folk) {
-    playDialogue([{ who: n.def.name, text: choose(FOLK_LINES) }]);
+    playDialogue([{ who: n.def.name, text: choose(FOLK_LINES[G.map.id] || FOLK_LINES.town) }]);
     if (dailyAllow('folk:' + n.id)) addJP('neighbor', 1);
     return;
   }
@@ -114,6 +116,7 @@ export function interactNpc(n) {
   // Story conversations take priority over the menu.
   const story = storyDialogue(n.id);
   if (story) { playDialogue(story.lines, story.onEnd); firstTalkBonus(n.id); return; }
+  if (questTalk(n.id)) return;
   openNpcMenu(n);
 }
 
@@ -133,31 +136,33 @@ export function chatWith(id) {
   if (hasSkill('familiar_face') || lv >= 3) pool.push(...def.friendly);
   lines.push({ who: def.name, text: choose(pool) });
   const w = G.s.world;
-  if (id === 'ruth') {
+  const ch = chapter();
+  const first = def.name.split(' ')[0].replace(/"/g, '');
+  if (id === ch.neighbor) {
     if (lv >= 2 && siegeTonight()) {
-      lines.push({ who: def.name, text: 'Frank. I saw a car idling by your mailbox with its lights off. Twice. I\'ve got a bad feeling about tonight.' });
+      lines.push({ who: def.name, text: id === 'ruth'
+        ? 'Frank. I saw a car idling by your mailbox with its lights off. Twice. I\'ve got a bad feeling about tonight.'
+        : 'Same sedan\'s been around the block four times since noon. Illinois plates. They\'re coming tonight, Frank. I\'d bet my pension on it.' });
       if (w.siege) w.siege.extraLead = Math.max(w.siege.extraLead || 0, 60);
-      lines.push({ who: 'You', text: '(Ruth\'s warning: an attack is likely tonight. You\'ll get an earlier alert.)' });
+      lines.push({ who: 'You', text: `(${first}'s warning: an attack is likely tonight. You'll get an earlier alert.)` });
     } else if (lv >= 2) {
-      lines.push({ who: def.name, text: 'Road\'s been quiet. Quiet\'s good.' });
-    } else if (lv < 2) {
-      lines.push({ who: 'You', text: '(Get closer to Ruth and she\'ll tell you when trouble is coming.)' });
+      lines.push({ who: def.name, text: 'Street\'s been quiet. Quiet\'s good.' });
+    } else {
+      lines.push({ who: 'You', text: `(Get closer to ${first} and they'll tell you when trouble is coming.)` });
     }
-    if (lv >= 3 && dailyAllow('ruthgift')) {
-      if ((G.s.time.day % 2) === 0) {
-        lines.push({ who: def.name, text: 'Here — old habit from the hospital. Take these.' });
-        addItem('bandage', 2);
-      }
+    if (lv >= 3 && dailyAllow('neighborgift') && (G.s.time.day % 2) === 0) {
+      lines.push({ who: def.name, text: 'Here — take these. You go through them faster than anyone I know.' });
+      addItem('bandage', 2);
     }
-  } else if (id === 'dee') {
+  } else if (id === ch.shopkeeper) {
     if (lv >= 1) {
       const signs = Object.keys(w.signs).filter((k) => w.signs[k].day === G.s.time.day && !w.signs[k].done);
-      if (signs.includes('stranger')) lines.push({ who: def.name, text: 'There\'s a fella in a grey coat out by the diner, asking about newcomers. I didn\'t tell him a thing.' });
-      else if (w.threat >= 50) lines.push({ who: def.name, text: 'Couple of out-of-state cars through town this week. Not hunters. Too clean.' });
+      if (signs.includes('stranger')) lines.push({ who: def.name, text: 'There\'s a fella in a grey coat hanging around outside, asking about newcomers. I didn\'t tell him a thing.' });
+      else if (w.threat >= 50) lines.push({ who: def.name, text: 'Couple of out-of-state cars through town this week. Not tourists. Too clean.' });
       else lines.push({ who: def.name, text: 'Nothing new to report. Town\'s as boring as ever, thank God.' });
     }
-    if (lv >= 2) lines.push({ who: 'You', text: `(Dee gives you a ${lv >= 4 ? 10 : 5}% friends discount.)` });
-  } else if (id === 'gus') {
+    if (lv >= 2) lines.push({ who: 'You', text: `(${first} gives you a ${lv >= 4 ? 10 : 5}% friends discount.)` });
+  } else if (id === ch.jobContact) {
     if (lv >= 2) lines.push({ who: def.name, text: 'You\'ve earned a raise. Jobs pay 10% more from now on.' });
     if (lv >= 1 && w.threat >= 40) lines.push({ who: def.name, text: `Heat on you feels ${heatLabel(w.threat).toLowerCase()}, if you want my read. Keep your eyes open.` });
   }
@@ -173,15 +178,20 @@ export function giveGift(id) {
   addRel(id, 6);
   addJP('neighbor', 3);
   const def = NPCS[id];
-  const reply = { ruth: 'Well aren\'t you sweet. I\'ll pretend I didn\'t see the price tag.', dee: 'From my own shelves? Ha! It\'s the thought, honey.', gus: 'Huh. Thanks. I skipped lunch.' }[id];
+  const reply = {
+    ruth: 'Well aren\'t you sweet. I\'ll pretend I didn\'t see the price tag.', dee: 'From my own shelves? Ha! It\'s the thought, honey.', gus: 'Huh. Thanks. I skipped lunch.',
+    marcus: 'Thoughtful. I\'ll eat it at the radio. Thank you, Frank.', rosa: 'Food from a customer? That\'s a first. Gracias.', pete: 'Oh, buddy. You\'re my favorite person today.',
+  }[id];
   playDialogue([{ who: def.name, text: reply }]);
 }
 
 export function npcAvailableServices(n) {
   const minute = G.s.time.minute;
   const out = [];
-  if (n.id === 'dee' && n.spot === 'dee_store' && minute >= 8 * 60 && minute < 20 * 60) out.push('shop');
-  if (n.id === 'gus' && n.spot === 'gus_yard' && minute >= 7 * 60 && minute < 17 * 60) { out.push('jobs'); out.push('shop'); }
+  const ch = chapter();
+  if (n.id === ch.shopkeeper && n.spot === `${n.id}_store` && minute >= 8 * 60 && minute < 20 * 60) out.push('shop');
+  if (n.id === ch.jobContact && n.spot === `${n.id}_yard` && minute >= 7 * 60 && minute < 17 * 60) { out.push('jobs'); if (n.id === 'gus') out.push('shop'); }
+  if (questOffer(n.id)) out.push('favor');
   return out;
 }
 

@@ -15,7 +15,7 @@ export function initHud() {
     clock: $('clock'), day: $('day'), obj: $('objective'), job: $('jobline'), ammo: $('ammo'), ammoSub: $('ammo-sub'),
     danger: $('danger'), toasts: $('toasts'), banner: $('banner'), prompt: $('prompt'), center: $('center-msg'),
     actLabel: $('btn-interact-label'), actBtn: $('btn-interact'), useLabel: $('btn-use-label'), cover: $('cover-tag'),
-    reloadBar: $('reload-bar'), quick: $('quick-item'),
+    reloadBar: $('reload-bar'), quick: $('quick-item'), swapLabel: $('btn-swap-label'), swapBtn: $('btn-swap'),
   };
 }
 
@@ -37,6 +37,11 @@ export function banner(text, kind = 'info', dur = 3) {
   if (kind === 'objective') for (let i = bannerQueue.length - 1; i >= 0; i--) if (bannerQueue[i].kind === 'objective') bannerQueue.splice(i, 1);
   bannerQueue.push({ text, kind, dur });
   if (bannerQueue.length > 4) bannerQueue.shift();
+}
+
+/** Drop queued banners of a kind (e.g. stale attack warnings once the attack begins). */
+export function clearBanners(kind) {
+  for (let i = bannerQueue.length - 1; i >= 0; i--) if (bannerQueue[i].kind === kind) bannerQueue.splice(i, 1);
 }
 
 export function centerMessage(title, sub = '', dur = 2.5) {
@@ -88,10 +93,13 @@ export function updateHud(dt, info) {
   els.obj.textContent = info.objective;
   els.job.textContent = info.jobLine || '';
   els.job.classList.toggle('hidden', !info.jobLine);
-  const reserve = s.inv.ammo || 0;
-  els.ammo.textContent = p.reloadT > 0 ? 'RELOADING' : `${p.mag} / ${reserve}`;
+  const w = info.weapon;
+  const reserve = s.inv[w.ammo] || 0;
+  els.ammo.textContent = p.reloadT > 0 && !w.perRound ? 'RELOADING' : `${p.mag} / ${reserve}`;
   els.ammo.classList.toggle('warn', p.mag === 0 && p.reloadT <= 0);
-  els.ammoSub.textContent = p.mag === 0 && reserve === 0 ? 'NO AMMO — use MELEE' : p.mag === 0 ? 'Press R to reload' : '9mm handgun';
+  els.ammoSub.textContent = p.mag === 0 && reserve === 0 ? 'EMPTY — switch or MELEE' : p.mag === 0 ? 'Press R to reload' : `${w.icon} ${w.name}`;
+  els.swapLabel.textContent = info.weaponCount > 1 ? `${w.short}` : 'SWAP';
+  els.swapBtn.classList.toggle('dim', info.weaponCount < 2);
   els.reloadBar.style.width = p.reloadT > 0 ? `${(1 - p.reloadT / info.reloadTime) * 100}%` : '0%';
   els.cover.classList.toggle('hidden', !(p.inCover && info.combat));
 

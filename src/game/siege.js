@@ -5,11 +5,13 @@ import { choose, chance, clamp, dist, randInt, rand } from '../util.js';
 import { spawnEnemy, pickSpawnTypes } from './enemies.js';
 import { addXP, addJP, derived, relOf } from './progression.js';
 import { addItem, count } from './inventory.js';
-import { banner, toast, centerMessage } from '../ui/hud.js';
+import { banner, toast, centerMessage, clearBanners } from '../ui/hud.js';
 import { showDefeat, showSiegeSummary } from '../ui/menus.js';
 import { sfx, setMusic } from '../audio.js';
 import { saveGame } from './save.js';
 import { fmtClock } from '../util.js';
+import { chapter, homeMap, homeMapId, atHome } from './chapters.js';
+import { NPCS } from '../data/npcs.js';
 
 export const absNow = () => G.s.time.day * 1440 + G.s.time.minute;
 export const absOf = (s) => s.day * 1440 + s.minute;
@@ -29,7 +31,7 @@ export function addThreat(n, why) {
 
 /* ---------------- planning ---------------- */
 function dirsFor(n) {
-  const all = Object.keys(G.maps.cabin.spawns);
+  const all = Object.keys(homeMap().spawns);
   const out = [];
   while (out.length < n) { const d = choose(all); if (!out.includes(d)) out.push(d); }
   return out;
@@ -38,13 +40,17 @@ function dirsFor(n) {
 export function makeRaidPlan(size, kind = 'raid') {
   const lvl = G.s.stats.level;
   const n = clamp(size, 2, 8);
-  const types = kind === 'ambush'
-    ? pickSpawnTypes(n, [['scout', 0.8], ['gunman', 0.2]])
-    : pickSpawnTypes(n, G.s.world.threat < 40 && lvl < 3
-      ? [['scout', 0.7], ['gunman', 0.2], ['enforcer', 0.1]]
-      : [['scout', 0.45], ['gunman', 0.3], ['enforcer', 0.25]]);
+  const late = G.s.chapter >= 2 || G.s.world.threat >= 60;
+  let types;
+  if (kind === 'ambush') types = pickSpawnTypes(n, [['scout', 0.8], ['gunman', 0.2]]);
+  else if (G.s.world.threat < 40 && lvl < 3 && G.s.chapter < 2) types = pickSpawnTypes(n, [['scout', 0.7], ['gunman', 0.2], ['enforcer', 0.1]]);
+  else types = pickSpawnTypes(n, late
+    ? [['scout', 0.32], ['gunman', 0.26], ['enforcer', 0.22], ['arsonist', 0.2]]
+    : [['scout', 0.4], ['gunman', 0.28], ['enforcer', 0.22], ['arsonist', 0.1]]);
+  // Big raids are led by a lieutenant.
+  if (kind === 'raid' && n >= 6) types[types.length - 1] = 'lieutenant';
   const nd = n <= 3 ? 1 : n <= 5 ? 2 : 3;
-  const dirs = kind === 'ambush' ? [choose(['east', 'southwest'])] : dirsFor(nd);
+  const dirs = kind === 'ambush' ? [choose(['east', 'southwest', 'west'].filter((d) => homeMap().spawns[d]))] : dirsFor(nd);
   const waves = dirs.map((dir, i) => ({ dir, types: [], delay: i * rand(14, 26) }));
   types.forEach((t, i) => waves[i % waves.length].types.push(t));
   const hpMult = 1 + Math.max(0, lvl - 3) * 0.05; // gentle scaling, never makes old enemies irrelevant
@@ -52,8 +58,18 @@ export function makeRaidPlan(size, kind = 'raid') {
 }
 
 export function storyPlan() {
+  if (G.s.chapter === 2) {
+    return {
+      kind: 'story', hpMult: 1.1, bossName: 'Sal "the Knife" Benedetto', bossItem: 'burner',
+      waves: [
+        { dir: 'west', types: ['scout', 'scout', 'arsonist'], delay: 0 },
+        { dir: 'south', types: ['gunman', 'enforcer'], delay: 22 },
+        { dir: 'east', types: ['lieutenant', 'gunman', 'arsonist'], delay: 48, boss: 0 },
+      ],
+    };
+  }
   return {
-    kind: 'story', hpMult: 1,
+    kind: 'story', hpMult: 1, bossName: 'Big Carmine', bossItem: 'note',
     waves: [
       { dir: 'north', types: ['scout', 'scout'], delay: 0 },
       { dir: 'east', types: ['gunman', 'scout'], delay: 22 },
@@ -84,7 +100,7 @@ export function dailyProcess() {
   const free = story.flags.firstSiegeDone;
   // Reset previous signs
   for (const k of Object.keys(w.signs)) if (w.signs[k].day < day) delete w.signs[k];
-  G.map && G.map.id === 'cabin' && refreshSignProps();
+  G.map && atHome() && refreshSignProps();
 
   if (free) {
     w.threat = clamp(w.threat + 3, 0, 100);
@@ -113,9 +129,9 @@ export function addSign(kind) {
   refreshSignProps();
 }
 
-/** Add/remove the world props for active warning signs on the cabin map. */
+/** Add/remove the world props for active warning signs on the home map. */
 export function refreshSignProps() {
-  const m = G.maps.cabin;
+  const m = homeMap();
   if (!m) return;
   m.props = m.props.filter((p) => !p.sign);
   const w = G.s.world;
@@ -138,21 +154,23 @@ export function updateThreatClock() {
   const w = G.s.world;
   const s = w.siege;
   // Sign props appear/disappear with the clock.
-  if (G.map.id === 'cabin') {
+  if (atHome()) {
     const sc = w.signs.strange_car;
     const has = G.map.props.some((p) => p.id === 'strange_car');
     const should = sc && !sc.done && sc.day === G.s.time.day && G.s.time.minute >= 17 * 60 && G.s.time.minute < 23 * 60;
     if (!!has !== !!should) refreshSignProps();
   }
-  // Ruth's warning call at 6 PM when an attack is coming and you're friends.
-  if (s && !s.ruthCalled && siegeTonight() && relOf('ruth') >= 2 && G.s.time.minute >= 18 * 60 && G.s.time.minute < 21 * 60) {
+  // The neighbor's warning call at 6 PM when an attack is coming and you're friends.
+  const nb = chapter().neighbor;
+  const nbName = NPCS[nb].name.split(' ')[0];
+  if (s && !s.ruthCalled && siegeTonight() && relOf(nb) >= 2 && G.s.time.minute >= 18 * 60 && G.s.time.minute < 21 * 60) {
     s.ruthCalled = true;
     if (G.s.home.phoneLine) {
       sfx('phone');
-      banner('📞 Ruth called: "Headlights crawled past my gate twice. Lock up tonight, Frank."', 'danger', 7);
+      banner(nb === 'ruth' ? '📞 Ruth called: "Headlights crawled past my gate twice. Lock up tonight, Frank."' : `📞 ${nbName} called: "Same sedan, fourth pass tonight. They're coming, Frank. Get ready."`, 'danger', 7);
       s.extraLead = 60;
     } else {
-      toast('The phone line is dead — if Ruth tried to call, it didn\'t get through.', 'warn', 4);
+      toast(`The phone line is dead — if ${nbName} tried to call, it didn't get through.`, 'warn', 4);
     }
   }
   if (!s || G.siegeActive) return;
@@ -165,7 +183,7 @@ export function updateThreatClock() {
     warn(s, d);
   }
   if (now >= at) {
-    if (G.map.id === 'cabin' && !G.transition) startSiege(s);
+    if (atHome() && !G.transition) startSiege(s);
     else if (G.s.time.minute >= 6 * 60 && G.s.time.minute < 12 * 60 && now - at > 60) missedSiege(s);
   }
 }
@@ -173,7 +191,7 @@ export function updateThreatClock() {
 function warn(s, d) {
   const alarm = G.s.home.upgrades.alarm;
   sfx(alarm ? 'alarm' : 'warning');
-  const dirs = s.plan.waves.map((w) => G.maps.cabin.spawns[w.dir].label);
+  const dirs = s.plan.waves.map((w) => (homeMap().spawns[w.dir] || {}).label || w.dir);
   let text = alarm ? '🔔 Tripwire alarm! Someone is coming' : '⚠ Something\'s wrong. Engines idling in the dark';
   if (d.showDirections) text += ` — from ${[...new Set(dirs)].join(', ')}`;
   text += `. Attack around ${fmtClock(s.minute)}.`;
@@ -193,19 +211,20 @@ function missedSiege(s) {
   } else {
     const back = G.s.home.openings.back_door;
     back.hp = Math.max(10, back.hp - 35);
-    toast('Someone came by the cabin while you were away. The back door has been forced.', 'danger', 5);
+    toast('Someone came by the house while you were away. The back door has been forced.', 'danger', 5);
     w.quietUntilDay = G.s.time.day + 1;
   }
 }
 
 export function startSiege(s, immediate = false) {
   G.siegeActive = true;
+  clearBanners('danger');
   G.siege = { plan: s.plan, t: 0, waveIdx: 0, spawned: 0, killed: 0, fled: 0, total: s.plan.waves.reduce((a, w) => a + w.types.length, 0), startHp: G.player.hp };
   G.s.world.siege = null;
   setMusic('tense');
   sfx('warning');
   const label = s.plan.kind === 'story' ? 'THEY FOUND YOU' : s.plan.kind === 'ambush' ? 'AMBUSH' : 'SIEGE';
-  centerMessage(label, s.plan.kind === 'ambush' ? 'Get to cover!' : 'Defend the cabin', 2.6);
+  centerMessage(label, s.plan.kind === 'ambush' ? 'Get to cover!' : 'Defend your home', 2.6);
   if (G.sleeping) G.events.emit('wake', 'Shouts outside! You scramble out of bed.');
   G.events.emit('siegeStart', s.plan);
 }
@@ -221,7 +240,8 @@ export function updateSiege(dt) {
     wave.types.forEach((t, i) => {
       const pos = freeSpot(sp.x + rand(-40, 40), sp.y + rand(-40, 40));
       const opts = { hpMult: sg.plan.hpMult };
-      if (sg.plan.kind === 'story' && wave.boss === i) { opts.name = 'Big Carmine'; opts.hpMult = 1.35; opts.carriesNote = true; }
+      if (sg.plan.kind === 'story' && wave.boss === i) { opts.name = sg.plan.bossName || 'Big Carmine'; opts.hpMult = t === 'lieutenant' ? 1 : 1.35; opts.carriesNote = sg.plan.bossItem || 'note'; }
+      else if (t === 'lieutenant') opts.name = 'Lieutenant';
       const e = spawnEnemy(t, pos.x, pos.y, opts);
       if (sg.plan.kind === 'ambush') e.alerted = true;
       sg.spawned++;
@@ -305,17 +325,28 @@ export function handleDefeat() {
   const lost = Math.min(150, Math.floor(G.s.money * 0.2));
   sfx('defeat');
   setMusic('night');
-  const onCabin = G.map.id === 'cabin';
-  const ruthFriend = relOf('ruth') >= 1;
-  const rescuer = onCabin ? (ruthFriend ? 'Ruth' : 'Ruth') : 'Dee';
+  const onCabin = atHome();
+  const nb = chapter().neighbor;
+  const nbName = NPCS[nb].name.split(' ')[0];
+  const skName = NPCS[chapter().shopkeeper].name.split(' ')[0].replace(/"/g, '');
+  const friend = relOf(nb) >= 1;
+  const rescuer = onCabin ? nbName : skName;
+  const RESCUE = {
+    ruth: [
+      'Ruth heard the shots and came with her late husband\'s shotgun. The attackers scattered. She dragged you to her farmhouse and patched you up through the night.',
+      'Ruth heard the shots and called the county sheriff. By the time the sirens came, the attackers were gone. She found you on the porch and took you in.',
+    ],
+    marcus: [
+      'Marcus came across the street with a revolver you\'ve never seen and a calm you didn\'t expect. Two shots in the air and they ran. He carried you to his couch.',
+      'Marcus called it in on his radio. Sirens scattered them. He found you in the yard and took you in for the night.',
+    ],
+  };
   showDefeat({
     lost,
     rescuer,
     text: onCabin
-      ? (ruthFriend
-        ? 'Ruth heard the shots and came with her late husband\'s shotgun. The attackers scattered. She dragged you to her farmhouse and patched you up through the night.'
-        : 'Ruth heard the shots and called the county sheriff. By the time the sirens came, the attackers were gone. She found you on the porch and took you in.')
-      : 'Dee found you slumped behind the store and hauled you inside. "Whoever they were, they took off when I hit the lights."',
+      ? (RESCUE[nb] || RESCUE.ruth)[friend ? 0 : 1]
+      : `${skName} found you slumped behind the store and hauled you inside. "Whoever they were, they took off when I hit the lights."`,
     story,
     onContinue: () => recoverFromDefeat({ lost, story, onCabin }),
   });

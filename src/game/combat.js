@@ -15,10 +15,10 @@ export function shake(amount) {
   G.camera.shake = Math.max(G.camera.shake, amount * m);
 }
 
-export function spawnBullet({ x, y, angle, speed, dmg, owner, range, source = null }) {
+export function spawnBullet({ x, y, angle, speed, dmg, owner, range, source = null, pierce = 0, knock = 90, weapon = null }) {
   G.bullets.push({
     x, y, px: x, py: y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
-    dmg, owner, range, travelled: 0, lastCell: -1, dead: false, source,
+    dmg, owner, range, travelled: 0, lastCell: -1, dead: false, source, pierce, knock, weapon, hit: null,
   });
 }
 
@@ -40,12 +40,13 @@ export function addPickup(kind, x, y, amount, extra = {}) {
 }
 
 /** Damage an enemy. `src` is 'bullet' or 'melee'. */
-export function damageEnemy(e, dmg, angle, src) {
+export function damageEnemy(e, dmg, angle, src, knock = 90) {
   if (e.dead) return;
+  if (e.armor) dmg *= e.armor;
   e.hp -= dmg;
   e.hitT = 0.15;
   e.lastHit = 0;
-  e.kx += Math.cos(angle) * 90; e.ky += Math.sin(angle) * 90;
+  e.kx += Math.cos(angle) * knock; e.ky += Math.sin(angle) * knock;
   if (!e.alerted) G.events.emit('enemyAlert', e, 'hurt');
   spawnParticles(e.x, e.y, '#b0302a', 5, 110);
   addFloater(e.x + rand(-6, 6), e.y - 20, `${Math.round(dmg)}`, '#ffd166');
@@ -60,7 +61,7 @@ export function damageEnemy(e, dmg, angle, src) {
     addPickup('cash', e.x + rand(-8, 8), e.y + rand(-8, 8), cash);
     if (Math.random() < 0.85) addPickup('ammo', e.x + rand(-10, 10), e.y + rand(-10, 10), randInt(def.ammoDrop[0], def.ammoDrop[1]));
     if (Math.random() < 0.2) addPickup('bandage', e.x + rand(-10, 10), e.y + rand(-10, 10), 1);
-    if (e.carriesNote && !G.s.story.flags.noteRead && count('note') === 0) addPickup('note', e.x, e.y + 6, 1, { map: G.map.id });
+    if (e.carriesNote) G.events.emit('bossDropped', e);
     G.events.emit('enemyKilled', e);
   }
 }
@@ -96,7 +97,9 @@ export function updateBullets(dt) {
           if (e.dead || e.gone) continue;
           const r = e.radius + 2;
           if ((e.x - b.x) ** 2 + (e.y - b.y) ** 2 < r * r) {
-            damageEnemy(e, b.dmg, Math.atan2(b.vy, b.vx), 'bullet');
+            if (b.hit && b.hit.includes(e)) continue;
+            damageEnemy(e, b.dmg, Math.atan2(b.vy, b.vx), 'bullet', b.knock);
+            if (b.pierce > 0) { b.pierce--; b.dmg *= 0.6; (b.hit = b.hit || []).push(e); continue; }
             b.dead = true;
             break;
           }
@@ -123,6 +126,11 @@ export function updateEffects(dt) {
     pt.life -= dt;
   }
   G.particles = G.particles.filter((p) => p.life > 0);
+  for (const c of G.casings || []) {
+    if (c.t < 0.35) { c.x += c.vx * dt; c.y += c.vy * dt; c.rot += dt * 20; c.vx *= 0.9; c.vy *= 0.9; }
+    c.t += dt;
+  }
+  if (G.casings) G.casings = G.casings.filter((c) => c.t < 12);
   for (const f of G.floaters) { f.y -= 28 * dt; f.life -= dt; }
   G.floaters = G.floaters.filter((f) => f.life > 0);
 
@@ -149,9 +157,9 @@ function collect(pk) {
   } else if (pk.kind === 'bandage') {
     if (addItem('bandage', 1, true) <= 0) return;
     toast('+1 Bandage', 'item', 1.2);
-  } else if (pk.kind === 'note') {
-    addItem('note', 1, true);
-    G.events.emit('noteFound');
+  } else if (pk.kind === 'note' || pk.kind === 'burner') {
+    addItem(pk.kind, 1, true);
+    G.events.emit(pk.kind === 'note' ? 'noteFound' : 'burnerFound');
   }
   pk.taken = true;
   sfx(pk.kind === 'cash' ? 'coin' : 'pickup');

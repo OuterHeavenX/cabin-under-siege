@@ -9,6 +9,9 @@ import { damagePlayer } from './player.js';
 import { derived, addJP } from './progression.js';
 import { inFloodlight, isLit } from '../world/lights.js';
 import { sfx } from '../audio.js';
+import { throwMolotov } from './fire.js';
+import { homeInterior, homeMapId } from './chapters.js';
+import { checkTrap } from './home.js';
 
 let nextId = 1;
 
@@ -21,24 +24,39 @@ export function spawnEnemy(type, x, y, opts = {}) {
     fireCd: rand(0.8, 1.6), aimT: 0, aimAngle: 0, stun: 0, kx: 0, ky: 0,
     cover: null, coverT: 0, spotted: 0, spottedOnce: false, dead: false, deadT: 0, gone: false,
     hitT: 0, lastHit: 99, retreating: false, retreatRolled: false, strafe: Math.random() < 0.5 ? 1 : -1, strafeT: 0,
-    breach: null, breachCd: 0, name: opts.name || def.name, carriesNote: !!opts.carriesNote,
+    breach: null, breachCd: 0, name: opts.name || def.name, carriesNote: opts.carriesNote || null,
     entry: opts.entry || null, walkPhase: 0, hpMultApplied: opts.hpMult || 1,
   };
   G.enemies.push(e);
   return e;
 }
 
-function costFn(cx, cy) {
-  const m = G.map;
-  const s = m.getSolid(cx, cy);
-  if (s !== 0) return Infinity;
-  const b = m.blockerAt(cx, cy);
-  if (b) {
-    if (b.kind === 'cover') return Infinity;
-    if (b.blocksMove('enemy')) return b.rec.npc ? Infinity : 7;
-  }
-  return 0;
+/** How much punishment an opening can still take (attackers probe for the weakest). */
+export function openingStrength(b) {
+  if (b.kind === 'door') return b.passable ? 0 : b.rec.hp;
+  return b.rec.glass + (b.rec.boards ? b.rec.boardHp : 0) + (b.rec.shutters ? b.rec.shutterHp : 0);
 }
+
+/** Per-attacker path cost: weak doors/windows are cheap, braced ones expensive,
+ *  with a small personal bias so a squad splits between a couple of weak points. */
+function makeCost(e) {
+  return (cx, cy) => {
+    const m = G.map;
+    const s = m.getSolid(cx, cy);
+    if (s !== 0) return Infinity;
+    const b = m.blockerAt(cx, cy);
+    if (b) {
+      if (b.kind === 'cover') return Infinity;
+      if (b.blocksMove('enemy')) {
+        if (b.rec.npc) return Infinity;
+        const bias = ((e.id * 7 + cx * 3 + cy * 5) % 7);
+        return 3 + openingStrength(b) / 12 + bias;
+      }
+    }
+    return 0;
+  };
+}
+const costFn = makeCost({ id: 0 });
 
 function alertEnemy(e) {
   if (e.alerted || e.dead) return;
@@ -94,7 +112,7 @@ function findCover(e, p) {
 /** Unalerted attackers search the cabin: A* routes them through the cheapest
  *  door or window nearest their approach, which they then breach. */
 function entryGoal() {
-  return G.map.id === 'cabin' ? { cx: 24, cy: 22 } : null;
+  return homeInterior(G.map.id);
 }
 
 function goalCellFor(e, p) {
@@ -146,6 +164,19 @@ function doFire(e, p) {
         p.x += Math.cos(e.aimAngle) * 6; p.y += Math.sin(e.aimAngle) * 6;
       }
     }
+  } else if (def.weapon === 'molotov') {
+    const t = e.throwAt || { x: p.x, y: p.y };
+    const sp = def.spread * dist(e.x, e.y, t.x, t.y);
+    throwMolotov(e, t.x + (Math.random() - 0.5) * sp, t.y + (Math.random() - 0.5) * sp);
+    e.throwAt = null;
+  } else if (def.weapon === 'eshotgun') {
+    for (let i = 0; i < def.pellets; i++) {
+      const a = e.aimAngle + ((i / (def.pellets - 1)) - 0.5) * 2 * def.spread;
+      spawnBullet({ x: e.x + Math.cos(a) * 16, y: e.y + Math.sin(a) * 16, angle: a, speed: 620, dmg: def.damage, owner: 'enemy', range: def.range + 40, source: e });
+    }
+    sfx('shotgun', { vol: Math.max(0.3, 1 - dist(e.x, e.y, p.x, p.y) / 700) });
+    e.spotted = Math.max(e.spotted, 1.6);
+    e.muzzle = 0.09;
   } else {
     let spread = def.spread;
     if (inFloodlight(e.x, e.y)) spread *= 1.5; // glare
@@ -157,7 +188,7 @@ function doFire(e, p) {
     e.spotted = Math.max(e.spotted, 1.6); // muzzle flash reveals the shooter
     e.muzzle = 0.07;
   }
-  e.fireCd = def.fireCooldown * rand(0.8, 1.25);
+  e.fireCd = def.fireCooldown * rand(0.8, 1.25) * (e.inspired ? 0.75 : 1);
 }
 
 export function updateEnemies(dt) {
@@ -165,6 +196,13 @@ export function updateEnemies(dt) {
   const m = G.map;
   const d = derived();
   const alive = G.enemies.filter((e) => !e.dead && !e.gone);
+  const bosses = alive.filter((e) => e.def.boss);
+  const camera = G.s.home.upgrades.camera && G.map.id === homeMapId() && G.siegeActive;
+  for (const e of alive) {
+    e.inspired = !e.def.boss && bosses.some((b) => dist(b.x, b.y, e.x, e.y) < 240);
+    if (camera) e.spotted = Math.max(e.spotted, 0.4);
+    checkTrap(e);
+  }
 
   for (const e of G.enemies) {
     if (e.gone) continue;
@@ -183,11 +221,11 @@ export function updateEnemies(dt) {
     const hpFrac = e.hp / e.maxHp;
 
     // Retreat decision (rolled once when badly hurt, or when left alone).
-    if (!e.retreating && !e.retreatRolled && hpFrac < e.def.retreatAt + 0.05) {
+    if (!e.retreating && !e.retreatRolled && !e.inspired && hpFrac < e.def.retreatAt + 0.05) {
       e.retreatRolled = true;
       if (Math.random() > e.def.bravery) { e.retreating = true; e.path = null; e.aimT = 0; G.events.emit('enemyRetreat', e); }
     }
-    if (!e.retreating && !e.lonelyRolled && alive.length === 1 && G.siegeActive && G.siege && G.siege.spawned >= 3 && hpFrac < 0.75) {
+    if (!e.retreating && !e.lonelyRolled && !e.def.boss && alive.length === 1 && G.siegeActive && G.siege && G.siege.spawned >= 3 && hpFrac < 0.75) {
       e.lonelyRolled = true;
       if (Math.random() < 0.55) { e.retreating = true; e.path = null; e.aimT = 0; G.events.emit('enemyRetreat', e); }
     }
@@ -215,7 +253,7 @@ export function updateEnemies(dt) {
     if (goal && (e.pathT <= 0 || gk !== e.goalKey || !e.path)) {
       e.goalKey = gk;
       e.pathT = 0.6 + Math.random() * 0.5;
-      e.path = m.findPath(Math.floor(e.x / TILE), Math.floor(e.y / TILE), goal.cx, goal.cy, costFn, 3500);
+      e.path = m.findPath(Math.floor(e.x / TILE), Math.floor(e.y / TILE), goal.cx, goal.cy, e.cost || (e.cost = makeCost(e)), 3500);
       e.breach = null;
     }
 
@@ -234,7 +272,8 @@ export function updateEnemies(dt) {
     if (e.aimT > 0) {
       e.aimT -= dt;
       // Track the player for the first part of the windup, then lock in.
-      if (e.aimT > e.def.telegraph * 0.4) e.aimAngle = angleTo(e.x, e.y, p.x, p.y);
+      if (e.aimT > e.def.telegraph * 0.4 && !(e.def.weapon === 'molotov' && e.throwAt)) e.aimAngle = angleTo(e.x, e.y, p.x, p.y);
+      else if (e.def.weapon === 'molotov' && !e.throwAt) e.throwAt = { x: p.x, y: p.y };
       e.angle = e.aimAngle;
       if (e.aimT <= 0) { e.aimT = 0; if (!p.dead) doFire(e, p); }
       continue;
@@ -247,6 +286,12 @@ export function updateEnemies(dt) {
       else {
         e.angle = angleTo(e.x, e.y, b.cx * TILE + 16, b.cy * TILE + 16);
         // Shooters stop to fire at a visible player rather than bashing.
+        if (e.def.weapon === 'molotov' && e.fireCd <= 0) {
+          // Back off and set the opening on fire.
+          e.throwAt = { x: b.cx * TILE + 16, y: b.cy * TILE + 16 };
+          e.aimT = e.def.telegraph; e.aimAngle = angleTo(e.x, e.y, e.throwAt.x, e.throwAt.y);
+          continue;
+        }
         if (e.alerted && canSee && e.def.weapon !== 'bat' && pd < e.def.range && e.fireCd <= 0) { startAim(e, p); continue; }
         if (e.breachCd <= 0) {
           b.damage(e.def.breachDamage);

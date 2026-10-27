@@ -8,17 +8,21 @@ import { HOMES } from '../data/homes.js';
 import { escapeHtml, fmtClock } from '../util.js';
 import { derived, spendAttr, buySkill, canBuySkill, shopDiscount, addMoney, addRel } from '../game/progression.js';
 import { addItem, count, removeItem, useConsumable } from '../game/inventory.js';
-import { installUpgrade, placeCover, homeStatus, craft, recipeCost, MAX_COVERS } from '../game/home.js';
+import { installUpgrade, placeCover, homeStatus, craft, recipeCost, MAX_COVERS, MAX_TRAPS } from '../game/home.js';
 import { boardOffers, acceptJob, abandonJob, jobHint, JOB_TYPES, jobOpenHours } from '../game/jobs.js';
 import { heatLabel } from '../game/siege.js';
 import { chatWith, giveGift, npcAvailableServices } from '../game/npcs.js';
 import { objectiveText } from '../game/story.js';
+import { offerQuest, activeQuests, questHint, QUESTS } from '../game/quests.js';
+import { chapter } from '../game/chapters.js';
 import { restBlocker, startSleep } from '../game/time.js';
 import { saveGame, canSaveNow, exportSave, readImportFile, writeSaveData, saveSettings } from '../game/save.js';
 import { sfx, setVolumes } from '../audio.js';
 import { toast } from './hud.js';
 import { resetInput, setTouchMode, input } from '../input.js';
 import { drawMinimap } from '../world/render.js';
+import { equipWeapon, magSize } from '../game/player.js';
+import { WEAPONS } from '../data/weapons.js';
 import { GAME_VERSION } from '../config.js';
 
 const root = () => document.getElementById('modal-root');
@@ -34,11 +38,13 @@ export function openModal(name, html, { onClose = null, closable = true, cls = '
   wrap.className = `modal-wrap ${cls}`;
   wrap.innerHTML = `<div class="modal" role="dialog" aria-label="${escapeHtml(name)}">${closable ? '<button class="close-btn" data-close aria-label="Close">✕</button>' : ''}<div class="modal-body scrollable">${html}</div></div>`;
   root().appendChild(wrap);
-  const entry = { name, el: wrap, onClose };
+  const entry = { name, el: wrap, onClose, openedAt: performance.now() };
   stack.push(entry);
   G.modal = name;
   resetInput();
   wrap.addEventListener('click', (e) => {
+    // Ignore the trailing click of the tap that opened this modal (it can land on ✕).
+    if (performance.now() - entry.openedAt < 400) { if (e.target.closest('[data-close]')) e.preventDefault(); return; }
     if (e.target.closest('[data-close]')) { e.preventDefault(); closeModal(); sfx('ui'); }
   });
   return wrap;
@@ -98,7 +104,9 @@ function renderMenu(entry) {
     case 'settings': body = settingsTab(); break;
     default: body = '';
   }
-  rerender(entry, `<div class="paused-tag">PAUSED</div><div class="tabs">${tabs}</div><div class="tab-body">${body}</div>`);
+  rerender(entry, `<div class="menu-head"><div class="paused-tag">PAUSED</div><div class="tabs" role="tablist">${tabs}</div></div><div class="tab-body">${body}</div>`);
+  const on = entry.el.querySelector('.tab.on');
+  if (on && on.scrollIntoView) on.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   if (menuTab === 'map') {
     const c = entry.el.querySelector('#minimap');
     if (c) drawMinimap(c);
@@ -121,6 +129,8 @@ function handleMenuClick(e, entry) {
     case 'quick': G.s.quick = id; toast(`${ITEMS[id].name} set as quick-use item.`, 'info'); break;
     case 'place': closeAllModals(); placeCover(id); return;
     case 'install': installUpgrade(id); break;
+    case 'equip': equipWeapon(G.player, id); break;
+    case 'equipPistol': equipWeapon(G.player, 'pistol'); break;
     case 'attr': spendAttr(id); break;
     case 'skill': if (canBuySkill(id)) confirmBox(`Spend ${SKILLS[id].cost} ${PATHS[SKILLS[id].path].name} JP to learn ${SKILLS[id].name}?`, 'Learn', () => { buySkill(id); refreshMenu(); }, 'Not yet'); return;
     case 'abandon': confirmBox('Abandon your current job? You won\'t be paid.', 'Abandon', () => { abandonJob(); refreshMenu(); }); return;
@@ -161,7 +171,7 @@ function invTab() {
   const p = G.player;
   const d = derived();
   const ids = Object.keys(G.s.inv).filter((k) => G.s.inv[k] > 0);
-  const order = ['Ammunition', 'Healing', 'Food', 'Materials', 'Tools', 'Defense', 'Upgrade', 'Story'];
+  const order = ['Weapon', 'Ammunition', 'Healing', 'Food', 'Materials', 'Tools', 'Defense', 'Upgrade', 'Story'];
   ids.sort((a, b) => order.indexOf(ITEMS[a].cat) - order.indexOf(ITEMS[b].cat));
   const rows = ids.map((id) => {
     const it = ITEMS[id];
@@ -169,10 +179,13 @@ function invTab() {
     if (it.quick) { btns.push(`<button class="btn sm" data-act="use" data-id="${id}">Use</button>`); btns.push(`<button class="btn sm ${G.s.quick === id ? 'on' : ''}" data-act="quick" data-id="${id}">${G.s.quick === id ? '★ Quick' : 'Set Quick'}</button>`); }
     if (it.place) btns.push(`<button class="btn sm" data-act="place" data-id="${id}">Place</button>`);
     if (it.install) btns.push(`<button class="btn sm" data-act="install" data-id="${id}">Install</button>`);
+    if (it.weapon) btns.push(`<button class="btn sm ${p.weapon === id ? 'on' : ''}" data-act="equip" data-id="${id}">${p.weapon === id ? '★ Equipped' : 'Equip'}</button>`);
     return `<div class="item-row"><div class="item-icon">${it.icon}</div><div class="item-main"><div class="item-name">${escapeHtml(it.name)} <span class="muted">${G.s.inv[id]} / ${it.cap}</span></div><div class="item-desc">${escapeHtml(it.desc)}</div></div><div class="item-btns">${btns.join('')}</div></div>`;
   }).join('');
   const ups = Object.entries(G.s.home.upgrades).filter(([, v]) => v).map(([k]) => ({ floodlight: 'Floodlight', alarm: 'Tripwire Alarm', extMag: 'Extended Magazine' }[k]));
-  return `<div class="stat-line">Handgun: <b>${p.mag}/${d.magSize}</b> loaded · Money: <b>$${G.s.money}</b> · Axe (always carried)</div>
+  const w = WEAPONS[p.weapon];
+  return `<div class="stat-line">Equipped: <b>${w.icon} ${w.name}</b> ${p.mag}/${magSize(p.weapon)} · Money: <b>$${G.s.money}</b> · Axe (always carried)</div>
+    <div class="item-row"><div class="item-icon">🔫</div><div class="item-main"><div class="item-name">9mm Handgun <span class="muted">always carried</span></div><div class="item-desc">${escapeHtml(WEAPONS.pistol.desc)}</div></div><div class="item-btns"><button class="btn sm ${p.weapon === 'pistol' ? 'on' : ''}" data-act="equipPistol">${p.weapon === 'pistol' ? '★ Equipped' : 'Equip'}</button></div></div>
     ${rows || '<p class="muted">Your pockets are empty.</p>'}
     ${ups.length ? `<p class="muted">Installed upgrades: ${ups.join(', ')}</p>` : ''}
     <p class="hint">Tip: the USE button (Q) uses your ★ quick item. Defense items are installed by walking up to a window or door and pressing ACT/E.</p>`;
@@ -220,17 +233,19 @@ function skillsTab() {
 /* ---- Home ---- */
 function homeTab() {
   const rows = homeStatus().map((r) => `<div class="def-row"><div class="def-name">${r.kind === 'door' ? '🚪' : '🪟'} ${escapeHtml(r.label)} ${r.extras.map((x) => `<span class="tag">${x}</span>`).join('')}</div>
-      <div class="cond"><div class="cond-fill ${r.cond < 0.35 ? 'bad' : r.cond < 0.75 ? 'mid' : ''}" style="width:${Math.round(r.cond * 100)}%"></div></div>
+      <div class="cond" role="img" aria-label="${Math.round(r.cond * 100)} percent"><div class="cond-fill ${r.cond < 0.35 ? 'bad' : r.cond < 0.75 ? 'mid' : ''}" style="width:${Math.round(r.cond * 100)}%"></div></div>
       <div class="def-stat">${Math.round(r.cond * 100)}% · ${escapeHtml(r.status)}${r.repair ? ` · Repair: ${r.repair} wood` : ''}</div></div>`).join('');
   const up = G.s.home.upgrades;
   const w = G.s.world;
   const heat = hasSkill('keen_eye') ? `${heatLabel(w.threat)} (${Math.round(w.threat)}/100)` : heatLabel(w.threat);
   return `<div class="stat-line">Mob Heat: <b class="heat-${heatLabel(w.threat).toLowerCase()}">${heat}</b> <span class="muted">— how close the family is to striking. Learn <i>Keen Eye</i> to see the exact number.</span></div>
     ${rows}
-    <div class="def-row"><div class="def-name">🛡 Placed cover</div><div class="def-stat">${G.s.home.covers.length} / ${MAX_COVERS} placed${G.s.home.covers.map((c) => ` · ${c.type} ${Math.round((c.hp))}hp`).join('')}</div></div>
-    <div class="def-row"><div class="def-name">☎ Phone line</div><div class="def-stat">${G.s.home.phoneLine ? 'Working — Ruth can call with warnings' : 'DAMAGED — repair at the pole by the road (Toolkit + 1 wood)'}</div></div>
-    <div class="def-row"><div class="def-name">💡 Lights</div><div class="def-stat">Porch light ${G.s.home.porchLight ? 'on' : 'off'} · Floodlight ${up.floodlight ? 'installed' : 'not installed (Okafor Lumber)'}</div></div>
-    <div class="def-row"><div class="def-name">🔔 Early warning</div><div class="def-stat">${up.alarm ? 'Tripwire alarm installed (+45 min warning, shows directions)' : 'No alarm (Okafor Lumber sells a tripwire kit)'}</div></div>
+    <div class="def-row wide"><div class="def-name">🛡 Placed cover</div><div class="def-stat">${G.s.home.covers.length} / ${MAX_COVERS} placed${G.s.home.covers.map((c) => ` · ${c.type} ${Math.round((c.hp))}hp`).join('')}</div></div>
+    <div class="def-row wide"><div class="def-name">⚙ Bear traps</div><div class="def-stat">${(G.s.home.traps || []).length} / ${MAX_TRAPS} set${(G.s.home.traps || []).some((t) => !t.armed) ? ' · some need re-arming (walk up and press ACT)' : ''}</div></div>
+    <div class="def-row wide"><div class="def-name">☎ Phone line</div><div class="def-stat">${G.s.home.phoneLine ? `Working — ${NPCS[chapter().neighbor].name.split(' ')[0]} can call with warnings` : 'DAMAGED — repair at the pole by the road (Toolkit + 1 wood)'}</div></div>
+    <div class="def-row wide"><div class="def-name">💡 Lights</div><div class="def-stat">Porch light ${G.s.home.porchLight ? 'on' : 'off'} · Floodlight ${up.floodlight ? 'installed' : `not installed (${chapter().hardwareName})`}</div></div>
+    <div class="def-row wide"><div class="def-name">🔔 Early warning</div><div class="def-stat">${up.alarm ? 'Tripwire alarm installed (+45 min warning, shows directions)' : `No alarm (${chapter().hardwareName} sells a tripwire kit)`}</div></div>
+    <div class="def-row wide"><div class="def-name">📷 Cameras</div><div class="def-stat">${up.camera ? 'Installed — every attacker on the property is marked during an attack' : `None (${chapter().hardwareName} sells a camera kit)`}</div></div>
     <p class="hint">Repair doors and windows by walking up to them and pressing ACT/E when no attackers are around. Repairs cost wood. Board kits and door braces are installed the same way.</p>`;
 }
 
@@ -248,19 +263,31 @@ function mapTab() {
 /* ---- Journal ---- */
 function journalTab() {
   const j = G.s.job;
-  const rel = Object.entries(NPCS).map(([id, n]) => {
-    const lv = relLevel(G.s.rel[id]);
-    const benefits = {
-      ruth: ['Lv1: takes you in if you fall', 'Lv2: warns you when an attack is coming', 'Lv3: shares medical supplies'],
-      dee: ['Lv1: tips about strangers in town', 'Lv2: 5% discount', 'Lv4: 10% discount'],
-      gus: ['Lv1: reads the town\'s mood', 'Lv2: +10% job pay', 'Lv3: friendly advice'],
-    }[id];
-    return `<div class="rel-row"><div><b>${escapeHtml(n.name)}</b> <span class="muted">${escapeHtml(n.title)}</span><div class="small muted">${escapeHtml(n.bio)}</div><div class="small">${benefits.map((b) => `<span class="${lv >= Number(b[2]) ? 'hl' : 'muted'}">${b}</span>`).join(' · ')}</div></div><div class="hearts" aria-label="Friendship ${lv} of 5">${'♥'.repeat(lv)}${'♡'.repeat(5 - lv)}</div></div>`;
+  const ch = chapter();
+  const roleBenefits = {
+    neighbor: ['Lv1: takes you in if you fall', 'Lv2: warns you when an attack is coming', 'Lv3: shares medical supplies'],
+    shopkeeper: ['Lv1: tips about strangers in town', 'Lv2: 5% discount', 'Lv4: 10% discount'],
+    jobContact: ['Lv1: reads the town\'s mood', 'Lv2: +10% job pay', 'Lv3: friendly advice'],
+  };
+  const people = [ch.neighbor, ch.shopkeeper, ch.jobContact];
+  const rel = people.map((id) => {
+    const n = NPCS[id];
+    const lv = relLevel(G.s.rel[id] || 0);
+    const role = id === ch.neighbor ? 'neighbor' : id === ch.shopkeeper ? 'shopkeeper' : 'jobContact';
+    return `<div class="rel-row"><div class="rel-main"><b>${escapeHtml(n.name)}</b> <span class="muted">${escapeHtml(n.title)}</span><div class="small muted">${escapeHtml(n.bio)}</div><div class="small">${roleBenefits[role].map((b) => `<span class="${lv >= Number(b[2]) ? 'hl' : 'muted'}">${b}</span>`).join(' · ')} · <span class="${lv >= 1 ? 'hl' : 'muted'}">Lv1: asks you for a favor</span></div></div><div class="hearts" aria-label="Friendship ${lv} of 5">${'♥'.repeat(lv)}${'♡'.repeat(5 - lv)}</div></div>`;
   }).join('');
-  const homes = HOMES.map((h) => `<div class="home-row ${h.playable ? '' : 'muted'}"><b>Ch.${h.chapter} ${escapeHtml(h.name)}</b> — ${h.playable ? (G.s.story.chapterComplete ? 'Complete ✓' : 'Now playing') : 'Planned for a future update (not playable yet)'}</div>`).join('');
-  return `<h3>Chapter 1 — The Cabin</h3>
+  const favors = activeQuests().map((q) => `<div class="objective-box favor"><b>🙋 ${escapeHtml(q.title)}</b> <span class="muted">for ${escapeHtml(NPCS[q.npc].name)}</span><br>${escapeHtml(questHint(q))}</div>`).join('');
+  const doneFavors = Object.entries(G.s.quests || {}).filter(([id, st]) => st.state === 'done' && QUESTS[id]).map(([id]) => QUESTS[id].title);
+  const homes = HOMES.map((h) => {
+    const done = (G.s.story.done || {})[h.chapter] || (h.chapter === 1 && G.s.story.chapterComplete);
+    const status = !h.playable ? 'Planned for a future update (not playable yet)' : done ? 'Complete ✓' : G.s.chapter === h.chapter ? 'Now playing' : G.s.chapter > h.chapter ? 'Moved on' : 'Ahead';
+    return `<div class="home-row ${h.playable ? '' : 'muted'}"><b>Ch.${h.chapter} ${escapeHtml(h.name)}</b> — ${status}</div>`;
+  }).join('');
+  return `<h3>Chapter ${ch.id} — ${escapeHtml(ch.name)}</h3>
     <div class="objective-box"><b>Objective:</b> ${escapeHtml(objectiveText())}</div>
-    ${j ? `<div class="objective-box job"><b>${JOB_TYPES[j.type].icon} Job: ${JOB_TYPES[j.type].name}</b> ($${j.pay})<br>${escapeHtml(jobHint())}<br><button class="btn sm" data-act="abandon">Abandon job</button></div>` : '<p class="muted">No active job. Visit the job board at Okafor Lumber (7 AM – 5 PM).</p>'}
+    ${j ? `<div class="objective-box job"><b>${JOB_TYPES[j.type].icon} Job: ${JOB_TYPES[j.type].name}</b> ($${j.pay})<br>${escapeHtml(jobHint())}<div class="row-btns"><button class="btn sm" data-act="abandon">Abandon job</button></div></div>` : `<p class="muted">No active job. Visit the job board at ${escapeHtml(ch.jobPlace)} (7 AM – 5 PM).</p>`}
+    ${favors || '<p class="muted small">No favors in progress. Friends (♥1+) sometimes ask for help — talk to them.</p>'}
+    ${doneFavors.length ? `<p class="small muted">Favors done: ${doneFavors.map(escapeHtml).join(', ')}</p>` : ''}
     <h3>People</h3>${rel}
     <h3>The road ahead</h3>${homes}`;
 }
@@ -312,6 +339,7 @@ export function openHelp() {
         <li><kbd>WASD</kbd>/<kbd>Arrows</kbd> Move · <kbd>Shift</kbd> Sprint</li>
         <li><kbd>Mouse</kbd> Aim · <kbd>Left click</kbd> Fire</li>
         <li><kbd>R</kbd> Reload · <kbd>E</kbd> Interact / talk / open doors</li>
+        <li><kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd>, <kbd>Tab</kbd> or <kbd>Mouse wheel</kbd> Switch weapon</li>
         <li><kbd>F</kbd> or <kbd>Right click</kbd> Melee shove</li>
         <li><kbd>Space</kbd> Dodge roll · <kbd>Q</kbd> Use quick item</li>
         <li><kbd>Esc</kbd>/<kbd>P</kbd> Pause menu · <kbd>I</kbd> Items · <kbd>C</kbd> Character · <kbd>K</kbd> Skills · <kbd>V</kbd> Home · <kbd>M</kbd> Map · <kbd>J</kbd> Journal · <kbd>H</kbd> Help</li>
@@ -321,14 +349,16 @@ export function openHelp() {
         <li>Right stick: aim — push it far to fire</li>
         <li><b>FIRE</b>: shoots where you aim (aim assist picks a target)</li>
         <li><b>ACT</b>: talk, open doors, chop, repair — label shows the action</li>
-        <li><b>RELOAD</b>, <b>MELEE</b>, <b>DODGE</b>, <b>USE</b> (quick item)</li>
+        <li><b>RELOAD</b>, <b>MELEE</b>, <b>DODGE</b>, <b>USE</b> (quick item), <b>SWAP</b> (next weapon)</li>
         <li>☰ top-right: pause menu</li>
       </ul></div>
     </div>
     <h3>How it works</h3><ul>
-      <li><b>Days</b>: work jobs at Okafor Lumber (7–5), shop at Marsh General (8–8), chop wood, talk to people.</li>
+      <li><b>Days</b>: work jobs from the job board (7–5), shop (8–8), chop wood, talk to people. Friends ask for <b>favors</b> with good rewards.</li>
+      <li><b>Weapons</b>: the handgun is always with you. Buy a pump shotgun (doorways) and a hunting rifle (long range, pierces) at the store.</li>
       <li><b>Nights</b>: the family may come. Warning signs — strange cars, footprints, a cut phone line, a stranger in town — mean trouble is near. Not every sign means an attack.</li>
-      <li><b>Defend</b>: board windows, brace doors, place sandbags. Solid things (trees, rocks, cars, walls, cover) stop bullets. Standing next to cover reduces damage you take.</li>
+      <li><b>Attackers</b>: Scouts, Enforcers (break doors), Gunmen (use cover), Arsonists (molotovs — fire burns doors, windows and you) and Lieutenants (tough, rally nearby attackers). Raiders probe your weakest door or window.</li>
+      <li><b>Defend</b>: board windows, add steel shutters, brace doors, place sandbags and bear traps, install a floodlight, tripwire alarm and cameras. Solid things (trees, rocks, cars, walls, cover) stop bullets. Standing next to cover reduces damage you take.</li>
       <li><b>Repair</b>: walk up to damaged doors/windows and press ACT. Costs wood.</li>
       <li><b>Rest</b> in your bed to sleep until morning. You'll never sleep through an attack.</li>
       <li><b>XP</b> raises your level (attribute points). <b>JP</b> is earned per path and buys skills.</li>
@@ -345,6 +375,7 @@ export function openNpcMenu(n) {
   const btns = [`<button class="btn big" data-npc="talk">💬 Talk</button>`];
   if (services.includes('shop')) btns.push(`<button class="btn big" data-npc="shop">🛒 Shop</button>`);
   if (services.includes('jobs')) btns.push(`<button class="btn big" data-npc="jobs">📋 Job board</button>`);
+  if (services.includes('favor')) btns.push(`<button class="btn big hl-btn" data-npc="favor">🙋 Ask about a favor</button>`);
   btns.push(`<button class="btn big" data-npc="gift" ${count('stew') + count('sandwich') ? '' : 'disabled'}>🎁 Give food</button>`);
   const el = openModal('npc', `<div class="npc-head"><div class="npc-dot" style="background:${def.body}"></div><div><h2>${escapeHtml(def.name)}</h2><div class="muted">${escapeHtml(def.title)}</div></div><div class="hearts">${'♥'.repeat(lv)}${'♡'.repeat(5 - lv)}</div></div>
     ${night ? '<p class="muted">It\'s late. They look tired.</p>' : ''}
@@ -359,6 +390,7 @@ export function openNpcMenu(n) {
     if (a === 'shop') openShop(n.id);
     if (a === 'jobs') openJobBoard();
     if (a === 'gift') giveGift(n.id);
+    if (a === 'favor') offerQuest(n.id);
   });
 }
 
@@ -376,10 +408,11 @@ export function openShop(shopId, tab = 'buy') {
       rows = shop.stock.map((s) => {
         const it = ITEMS[s.id];
         const have = count(s.id);
-        const full = have + s.qty > it.cap || (it.install && G.s.home.upgrades[it.install]);
+        const installed = it.install && (it.install === 'extMag' ? (G.s.weaponMods && G.s.weaponMods.extMag) || G.s.home.upgrades.extMag : G.s.home.upgrades[it.install]);
+        const full = have + s.qty > it.cap || installed;
         const pr = price(s.price);
         const afford = G.s.money >= pr;
-        return `<div class="item-row"><div class="item-icon">${it.icon}</div><div class="item-main"><div class="item-name">${escapeHtml(it.name)}${s.qty > 1 ? ` ×${s.qty}` : ''} <span class="muted">(have ${have})</span></div><div class="item-desc">${escapeHtml(it.desc)}</div></div><button class="btn buy" data-buy="${s.id}" ${!afford || full ? 'disabled' : ''}>${full ? (it.install && G.s.home.upgrades[it.install] ? 'Installed' : 'Full') : `$${pr}`}</button></div>`;
+        return `<div class="item-row"><div class="item-icon">${it.icon}</div><div class="item-main"><div class="item-name">${escapeHtml(it.name)}${s.qty > 1 ? ` ×${s.qty}` : ''} <span class="muted">(have ${have})</span></div><div class="item-desc">${escapeHtml(it.desc)}</div></div><button class="btn buy" data-buy="${s.id}" ${!afford || full ? 'disabled' : ''}>${full ? (installed ? 'Installed' : it.weapon ? 'Owned' : 'Full') : `$${pr}`}</button></div>`;
       }).join('');
     } else {
       const ids = Object.keys(G.s.inv).filter((k) => G.s.inv[k] > 0 && !ITEMS[k].story && ITEMS[k].sell > 0);
@@ -407,6 +440,7 @@ export function openShop(shopId, tab = 'buy') {
         sfx('coin');
         toast(`Bought ${ITEMS[s.id].name}${s.qty > 1 ? ' ×' + got : ''}`, 'item', 1.5);
         if (ITEMS[s.id].install === 'extMag') installUpgrade('ext_mag');
+        if (ITEMS[s.id].weapon) toast(`${ITEMS[s.id].name} bought! Switch with ${s.id === 'shotgun' ? '2' : '3'}, Tab, the mouse wheel or the SWAP button.`, 'level', 4);
         if (G.s.rel[shop.owner] !== undefined && pr >= 25) addRel(shop.owner, 1);
       }
       render();
@@ -551,12 +585,37 @@ export function showDefeat({ lost, rescuer, text, story, onContinue }) {
     .querySelector('[data-go]').addEventListener('click', () => { closeModal(); onContinue(); });
 }
 
-export function showChapterEnd() {
-  openModal('chapter', `<div class="chapter-card"><div class="ch-num">CHAPTER 1</div><h2>THE CABIN</h2><div class="ch-done">— COMPLETE —</div>
-    <p>You held the line. Pine Hollow has a few more friends of yours than it did a week ago, and the Vescari family has one less excuse to underestimate you.</p>
-    <p class="hl">But Leo Vescari knows exactly where you are. The family is still searching — and next time, they won't send boys.</p>
-    <p class="small muted">Chapter 2 (a new home in another state) is planned for a future update. You can keep playing: work jobs, upgrade the cabin, learn skills and survive the attacks that keep coming.</p>
+const CHAPTER_END = {
+  1: {
+    title: 'THE CABIN',
+    body: 'You held the line. Pine Hollow has a few more friends of yours than it did a week ago, and the Vescari family has one less excuse to underestimate you.',
+    hook: 'But Leo Vescari knows exactly where you are. The family is still searching — and next time, they won\'t send boys.',
+    next: 'Chapter 2 is ready: keep playing here as long as you like, then use your car at the cabin to leave Pine Hollow for good.',
+  },
+  2: {
+    title: 'LARCH STREET',
+    body: 'Sal Benedetto is gone, Larch Street is still standing, and the man across the road turned out to be the best friend a hunted man could have.',
+    hook: 'Leo knows about Marcus now. "Wisconsin next." The family is closing the distance — and they\'ll come with everything.',
+    next: 'Chapter 3 (a farm in Wisconsin) is planned for a future update. You can keep playing: work jobs, help neighbors, upgrade the house and survive the raids that keep coming.',
+  },
+};
+
+export function showChapterEnd(n = 1) {
+  const c = CHAPTER_END[n] || CHAPTER_END[1];
+  openModal('chapter', `<div class="chapter-card"><div class="ch-num">CHAPTER ${n}</div><h2>${c.title}</h2><div class="ch-done">— COMPLETE —</div>
+    <p>${escapeHtml(c.body)}</p>
+    <p class="hl">${escapeHtml(c.hook)}</p>
+    <p class="small muted">${escapeHtml(c.next)}</p>
     <button class="btn big primary" data-close>Keep playing</button></div>`, { cls: 'small chapter' });
+}
+
+export function showChapterStart(n, onGo) {
+  const titles = { 2: ['LARCH STREET', 'Millbrook, Ohio — six hundred miles from Pine Hollow.'] };
+  const [t, sub] = titles[n] || ['', ''];
+  const el = openModal('chapterStart', `<div class="chapter-card"><div class="ch-num">CHAPTER ${n}</div><h2>${t}</h2><p class="muted">${escapeHtml(sub)}</p>
+    <p class="small">Your level, skills, money, weapons and gear come with you. Installed lights, alarms and cameras are packed back into your inventory; boards, braces and shutters stay behind.</p>
+    <button class="btn big primary" data-go>Begin</button></div>`, { closable: false, cls: 'small chapter' });
+  el.querySelector('[data-go]').addEventListener('click', () => { closeModal(); onGo(); });
 }
 
 export { input };

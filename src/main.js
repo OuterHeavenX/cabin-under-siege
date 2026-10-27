@@ -2,9 +2,13 @@
 import { G, newSave, isNight } from './game/state.js';
 import { TILE } from './config.js';
 import { clamp, dist, fmtClock, escapeHtml } from './util.js';
-import { buildCabinMap, buildTownMap } from './world/mapgen.js';
+import { buildCabinMap, buildTownMap, buildMillbrookMap } from './world/mapgen.js';
+import { chapter, homeMapId, workMapId, atHome, LAST_CHAPTER } from './game/chapters.js';
+import { QUESTS, questWaypoint } from './game/quests.js';
+import { newHome } from './game/state.js';
+import { showChapterStart } from './ui/menus.js';
 import { buildGroundCanvas, buildRoofCanvas, render } from './world/render.js';
-import { initInput, consume, endFrame, resetInput, setTouchMode, input } from './input.js';
+import { initInput, consume, endFrame, resetInput, setTouchMode, input, suppressGhostClick } from './input.js';
 import { initAudio, setVolumes, updateAudio, setMusic, setAmbient, suspendAudio, resumeAudio, sfx } from './audio.js';
 import { initHud, updateHud, toast, banner } from './ui/hud.js';
 import { initDialogue, updateDialogue, playDialogue } from './ui/dialogue.js';
@@ -22,9 +26,13 @@ import { findTarget, doInteract, setTravel } from './game/interact.js';
 import { derived, addXP, addJP } from './game/progression.js';
 import { quickItem, count, addItem } from './game/inventory.js';
 import { ITEMS } from './data/items.js';
+import { NPCS } from './data/npcs.js';
+import { WEAPONS, WEAPON_ORDER } from './data/weapons.js';
+import { ownsWeapon, reloadTime } from './game/player.js';
 import { saveGame, hasSave, readSaveRaw, migrate, validateSave, deleteSave, loadSettings, canSaveNow } from './game/save.js';
 import { addPickup, damageEnemy } from './game/combat.js';
-import { spawnEnemy } from './game/enemies.js';
+import { updateFire, startFire } from './game/fire.js';
+import { spawnEnemy, openingStrength } from './game/enemies.js';
 import { startSiege, makeRaidPlan, scheduleSiege, addSign } from './game/siege.js';
 import { buySkill } from './game/progression.js';
 import { damagePlayer } from './game/player.js';
@@ -60,28 +68,45 @@ function resize() {
 }
 
 /* ---------------- maps ---------------- */
+const MAP_BUILDERS = {
+  cabin: () => buildCabinMap(G.s.home),
+  town: () => buildTownMap(),
+  millbrook: () => buildMillbrookMap(G.s.home),
+};
+
 function buildMaps() {
-  const cabin = buildCabinMap(G.s.home);
-  const town = buildTownMap();
-  for (const m of [cabin, town]) {
+  G.maps = {};
+  for (const id of chapter().maps) {
+    const m = MAP_BUILDERS[id]();
     m.groundCanvas = buildGroundCanvas(m);
     for (const b of m.buildings) b.roofCanvas = buildRoofCanvas(b);
+    G.maps[id] = m;
+    // Keep favor spots reachable: no trees on them.
+    for (const q of Object.values(QUESTS)) {
+      if (q.map !== id) continue;
+      for (const [x, y] of [...(q.spots || []), ...(q.target ? [q.target] : [])]) {
+        const cx = Math.floor(x), cy = Math.floor(y);
+        for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
+          const i = m.idx(cx + ox, cy + oy);
+          if (m.trees.has(i)) { m.trees.delete(i); m.solid[i] = 0; }
+        }
+      }
+    }
+    applyChopped(m);
   }
-  G.maps = { cabin, town };
   syncCovers();
-  applyChopped(cabin);
-  applyChopped(town);
 }
 
 export function loadMap(id, pos) {
   G.map = G.maps[id];
   G.enemies = [];
   G.bullets = [];
-  G.pickups = G.pickups.filter((p) => p.kind === 'note' && p.map === id);
+  G.pickups = G.pickups.filter((p) => (p.kind === 'note' || p.kind === 'burner') && p.map === id);
   G.particles = [];
   G.floaters = [];
+  G.fires = []; G.lobs = []; G.casings = []; G.smoke = [];
   applyChopped(G.map);
-  if (id === 'cabin') refreshSignProps();
+  if (id === homeMapId()) refreshSignProps();
   const p = G.player;
   if (pos) { p.x = pos.x; p.y = pos.y; }
   G.map.pushOut(p, p.radius, 'player');
@@ -96,20 +121,20 @@ function travel(target, mode) {
   if (G.siegeActive || inCombat() || G.enemies.some((e) => !e.dead && !e.gone)) { toast('You can\'t leave while you\'re under attack!', 'danger'); return; }
   const mins = mode === 'car' ? 20 : 60;
   if (mode === 'car') sfx('car');
-  const text = target === 'town' ? 'Driving to Pine Hollow…' : 'Heading home…';
+  const text = target === workMapId() ? `Driving to ${chapter().place}…` : 'Heading home…';
   G.transition = {
     t: 0, fade: 0, text, phase: 'out',
     mid: () => {
       advanceMinutes(mins);
       const m = G.maps[target];
       let pos;
-      if (mode === 'car') pos = target === 'town' ? m.points.car : m.points.car;
+      if (mode === 'car') pos = m.points.car;
       else pos = target === 'town' ? { x: 1.6 * TILE, y: 21 * TILE } : { x: 57.5 * TILE, y: 39.5 * TILE };
       loadMap(target, pos);
       if (mode === 'walk') addJP('survivor', 2, 'walk', 2);
       saveGame('travel');
     },
-    done: () => { if (target === 'cabin') maybeAmbushOnArrival(); },
+    done: () => { if (target === homeMapId()) maybeAmbushOnArrival(); },
   };
 }
 setTravel(travel);
@@ -136,7 +161,7 @@ function updateMood(force) {
   if (G.siegeActive || G.enemies.some((e) => !e.dead && e.alerted)) setMusic('tense');
   else setMusic(isNight() ? 'night' : 'day');
   if (isNight()) setAmbient('night');
-  else setAmbient(G.map && G.map.id === 'town' ? 'town' : 'day');
+  else setAmbient(G.map && G.map.id === workMapId() ? 'town' : 'day');
 }
 
 /* ---------------- game update ---------------- */
@@ -153,6 +178,7 @@ function update(dt) {
   updateEnemies(dt);
   updateSiege(dt);
   updateBullets(dt);
+  updateFire(dt);
   updateEffects(dt);
   updateNpcs(dt);
   updateJobs(dt);
@@ -224,14 +250,14 @@ function computeHudInfo(dt) {
   else if (s.world.siege && s.world.siege.warned) danger = `Attack expected ~${fmtClock(s.world.siege.minute)}. Get ready!`;
   const q = quickItem();
   // Waypoint
-  let wp = storyWaypoint();
+  let wp = storyWaypoint() || questWaypoint();
   if (wp && wp.map !== G.map.id) {
     const car = G.map.props.find((p) => p.kind === 'car');
-    wp = car ? { x: car.x, y: car.y, label: wp.map === 'town' ? 'Car → Town' : 'Car → Home' } : null;
+    wp = car ? { x: car.x, y: car.y, label: wp.map === homeMapId() ? 'Car → Home' : 'Car → Town' } : null;
   }
   G.waypoint = wp && !G.siegeActive ? wp : null;
   hudInfo = {
-    maxHp: d.maxHp, maxStamina: d.maxStamina, reloadTime: d.reloadTime, objective: objectiveText(), jobLine, danger,
+    maxHp: d.maxHp, maxStamina: d.maxStamina, reloadTime: reloadTime(G.player.weapon), weapon: WEAPONS[G.player.weapon], weaponCount: WEAPON_ORDER.filter(ownsWeapon).length, objective: objectiveText(), jobLine, danger,
     quickLabel: q ? `${ITEMS[q].icon}×${count(q)}` : 'USE', night: isNight(), combat: inCombat(), target: null,
   };
 }
@@ -309,18 +335,24 @@ function initEvents() {
   G.events.on('playerDown', () => handleDefeat());
   G.events.on('recovered', ({ onCabin, gifts, story }) => {
     G.transition = null;
-    const m = onCabin ? G.maps.cabin : G.maps.town;
+    const m = onCabin ? G.maps[homeMapId()] : G.maps[workMapId()];
     loadMap(m.id, m.points.recovery);
-    const who = onCabin ? 'Ruth Calloway' : 'Dee Marsh';
+    const who = NPCS[onCabin ? chapter().neighbor : chapter().shopkeeper].name;
     const lines = [{ who, text: onCabin ? 'Easy, easy. You\'ve got stitches in places you don\'t want to know about. You\'ll live.' : 'Morning, sunshine. You owe me a mop.' }];
     if (gifts.length) lines.push({ who, text: `I left you some things: ${gifts.join(' and ')}. Don't argue.` });
     if (story) lines.push({ who: 'Frank', text: 'They\'ll come back tonight. This time I\'ll be ready.' });
     playDialogue(lines);
     saveGame('recover', { force: true });
   });
+  G.events.on('requestMove', () => {
+    const next = G.s.chapter + 1;
+    if (next > LAST_CHAPTER) return;
+    if (G.siegeActive || G.enemies.some((e) => !e.dead && !e.gone)) { toast('Not with attackers around!', 'danger'); return; }
+    confirmBox('Leave for good and start the next chapter? You can\'t come back here. Your level, skills, money, weapons and gear come with you.', 'Leave', () => moveToChapter(next), 'Not yet');
+  });
   G.events.on('newDay', (day) => {
     applyChopped(G.map);
-    if (G.map.id === 'cabin') refreshSignProps();
+    if (atHome()) refreshSignProps();
     if (!G.sleeping) banner(`Day ${day} begins.`, 'info', 3);
   });
   G.events.on('mapLoaded', (id) => {
@@ -332,10 +364,45 @@ function initEvents() {
   });
 }
 
+/** Pack up and move to the next chapter's home. */
+function moveToChapter(n) {
+  const s = G.s;
+  const old = s.home;
+  // Pack portable upgrades and placed gear back into the inventory.
+  const pack = { floodlight: 'floodlight_kit', alarm: 'alarm_kit', camera: 'camera_kit' };
+  for (const [k, item] of Object.entries(pack)) if (old.upgrades[k]) addItem(item, 1, true);
+  for (const c of old.covers) addItem(c.type, 1, true);
+  for (let i = 0; i < (old.traps || []).length; i++) addItem('bear_trap', 1, true);
+  s.pastHomes[old.id || 'cabin'] = { leftOnDay: s.time.day };
+  s.chapter = n;
+  s.home = newHome(n === 2 ? 'house' : 'cabin');
+  s.job = null;
+  s.story.step = chapter().firstStep;
+  s.story.flags = {};
+  s.world.siege = null;
+  s.world.signs = {};
+  s.world.threat = 15;
+  s.world.board = null;
+  s.world.quietUntilDay = s.time.day + 4;
+  s.world.chopped[chapter().homeMap] = s.world.chopped[chapter().homeMap] || {};
+  // Two days on the road.
+  s.time.day += 2;
+  s.time.minute = 10 * 60;
+  s.world.lastDayProcessed = s.time.day;
+  s.player.map = chapter().homeMap;
+  closeAllModals();
+  buildMaps();
+  const m = G.maps[chapter().homeMap];
+  G.player.hp = derived().maxHp;
+  loadMap(m.id, m.points.start);
+  saveGame('move', { force: true });
+  showChapterStart(n, () => banner(`New objective: ${objectiveText()}`, 'objective', 5));
+}
+
 /* ---------------- start / title ---------------- */
 function startGame(isNew) {
   closeAllModals();
-  G.enemies = []; G.bullets = []; G.pickups = []; G.particles = []; G.floaters = [];
+  G.enemies = []; G.bullets = []; G.pickups = []; G.particles = []; G.floaters = []; G.fires = []; G.lobs = [];
   G.siegeActive = false; G.siege = null; G.sleeping = null; G.transition = null; G.repairHold = null;
   buildMaps();
   G.player = createPlayer();
@@ -404,7 +471,7 @@ function initTitle() {
   document.getElementById('t-import').addEventListener('click', go(() => pickImport(() => showTitle())));
   document.getElementById('t-help').addEventListener('click', go(() => openHelp()));
   // Open on pointerdown: an iOS "click" can be dropped if the finger drifts or another finger is down.
-  document.getElementById('menu-btn').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); if (!modalOpen()) { sfx('ui'); openMenu(); } });
+  document.getElementById('menu-btn').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); suppressGhostClick(); if (!modalOpen()) { sfx('ui'); openMenu(); } });
   document.getElementById('objective').addEventListener('click', () => { if (!modalOpen()) openMenu('journal'); });
   const rh = document.getElementById('rotate-hint');
   rh.addEventListener('click', () => rh.classList.add('dismissed'));
@@ -434,7 +501,7 @@ function boot() {
   // Test/debug handle (harmless in production; used by the automated smoke test).
   window.__cus = {
     G, newGame, continueGame, travel, loadMap, saveGame, quitToTitle,
-    dbg: { damageEnemy, spawnEnemy, startSiege, makeRaidPlan, scheduleSiege, addSign, addItem, addXP, addJP, buySkill, derived, damagePlayer, count },
+    dbg: { input, openingStrength, homeMapId, openMenu, startFire, damageEnemy, spawnEnemy, startSiege, makeRaidPlan, scheduleSiege, addSign, addItem, addXP, addJP, buySkill, derived, damagePlayer, count },
   };
 }
 

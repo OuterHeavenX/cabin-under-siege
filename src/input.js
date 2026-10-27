@@ -15,10 +15,19 @@ export const input = {
 
 const KEYMAP = {
   KeyE: 'interact', Enter: 'interact', KeyR: 'reload', KeyQ: 'use', KeyF: 'melee', Space: 'dodge',
+  Digit1: 'weapon1', Digit2: 'weapon2', Digit3: 'weapon3', Tab: 'swap',
   Escape: 'pause', KeyP: 'pause', KeyI: 'inv', KeyC: 'char', KeyK: 'skills', KeyM: 'map', KeyJ: 'journal', KeyH: 'help', KeyV: 'home',
 };
 
 export function press(action) { input.pressed.add(action); }
+
+// A touch button acts on finger-down; swallow the browser's trailing click so it
+// can't hit whatever modal that action just opened underneath the finger.
+let suppressClickUntil = 0;
+export function suppressGhostClick() { suppressClickUntil = performance.now() + 400; }
+window.addEventListener('click', (e) => {
+  if (performance.now() < suppressClickUntil && e.target.closest && e.target.closest('#modal-root')) { e.stopPropagation(); e.preventDefault(); }
+}, true);
 export function consume(action) {
   if (input.pressed.has(action)) { input.pressed.delete(action); return true; }
   return false;
@@ -83,6 +92,12 @@ export function initInput(canvas) {
   });
   window.addEventListener('mouseup', (e) => { if (e.button === 0) input.held.fire = false; });
   canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+  let wheelT = 0;
+  canvas.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const now = performance.now();
+    if (now - wheelT > 180 && Math.abs(e.deltaY) > 4) { wheelT = now; press('swap'); }
+  }, { passive: false });
 
   // Switch into touch mode automatically when a finger is used.
   window.addEventListener('pointerdown', (e) => {
@@ -209,6 +224,7 @@ function initTouchControls() {
     const b = document.getElementById(id);
     b.addEventListener('pointerdown', (e) => {
       e.preventDefault(); e.stopPropagation();
+      suppressGhostClick();
       press(action); b.classList.add('down');
     });
     const up = () => b.classList.remove('down');
@@ -221,6 +237,7 @@ function initTouchControls() {
   bind('btn-use', 'use');
   bind('btn-melee', 'melee');
   bind('btn-dodge', 'dodge');
+  bind('btn-swap', 'swap');
 }
 
 /** Called when the game pauses (tab hidden, menu) so stuck inputs don't linger. */

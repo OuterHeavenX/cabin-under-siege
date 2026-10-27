@@ -197,6 +197,10 @@ export function buildCabinMap(home) {
     { x: 48.5 * TILE, y: 21.5 * TILE, r: 110, building: 'ruth_house' },
     { x: 48.5 * TILE, y: 27 * TILE, r: 70 },
   ];
+  m.homeInfo = {
+    building: 'cabin', interior: { cx: 24, cy: 22 },
+    flood: { x: 24.5 * TILE, y: 28.6 * TILE, r: 270 }, porch: { x: 24.5 * TILE, y: 27.6 * TILE, r: 95 },
+  };
   m.exits = [{ id: 'to_town', x: 59 * TILE, y: 38 * TILE, w: TILE, h: 4 * TILE, target: 'town', label: 'Walk to Pine Hollow (1 hr)' }];
   addProp(m, { id: 'exit_town', kind: 'exit', x: 58.6 * TILE, y: 40 * TILE, label: 'Road to Pine Hollow', r: 56, target: 'town' });
   return m;
@@ -309,7 +313,7 @@ export function buildTownMap() {
     gus_yard: P(48.5, 29),
     gus_diner: P(26, 14),
     gus_home: P(36.5, 27),
-    stranger: P(29.6, 19.5),
+    stranger: P(29.6, 19.5), woodlot: P(61, 30),
     store_door: P(12.5, 19.5),
     recovery: P(13, 15.5),
     walk_a: P(18, 19.5), walk_b: P(46, 22.5), walk_c: P(27, 9.5), walk_d: P(10, 22.5), walk_e: P(38, 19.5), walk_f: P(55, 19.5),
@@ -343,5 +347,175 @@ export function buildTownMap() {
     south: { ...P(32, 43.5), label: 'the south road' },
   };
   addProp(m, { id: 'exit_cabin', kind: 'exit', x: 0.6 * TILE, y: 21 * TILE, label: 'Road Home', r: 56, target: 'cabin' });
+  return m;
+}
+
+/* ------------------------------------------------------------------ */
+/*  CHAPTER 2: MILLBROOK — Larch Street + downtown on one map          */
+/* ------------------------------------------------------------------ */
+export function buildMillbrookMap(home) {
+  const W = 64, H = 48;
+  const m = new GameMap('millbrook', W, H, 'Millbrook');
+  const rnd = seeded(2024);
+
+  // Streets: Larch St (east-west) and Main St (north-south).
+  m.fillGround(0, 29, W, 2, GR.ROAD);
+  m.fillGround(44, 0, 2, 29, GR.ROAD);
+  m.fillGround(0, 28, 44, 1, GR.SIDEWALK); m.fillGround(46, 28, 18, 1, GR.SIDEWALK);
+  m.fillGround(0, 31, W, 1, GR.SIDEWALK);
+  m.fillGround(43, 0, 1, 28, GR.SIDEWALK); m.fillGround(46, 0, 1, 28, GR.SIDEWALK);
+
+  // Your house
+  building(m, { id: 'house', name: 'Your House', x: 18, y: 33, w: 12, h: 9, roof: '#4d5a66', isHome: true });
+  const o = home.openings;
+  addDoor(m, 'front_door', 24, 33, o.front_door, 'Front Door');
+  addDoor(m, 'back_door', 24, 41, o.back_door, 'Back Door');
+  addWindow(m, 'win_f1', 21, 33, o.win_f1, 'Front-Left Window');
+  addWindow(m, 'win_f2', 27, 33, o.win_f2, 'Front-Right Window');
+  addWindow(m, 'win_w', 18, 37, o.win_w, 'West Window', true);
+  addWindow(m, 'win_e', 29, 37, o.win_e, 'East Window', true);
+  addWindow(m, 'win_b', 27, 41, o.win_b, 'Back Window');
+  m.fillGround(22, 32, 5, 1, GR.PORCH);
+  m.fillSolid(19, 34, 2, 2, SO.FURN); m.decor.push({ kind: 'bed', x: 19, y: 34, w: 2, h: 2 });
+  m.fillSolid(27, 34, 2, 1, SO.FURN); m.decor.push({ kind: 'stove', x: 27, y: 34, w: 2, h: 1 });
+  m.fillSolid(22, 37, 3, 2, SO.FURN); m.decor.push({ kind: 'table', x: 22, y: 37, w: 3, h: 2 });
+  m.fillSolid(28, 39, 1, 2, SO.FURN); m.decor.push({ kind: 'workbench', x: 28, y: 39, w: 1, h: 2 });
+  m.decor.push({ kind: 'rug', x: 19, y: 38, w: 3, h: 2 });
+  m.decor.push({ kind: 'phone', x: 25, y: 34, w: 1, h: 1 });
+  addProp(m, { id: 'bed', kind: 'bed', x: 20 * TILE, y: 36.3 * TILE, label: 'Bed', r: 40 });
+  addProp(m, { id: 'workbench', kind: 'workbench', x: 27.6 * TILE, y: 40 * TILE, label: 'Workbench', r: 40 });
+  addProp(m, { id: 'phone', kind: 'phone', x: 25.5 * TILE, y: 34.4 * TILE, label: 'Telephone', r: 40 });
+  // Driveway & car
+  m.fillGround(31, 32, 3, 7, GR.GRAVEL);
+  m.fillSolid(31, 34, 2, 3, SO.CAR);
+  addProp(m, { id: 'car', kind: 'car', x: 32 * TILE, y: 35.5 * TILE, label: 'Your Car', r: 64 });
+  // Mailbox & phone pole
+  m.setSolid(20, 32, SO.FURN); m.decor.push({ kind: 'mailbox', x: 20, y: 32, w: 1, h: 1 });
+  addProp(m, { id: 'mailbox', kind: 'mailbox', x: 20.5 * TILE, y: 32.5 * TILE, label: 'Mailbox', r: 40 });
+  m.setSolid(15, 32, SO.WALL); m.decor.push({ kind: 'pole', x: 15, y: 32, w: 1, h: 1 });
+  addProp(m, { id: 'phonepole', kind: 'phonepole', x: 15.5 * TILE, y: 32.5 * TILE, label: 'Phone Line', r: 48 });
+  // Backyard fence with a gate
+  for (let cx = 17; cx <= 30; cx++) if (cx < 23 || cx > 25) m.setSolid(cx, 46, SO.FENCE);
+  for (let cy = 42; cy <= 46; cy++) { m.setSolid(17, cy, SO.FENCE); m.setSolid(30, cy, SO.FENCE); }
+  m.fillSolid(19, 43, 2, 1, SO.LOGS); m.decor.push({ kind: 'logs', x: 19, y: 43, w: 2, h: 1 });
+
+  // Marcus Bell's house (across the street)
+  building(m, { id: 'marcus_house', name: 'Bell House', x: 18, y: 19, w: 9, h: 9, roof: '#7a5230' });
+  addDoor(m, 'marcus_door', 22, 27, npcDoorRec(), "Marcus's Door");
+  addWindow(m, 'marcus_w1', 20, 27, npcWinRec(), 'Window');
+  addWindow(m, 'marcus_w2', 25, 27, npcWinRec(), 'Window');
+  m.fillSolid(19, 20, 2, 1, SO.FURN); m.decor.push({ kind: 'bed', x: 19, y: 20, w: 2, h: 1 });
+  m.fillSolid(23, 21, 2, 2, SO.FURN); m.decor.push({ kind: 'table', x: 23, y: 21, w: 2, h: 2 });
+  m.setSolid(16, 22, SO.WALL); m.decor.push({ kind: 'antenna', x: 16, y: 22, w: 1, h: 1 });
+
+  // Other homes on Larch Street
+  building(m, { id: 'rosa_house', name: 'Delgado House', x: 6, y: 20, w: 8, h: 8, roof: '#9a4f3a' });
+  addDoor(m, 'rosa_door', 9, 27, npcDoorRec(), "Rosa's Door");
+  addWindow(m, 'rosa_w', 11, 27, npcWinRec(), 'Window');
+  building(m, { id: 'pete_house', name: 'Kowalski House', x: 30, y: 20, w: 8, h: 8, roof: '#5a6b3d' });
+  addDoor(m, 'pete_door', 33, 27, npcDoorRec(), "Pete's Door");
+  addWindow(m, 'pete_w', 35, 27, npcWinRec(), 'Window');
+  building(m, { id: 'hendricks', name: 'Hendricks House', x: 4, y: 33, w: 8, h: 7, roof: '#6a5a8a' });
+  addDoor(m, 'hend2_door', 7, 33, npcDoorRec(), 'Hendricks Door');
+  addWindow(m, 'hend2_w', 9, 33, npcWinRec(), 'Window');
+  building(m, { id: 'ortiz', name: 'Ortiz House', x: 36, y: 33, w: 7, h: 7, roof: '#3d5f7a' });
+  addDoor(m, 'ortiz_door', 39, 33, npcDoorRec(), 'Ortiz Door');
+  addWindow(m, 'ortiz_w', 41, 33, npcWinRec(), 'Window');
+  for (let cx = 36; cx <= 42; cx++) m.setSolid(cx, 42, SO.FENCE);
+
+  // Downtown: Delgado Hardware & Sporting
+  building(m, { id: 'hardware', name: 'Delgado Hardware', x: 47, y: 8, w: 11, h: 8, roof: '#2f6a5a', floor: GR.TILEFLOOR, shop: 'rosa' });
+  addDoor(m, 'hw_door', 47, 12, npcDoorRec(), 'Store Door', true);
+  addWindow(m, 'hw_w1', 47, 10, npcWinRec(), 'Window', true);
+  addWindow(m, 'hw_w2', 47, 14, npcWinRec(), 'Window', true);
+  m.fillSolid(50, 10, 1, 4, SO.COUNTER); m.decor.push({ kind: 'counter', x: 50, y: 10, w: 1, h: 4 });
+  m.fillSolid(56, 9, 1, 6, SO.FURN); m.decor.push({ kind: 'shelf', x: 56, y: 9, w: 1, h: 6 });
+  m.fillSolid(52, 9, 4, 1, SO.FURN); m.decor.push({ kind: 'shelf', x: 52, y: 9, w: 4, h: 1 });
+  addProp(m, { id: 'store_counter', kind: 'counter', x: 49.3 * TILE, y: 12 * TILE, label: 'Store Counter', r: 44 });
+
+  // Post office & library
+  building(m, { id: 'post', name: 'Post Office', x: 47, y: 18, w: 7, h: 7, roof: '#3b4f7a' });
+  addDoor(m, 'post_door', 47, 21, npcDoorRec(), 'Post Office Door', true);
+  addWindow(m, 'post_w', 47, 19, npcWinRec(), 'Window', true);
+  building(m, { id: 'library', name: 'Library', x: 55, y: 18, w: 8, h: 8, roof: '#6b3b5a' });
+  addDoor(m, 'lib_door', 58, 25, npcDoorRec(), 'Library Door');
+  addWindow(m, 'lib_w', 60, 25, npcWinRec(), 'Window');
+
+  // Kowalski Moving & Odd Jobs
+  m.fillGround(30, 12, 12, 6, GR.GRAVEL);
+  building(m, { id: 'kowalski', name: 'Kowalski Moving', x: 34, y: 6, w: 8, h: 6, roof: '#8b6b2f' });
+  addDoor(m, 'kow_door', 41, 9, npcDoorRec(), 'Office Door', true);
+  for (let cx = 29; cx <= 42; cx++) m.setSolid(cx, 18, SO.FENCE);
+  for (let cy = 12; cy <= 18; cy++) { m.setSolid(29, cy, SO.FENCE); if (cy !== 14 && cy !== 15) m.setSolid(42, cy, SO.FENCE); }
+  m.fillSolid(33, 13, 3, 2, SO.LOGS); m.decor.push({ kind: 'logs', x: 33, y: 13, w: 3, h: 2 });
+  m.fillSolid(31, 16, 2, 1, SO.FURN); m.decor.push({ kind: 'crate', x: 31, y: 16, w: 2, h: 1 });
+  m.fillSolid(38, 16, 2, 1, SO.FURN); m.decor.push({ kind: 'crate', x: 38, y: 16, w: 2, h: 1 });
+  m.setSolid(42, 11, SO.FURN); m.decor.push({ kind: 'board', x: 42, y: 11, w: 1, h: 1 });
+  addProp(m, { id: 'jobboard', kind: 'jobboard', x: 43.4 * TILE, y: 11.5 * TILE, label: 'Job Board', r: 44 });
+  addProp(m, { id: 'logdrop', kind: 'logdrop', x: 34.5 * TILE, y: 15.6 * TILE, label: 'Firewood Drop-off', r: 54 });
+  addProp(m, { id: 'shed', kind: 'shed', x: 32 * TILE, y: 15.4 * TILE, label: 'Supply Crates', r: 46 });
+
+  // Park gazebo in the woods
+  m.fillGround(10, 7, 8, 6, GR.DIRT);
+  m.fillSolid(13, 9, 2, 2, SO.FURN); m.decor.push({ kind: 'gazebo', x: 13, y: 9, w: 2, h: 2 });
+
+  // Rocks for cover
+  [[14, 36], [34, 41], [3, 43], [12, 44], [46, 34], [52, 38], [58, 33], [27, 45]].forEach(([cx, cy]) => m.setSolid(cx, cy, SO.ROCK));
+
+  const clear = [
+    [0, 27, 63, 32], [16, 32, 31, 46], [30, 31, 34, 39], [3, 32, 13, 41], [35, 32, 43, 42], [17, 18, 27, 28], [5, 19, 14, 28], [29, 19, 38, 28],
+    [42, 0, 63, 27], [28, 5, 42, 19], [10, 7, 17, 12], [22, 44, 26, 47], [0, 44, 3, 47], [59, 44, 63, 47], [15, 21, 16, 23],
+  ];
+  const avoid = (cx, cy) => clear.some((r) => rectHas(r, cx, cy));
+  scatterTrees(m, rnd, 0, 0, 41, 18, 0.3, avoid);
+  scatterTrees(m, rnd, 0, 32, W - 1, H - 1, 0.18, avoid);
+  scatterTrees(m, rnd, 0, 19, 43, 27, 0.08, avoid);
+  [[15, 25], [28, 24], [3, 37], [44, 37], [50, 41], [60, 38]].forEach(([cx, cy]) => addTree(m, cx, cy, 'oak'));
+
+  m.spawns = {
+    west: { ...P(0.5, 29.5), label: 'the west end of Larch Street' },
+    east: { ...P(63.5, 29.5), label: 'the east end of Larch Street' },
+    north: { ...P(44.5, 0.5), label: 'Main Street' },
+    south: { ...P(24.5, 47.5), label: 'the woods behind the house' },
+    southwest: { ...P(1.5, 46), label: 'the south-west treeline' },
+    southeast: { ...P(61, 46), label: 'the south-east lots' },
+  };
+  m.points = {
+    start: P(30.5, 37), arrive: P(30.5, 37), car: P(30.4, 35.5),
+    cabin_in: P(24.5, 36.5), porch: P(24.5, 32.4), cabin_front: P(24.5, 32.2),
+    marcus_yard: P(14, 25.5), marcus_porch: P(22.5, 28.5), marcus_in: P(22.5, 23.5),
+    rosa_store: P(51.6, 11.8), rosa_home: P(9.5, 23.5), rosa_porch: P(9.5, 28.5),
+    pete_yard: P(37.5, 14.6), pete_home: P(33.5, 23.5), pete_porch: P(33.5, 28.5),
+    stranger: P(46.5, 17), store_door: P(46.4, 12.5), recovery: P(22.5, 23.5),
+    footprints: P(17.3, 37.5), strange_car: P(10, 29.5), woodlot: P(8, 8), ruth_porch: P(22.5, 28.5),
+    walk_a: P(10, 28.4), walk_b: P(40, 31.4), walk_c: P(46.5, 6), walk_d: P(46.5, 24), walk_e: P(56, 28.4), walk_f: P(30, 31.4),
+  };
+  m.deliveryTargets = {
+    post: { name: 'the Post Office', ...P(46.4, 21.5) },
+    library: { name: 'the Library', ...P(58.5, 26.4) },
+    hendricks: { name: 'the Hendricks house', ...P(7.5, 32.3) },
+    ortiz: { name: 'the Ortiz house', ...P(39.5, 32.3) },
+  };
+  m.repairTargets = {
+    gazebo: { name: 'the park gazebo', ...P(13.9, 11.5) },
+    ortiz_fence: { name: "the Ortiz family's fence", ...P(39.5, 41.4) },
+    post_box: { name: 'the post office drop box', ...P(46.5, 24.6) },
+    library_rail: { name: 'the library railing', ...P(60.5, 26.4) },
+  };
+  m.discover = [
+    { id: 'larch', name: 'Larch Street', ...P(24, 30), r: 200 },
+    { id: 'downtown', name: 'Downtown Millbrook', ...P(45, 14), r: 160 },
+    { id: 'hardware', name: 'Delgado Hardware', ...P(51, 12), r: 110 },
+    { id: 'kowalski', name: 'Kowalski Moving', ...P(36, 13), r: 140 },
+    { id: 'park', name: 'Millbrook Park', ...P(14, 10), r: 140 },
+  ];
+  m.lights = [];
+  for (let cx = 4; cx < 64; cx += 8) { m.lights.push({ x: cx * TILE, y: 28 * TILE, r: 120, street: true }); m.lights.push({ x: (cx + 4) * TILE, y: 31.9 * TILE, r: 120, street: true }); }
+  for (let cy = 4; cy < 28; cy += 8) { m.lights.push({ x: 43 * TILE, y: cy * TILE, r: 120, street: true }); m.lights.push({ x: 46.9 * TILE, y: (cy + 4) * TILE, r: 120, street: true }); }
+  for (const b of m.buildings) m.lights.push({ x: (b.x + b.w / 2) * TILE, y: (b.y + b.h / 2) * TILE, r: Math.max(b.w, b.h) * 16, building: b.id });
+  m.homeInfo = {
+    building: 'house', interior: { cx: 24, cy: 37 },
+    flood: { x: 24.5 * TILE, y: 32.6 * TILE, r: 270 }, porch: { x: 24.5 * TILE, y: 32 * TILE, r: 95 },
+  };
   return m;
 }

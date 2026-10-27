@@ -9,12 +9,15 @@ import { angleDiff, angleTo, clamp, dist } from '../util.js';
 import { sfx } from '../audio.js';
 import { toast } from '../ui/hud.js';
 import { isNight } from './state.js';
+import { WEAPONS, WEAPON_ORDER } from '../data/weapons.js';
 
 export function createPlayer() {
   const sp = G.s.player;
   return {
     x: sp.x, y: sp.y, radius: PLAYER_RADIUS,
     hp: sp.hp, stamina: sp.stamina, mag: sp.mag,
+    weapon: sp.weapon && WEAPONS[sp.weapon] ? sp.weapon : 'pistol',
+    mags: { pistol: 0, shotgun: 0, rifle: 0, ...(sp.mags || {}) }, swapT: 0, casings: [],
     angle: sp.facing ?? -Math.PI / 2,
     vx: 0, vy: 0,
     fireCd: 0, reloadT: 0, meleeCd: 0, meleeAnim: 0,
@@ -105,21 +108,29 @@ export function updatePlayer(dt) {
     p.angle = Math.atan2(mv.y, mv.x);
   }
 
+  // --- Weapon switching ---
+  p.swapT -= dt;
+  if (consume('swap')) cycleWeapon(p, 1);
+  for (const [i, id] of WEAPON_ORDER.entries()) if (consume('weapon' + (i + 1))) equipWeapon(p, id);
+
   // --- Shooting ---
+  const w = WEAPONS[p.weapon];
   const firing = input.held.fire || consume('fireClick');
-  if (firing && p.reloadT <= 0 && p.fireCd <= 0 && p.dodgeT <= 0 && !G.repairHold) {
+  // Shell-by-shell reloads can be interrupted by firing.
+  if (firing && p.reloadT > 0 && w.perRound && p.mag > 0) { p.reloadT = 0; }
+  if (firing && p.reloadT <= 0 && p.fireCd <= 0 && p.dodgeT <= 0 && p.swapT <= 0 && !G.repairHold) {
     // FIRE button without stick aim: aim assist picks a target in a wide cone.
     if (input.touchMode && !(input.aim.active) && G.settings.aimAssist) {
       const t = assistTarget(p, 1.2);
       if (t) p.angle = angleTo(p.x, p.y, t.x, t.y);
     }
     if (p.mag > 0) {
-      fire(p, d, moving);
+      fire(p, d, moving, w);
     } else {
       sfx('empty');
       p.fireCd = 0.3;
-      if (count('ammo') > 0) startReload(p, d);
-      else toast('Out of ammo! Use MELEE or buy rounds at Marsh General.', 'warn', 2.5);
+      if (count(w.ammo) > 0) startReload(p, d);
+      else toast(`Out of ${w.short.toLowerCase()} ammo! Switch weapons, use MELEE, or buy more.`, 'warn', 2.5);
     }
   }
 
@@ -148,38 +159,85 @@ export function updatePlayer(dt) {
   }
 }
 
-function fire(p, d, moving) {
+export function ownsWeapon(id) { return id === 'pistol' || count(id) > 0; }
+
+export function magSize(id) {
+  if (id === 'pistol') return G.s.home.upgrades.extMag || G.s.weaponMods?.extMag ? WEAPONS.pistol.extMag : WEAPONS.pistol.mag;
+  return WEAPONS[id].mag;
+}
+
+export function reloadTime(id) {
+  const w = WEAPONS[id];
+  return w.reload * (derived().reloadTime / 1.45);
+}
+
+export function equipWeapon(p, id) {
+  if (!WEAPONS[id] || p.weapon === id) return;
+  if (!ownsWeapon(id)) { toast(`You don't own a ${WEAPONS[id].name}.`, 'warn', 1.5); return; }
+  p.mags[p.weapon] = p.mag;
+  p.weapon = id;
+  p.mag = p.mags[id] || 0;
+  p.reloadT = 0;
+  p.swapT = 0.35;
+  sfx('swap');
+  toast(`${WEAPONS[id].icon} ${WEAPONS[id].name}`, 'info', 1);
+}
+
+export function cycleWeapon(p, dir) {
+  const owned = WEAPON_ORDER.filter(ownsWeapon);
+  if (owned.length < 2) { toast('You only have the handgun. Marsh General sells long guns.', 'info', 1.6); return; }
+  const i = owned.indexOf(p.weapon);
+  equipWeapon(p, owned[(i + dir + owned.length) % owned.length]);
+}
+
+function fire(p, d, moving, w) {
   p.mag--;
-  p.fireCd = 0.26;
-  p.muzzle = 0.06;
+  p.fireCd = w.fireCd;
+  p.muzzle = w.pellets > 1 ? 0.09 : 0.06;
   p.lastCombat = 0;
-  let spread = 0.075 * d.spreadMult;
-  if (moving) spread += 0.06 * d.moveSpreadMult;
+  let spread = w.spread * (w.pellets > 1 ? 1 : d.spreadMult);
+  if (moving) spread += w.moveSpread * d.moveSpreadMult;
   spread += p.flinch * 0.2 * d.flinchMult;
-  const a = p.angle + (Math.random() - 0.5) * 2 * spread;
-  const mx = p.x + Math.cos(p.angle) * 16, my = p.y + Math.sin(p.angle) * 16;
-  spawnBullet({ x: mx, y: my, angle: a, speed: 900, dmg: 26, owner: 'player', range: 520 });
-  sfx('shot');
-  shake(2);
+  const mx = p.x + Math.cos(p.angle) * 18, my = p.y + Math.sin(p.angle) * 18;
+  for (let i = 0; i < w.pellets; i++) {
+    const a = w.pellets > 1
+      ? p.angle + ((i / (w.pellets - 1)) - 0.5) * 2 * spread * (0.75 + Math.random() * 0.25) + (Math.random() - 0.5) * 0.04
+      : p.angle + (Math.random() - 0.5) * 2 * spread;
+    spawnBullet({ x: mx, y: my, angle: a, speed: w.speed * (0.92 + Math.random() * 0.16), dmg: w.dmg, owner: 'player', range: w.range * (w.pellets > 1 ? 0.85 + Math.random() * 0.3 : 1), pierce: w.pierce || 0, knock: w.knock, weapon: p.weapon });
+  }
+  // Ejected casing (visual)
+  G.casings = G.casings || [];
+  if (G.casings.length > 40) G.casings.shift();
+  const side = p.angle + Math.PI / 2;
+  G.casings.push({ x: p.x, y: p.y, vx: Math.cos(side) * 90 + (Math.random() - 0.5) * 40, vy: Math.sin(side) * 90 + (Math.random() - 0.5) * 40, t: 0, rot: Math.random() * 6, color: p.weapon === 'shotgun' ? '#c0392b' : '#d9b84a' });
+  sfx(w.sound);
+  shake(w.shake);
+  if (p.weapon !== 'pistol') { p.x -= Math.cos(p.angle) * 3; p.y -= Math.sin(p.angle) * 3; }
   G.events.emit('shot', p.x, p.y);
-  if (p.mag === 0 && count('ammo') > 0) startReload(p, d);
+  if (p.mag === 0 && count(w.ammo) > 0) startReload(p, d);
 }
 
 function startReload(p, d) {
-  if (p.reloadT > 0 || p.mag >= d.magSize) return;
-  if (count('ammo') <= 0) { toast('No spare ammo.', 'warn'); return; }
-  p.reloadT = d.reloadTime;
-  sfx('reload');
+  const w = WEAPONS[p.weapon];
+  if (p.reloadT > 0 || p.mag >= magSize(p.weapon)) return;
+  if (count(w.ammo) <= 0) { toast(`No spare ${ITEM_NAME(w.ammo)}.`, 'warn'); return; }
+  p.reloadT = reloadTime(p.weapon);
+  sfx(w.perRound ? 'shell' : 'reload');
 }
 
 function finishReload(p, d) {
-  const need = d.magSize - p.mag;
-  const take = Math.min(need, count('ammo'));
-  removeItem('ammo', take);
+  const w = WEAPONS[p.weapon];
+  const need = magSize(p.weapon) - p.mag;
+  const take = Math.min(w.perRound ? 1 : need, count(w.ammo));
+  removeItem(w.ammo, take);
   p.mag += take;
   p.reloadT = 0;
-  sfx('reloadDone');
+  // Shotgun keeps loading shells until full (or until you fire).
+  if (w.perRound && p.mag < magSize(p.weapon) && count(w.ammo) > 0) { p.reloadT = reloadTime(p.weapon); sfx('shell'); }
+  else sfx('reloadDone');
 }
+
+const ITEM_NAME = (id) => ({ ammo: '9mm rounds', shells: 'shotgun shells', rifle_ammo: 'rifle rounds' }[id] || id);
 
 function melee(p, d) {
   if (p.meleeCd > 0 || p.dodgeT > 0) return;

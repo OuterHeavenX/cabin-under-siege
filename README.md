@@ -7,7 +7,23 @@ You are Frank Lowe — formerly Frankie Corsetti of the Vescari crime family —
 to build an honest life in a cabin outside the small town of Pine Hollow. By day you
 work, meet people and fix up the place. Some nights, the family comes for you.
 
-This build is a **complete, playable vertical slice: Chapter 1 — The Cabin**.
+This build (v0.2) contains **two complete, playable chapters**:
+
+1. **The Cabin** — Pine Hollow, a remote cabin and a small town.
+2. **Larch Street** — Millbrook, Ohio: a house on a quiet street, a neighbor with secrets, and Sal Benedetto.
+
+### What's new in v0.2
+
+- **Weapons**: pump shotgun (7-pellet spread, shell-by-shell reload you can interrupt) and hunting rifle (long range, punches through the first attacker), with their own ammo. Switch with 1/2/3, Tab, the mouse wheel or the touch **SWAP** button.
+- **New attackers**: the **Arsonist** (lobs molotovs — burning ground hurts you and eats through doors, windows and cover) and the **Lieutenant** boss (tough, enemy shotgun, rallies nearby attackers so they fire faster and don't run).
+- **Smarter raids**: attackers rate every door and window by how much punishment it can take and probe the weakest, with a little individual bias so squads split.
+- **New defenses**: steel window **shutters** (stop 90% of bullets), placeable **bear traps** (heavy damage + pin; re-arm after), and **security cameras** (every attacker on the property is marked during an attack).
+- **Favors**: each named character asks for one favor once you're friends (find, deliver, clear, repair, bring materials) — with rewards like Harold's old rifle or Marcus's cameras.
+- **Chapter 2**: when Chapter 1 is done, use your car to leave Pine Hollow for good. Level, skills, money, weapons and gear come with you; portable upgrades are packed up. New map, three new characters, a new story, an authored siege and a new ending.
+- **Music**: three looping synthesized themes (day folk, night keys, siege drums) instead of a drone.
+- **Graphics**: blended terrain, shaded tree sprites with wind sway, shaded characters, warm window and lamp glow at night, fireflies, chimney smoke, burning fires, water shimmer, morning color grading and a soft vignette.
+- **Menus**: compact sticky tab bar on phones, aligned button columns, and fixes for misplaced buttons. Fixed touch "ghost clicks" that could close a menu right after opening it.
+- **Saves**: format v2; v1 saves migrate automatically.
 
 ---
 
@@ -46,6 +62,7 @@ directly from disk (`file://`) won't work because browsers block ES modules ther
 | Aim | Mouse | Right stick (AIM) |
 | Fire | Left click (hold for repeated fire) | **FIRE** button, or push the aim stick far |
 | Reload | R | RELOAD |
+| Switch weapon | 1 / 2 / 3, Tab, mouse wheel | SWAP |
 | Interact / talk / open doors / chop / repair | E | **ACT** (its label shows the action: TALK, OPEN, CHOP, FIX, DRIVE…) |
 | Melee shove | F or right click | MELEE |
 | Dodge roll (brief invulnerability) | Space | DODGE |
@@ -161,7 +178,7 @@ validation/migration, simultaneous two-finger touch (joystick + aim) in an iPhon
 landscape viewport, rotation to portrait and back, and pausing when backgrounded. It fails
 on any console error. Screenshots go to `test-output/`.
 
-Current result: **66/66 checks pass**.
+Current result: **all checks pass** (see the count printed at the end of `npm test`). The v0.2 block covers buying/switching/firing the shotgun and rifle, rifle pierce, favors, shutters, traps, cameras, arsonist fire, the lieutenant's rally, weakest-point targeting, the move to Chapter 2, the full Chapter 2 story and siege, saving in Chapter 2 and migrating a version-1 save.
 
 ### iPhone / iPad checklist (real device testing still needed)
 
@@ -222,11 +239,12 @@ src/main.js                   Boot, main loop, travel, pause, title screen
 src/input.js                  Keyboard/mouse + multi-touch controls
 src/audio.js                  Synthesized SFX, ambience and music
 src/config.js, util.js        Constants and helpers
-src/data/                     Content: items & shops, skills & attributes, NPCs, enemies, homes
+src/data/                     Content: items & shops, weapons, skills & attributes, NPCs, enemies, homes
 src/world/                    Map class (collision, LOS, A*), map generation, doors/windows/cover,
                               lighting, renderer
-src/game/                     Systems: player, combat, enemy AI, siege & threat, time, jobs,
-                              NPCs, story, home defense, inventory, progression, saves
+src/game/                     Systems: player & weapons, combat, fire, enemy AI, siege & threat, time,
+                              jobs, favors (quests), NPCs, story, chapters, home defense, inventory,
+                              progression, saves
 src/ui/                       HUD, dialogue, menus/modals
 tools/                        Dev server, smoke test, icon generator
 ```
@@ -240,9 +258,14 @@ tools/                        Dev server, smoke test, icon generator
   `derived()` in `src/game/progression.js`.
 - **New job**: add a type to `JOB_TYPES`/`boardOffers()` in `src/game/jobs.js` with stage
   handlers and props.
-- **New location / home**: write a `buildXMap()` in `src/world/mapgen.js` (buildings,
-  doors/windows bound to save records, points, spawns, lights), register it in
-  `buildMaps()` in `main.js`, and add the chapter to `src/data/homes.js`.
+- **New chapter / home**: write a `buildXMap()` in `src/world/mapgen.js` (buildings,
+  doors/windows bound to save records, `points`, `spawns`, `lights`, `homeInfo`), add its
+  opening records to `newHome()` in `src/game/state.js`, register the builder in
+  `MAP_BUILDERS` in `main.js`, add an entry to `CHAPTERS` in `src/game/chapters.js`
+  (maps and which NPCs are the neighbor / shopkeeper / job contact), and mark it playable
+  in `src/data/homes.js`.
+- **New favor**: add an entry to `QUESTS` in `src/game/quests.js`.
+- **New weapon**: add it to `src/data/weapons.js` and an item + shop entry in `src/data/items.js`.
 - **New story chapter**: add a step table and conversations alongside `src/game/story.js`.
 - **Save format change**: bump `SAVE_VERSION`, add the field to `newSave()`, and add a
   version step in `migrate()` — missing fields are filled automatically.
@@ -252,11 +275,11 @@ tools/                        Dev server, smoke test, icon generator
 ## Known limitations
 
 - Not yet tested on a physical iPhone/iPad (see checklist above).
-- One weapon (handgun) plus melee; no weapon pickups from enemies.
+- Three firearms plus melee; no weapon pickups from enemies.
 - Enemy AI uses grid A* and simple cover search — good for small sieges, not tuned for
   large crowds. Attackers occasionally bunch at doorways.
 - NPC schedules are simple (a few locations per day); townsfolk don't react to danger.
-- Music is a generative pad, not composed tracks.
+- Music is synthesized in the browser (no recorded instruments).
 - The phone call, warnings and story are text only (no voice).
 - Save data lives in this browser's `localStorage`; clearing site data deletes it — use
   Export to back it up.
@@ -265,11 +288,11 @@ tools/                        Dev server, smoke test, icon generator
 
 ## Future ideas (not playable yet)
 
-- **Chapter 2+ homes**: a small house in another state, a larger rural property, a
-  wealthy estate, and the final mansion confrontation — each with new maps, defenses,
-  characters and story (listed in the Journal as *planned*).
-- More weapons (shotgun, rifle), weapon upgrades and ammo types.
-- New enemy types (driver/vehicle assaults, arsonist, dog handler, a lieutenant boss).
+- **Chapter 3+ homes**: the Wisconsin farm, a wealthy estate, and the final mansion
+  confrontation — each with new maps, defenses, characters and story (listed in the
+  Journal as *planned*).
+- Weapon upgrades and attachments beyond the extended magazine.
+- More enemy types (vehicle assaults, dog handler, sniper).
 - More jobs (fishing, farm work, mechanic), deeper NPC routines and side quests.
 - More upgrades: cameras, a safe room, traps, reinforced shutters, a guard dog.
 - Weather, seasons, hunger/fatigue as optional survival settings.

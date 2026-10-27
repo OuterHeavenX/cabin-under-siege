@@ -5,7 +5,7 @@
 // Usage: npm test   (needs Playwright: `npm i` then `npx playwright install chromium`)
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, statSync } from 'node:fs';
 
 const require = createRequire(import.meta.url);
 const { chromium, devices } = require('playwright');
@@ -21,6 +21,15 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const server = spawn(process.execPath, ['tools/serve.mjs', String(PORT)], { stdio: 'ignore' });
 await sleep(600);
+
+// The offline cache must list every source file.
+{
+  const sw = readFileSync(new globalThis.URL('../sw.js', import.meta.url), 'utf8');
+  const walk = (d) => readdirSync(d).flatMap((f) => (statSync(`${d}/${f}`).isDirectory() ? walk(`${d}/${f}`) : [`${d}/${f}`]));
+  const root = new globalThis.URL('..', import.meta.url).pathname;
+  const missing = walk(root + 'src').map((f) => f.slice(root.length)).filter((f) => !sw.includes(`"./${f}"`));
+  check('Service worker caches every source file (offline play)', missing.length === 0, missing.join(', '));
+}
 
 const browser = await chromium.launch();
 const errors = [];
@@ -54,7 +63,7 @@ const tp = (page, x, y, map) => ev(page, ([x, y, map]) => {
 const setTime = (page, minute, day) => ev(page, ([m, d]) => { const t = window.__cus.G.s.time; t.minute = m; if (d) t.day = d; }, [minute, day]);
 const step = (page) => ev(page, () => window.__cus.G.s.story.step);
 async function pressE(page, times = 1) { for (let i = 0; i < times; i++) { await page.keyboard.press('KeyE'); await sleep(140); } }
-async function faceTo(page, x, y) { await ev(page, ([x, y]) => { const p = window.__cus.G.player; p.angle = Math.atan2(y * 32 - p.y, x * 32 - p.x); }, [x, y]); }
+async function faceTo(page, x, y) { await ev(page, ([x, y]) => { if (window.__cus.dbg && window.__cus.dbg.input) window.__cus.dbg.input.mouse.inside = false; const p = window.__cus.G.player; p.angle = Math.atan2(y * 32 - p.y, x * 32 - p.x); }, [x, y]); }
 
 /* ================================================================== */
 /* Desktop run: the whole chapter                                      */
@@ -499,9 +508,218 @@ async function faceTo(page, x, y) { await ev(page, ([x, y]) => { const p = windo
     const old = JSON.parse(localStorage.getItem('cabinUnderSiege.save'));
     delete old.home.upgrades; delete old.world.discovered; delete old.jpEarned; old.version = 0; old.inv.bogus = 5;
     const d = m.migrate(old);
-    return d.home.upgrades && Array.isArray(d.world.discovered) && d.jpEarned && d.version === 1 && !d.inv.bogus;
+    return d.home.upgrades && Array.isArray(d.world.discovered) && d.jpEarned && d.version === 2 && d.chapter === 1 && d.player.mags && !d.inv.bogus;
   });
   check('Older/partial saves migrate safely', mig);
+  await ctx.close();
+}
+
+/* ================================================================== */
+/* v0.2: weapons, new enemies, defenses, favors and Chapter 2          */
+/* ================================================================== */
+{
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  const page = await ctx.newPage();
+  watch(page, 'v0.2');
+  await page.goto(URL);
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await page.click('#t-new');
+  await sleep(300);
+  await skipDialogues(page);
+  // Skip the early story so nothing interrupts the checks.
+  await ev(page, () => { const G = window.__cus.G; G.s.story.step = 'leave_town'; G.s.story.chapterComplete = true; G.s.story.flags.firstSiegeDone = true; G.s.money = 2000; });
+  const npcPos = (id) => ev(page, (id) => { const n = window.__cus.G.npcs.find((x) => x.id === id); return n ? { x: n.x / 32, y: n.y / 32 } : null; }, id);
+  async function talk(id) {
+    const n = await npcPos(id);
+    await tp(page, n.x - 1, n.y); await faceTo(page, n.x, n.y); await sleep(150); await pressE(page); await sleep(150);
+  }
+
+  // ---- Weapons ----
+  await tp(page, 5.8, 16.5, 'town');
+  await setTime(page, 10 * 60);
+  await sleep(300);
+  await tp(page, 13, 15); await faceTo(page, 13, 14); await sleep(150); await pressE(page); await sleep(200);
+  for (const id of ['shotgun', 'shells', 'rifle', 'rifle_ammo']) await page.click(`[data-buy="${id}"]`);
+  await page.keyboard.press('Escape'); await sleep(100);
+  check('v2 Buy shotgun, rifle and their ammo', await ev(page, () => { const i = window.__cus.G.s.inv; return i.shotgun === 1 && i.rifle === 1 && i.shells >= 8 && i.rifle_ammo >= 10; }));
+  await page.keyboard.press('Digit2'); await sleep(500);
+  check('v2 Switch to shotgun with key 2', (await ev(page, () => window.__cus.G.player.weapon)) === 'shotgun');
+  await page.keyboard.press('KeyR'); await sleep(2000);
+  const shellMag = await ev(page, () => window.__cus.G.player.mag);
+  check('v2 Shotgun reloads shell by shell', shellMag >= 3, `mag ${shellMag}`);
+  const nb0 = await ev(page, () => window.__cus.G.bullets.length);
+  await ev(page, () => { window.__cus.G.player.fireCd = 0; });
+  await page.mouse.move(900, 360); await page.mouse.down(); await sleep(40); await page.mouse.up(); await sleep(30);
+  const pellets = await ev(page, () => window.__cus.G.bullets.filter((b) => b.owner === 'player').length);
+  check('v2 Shotgun fires a spread of pellets', pellets >= 5, `${pellets} pellets`);
+  await sleep(500);
+  await page.keyboard.press('Tab'); await sleep(500);
+  check('v2 Tab cycles to the rifle', (await ev(page, () => window.__cus.G.player.weapon)) === 'rifle');
+  // Rifle pierces the first attacker
+  await page.keyboard.press('KeyR'); await sleep(2800);
+  const pierce = await ev(page, () => {
+    const c = window.__cus; const G = c.G; const p = G.player;
+    p.x = 20 * 32; p.y = 21 * 32; p.angle = 0; p.fireCd = 0;
+    const a = c.dbg.spawnEnemy('enforcer', 24 * 32, 21 * 32); const b = c.dbg.spawnEnemy('enforcer', 26 * 32, 21 * 32);
+    a.stun = b.stun = 99; a.alerted = b.alerted = true;
+    return [a.id, b.id];
+  });
+  await sleep(600);
+  const aimAt = await ev(page, () => { const G = window.__cus.G; const c = G.camera; return { x: (25 * 32 - c.x) * c.zoom + G.view.w / 2, y: (21 * 32 - c.y) * c.zoom + G.view.h / 2 }; });
+  await page.mouse.move(aimAt.x, aimAt.y);
+  await sleep(50);
+  await ev(page, () => { window.__cus.G.player.fireCd = 0; });
+  await page.mouse.down(); await sleep(30); await page.mouse.up(); await sleep(400);
+  const hurt = await ev(page, (ids) => ids.map((id) => { const e = window.__cus.G.enemies.find((x) => x.id === id); return e ? e.maxHp - e.hp : -1; }), pierce);
+  check('v2 Rifle round punches through the first attacker', hurt[0] > 0 && hurt[1] > 0, JSON.stringify(hurt));
+  await ev(page, () => { window.__cus.G.enemies = []; });
+  await page.keyboard.press('Digit1'); await sleep(400);
+
+  // ---- Favors (side requests) ----
+  await ev(page, () => { window.__cus.G.s.rel.gus = 25; });
+  await setTime(page, 10 * 60);
+  await sleep(200);
+  await talk('gus');
+  const favorBtn = await page.isVisible('[data-npc="favor"]');
+  check('v2 Friends offer favors in their menu', favorBtn);
+  if (favorBtn) { await page.click('[data-npc="favor"]'); await sleep(150); await skipDialogues(page, 0); }
+  check('v2 Favor accepted', (await ev(page, () => (window.__cus.G.s.quests.gus_log || {}).state)) === 'active');
+  await tp(page, 32.5, 3.6); await faceTo(page, 32.5, 2.6); await sleep(150);
+  for (let i = 0; i < 5; i++) { await ev(page, () => { window.__cus.G.player.stamina = 100; }); await pressE(page); }
+  await skipDialogues(page);
+  check('v2 Favor objective completed (fallen tree cleared)', (await ev(page, () => window.__cus.G.s.quests.gus_log.state)) === 'return');
+  const brace0 = await ev(page, () => window.__cus.G.s.inv.door_brace || 0);
+  await talk('gus'); await skipDialogues(page);
+  check('v2 Favor turned in for rewards', (await ev(page, () => window.__cus.G.s.quests.gus_log.state)) === 'done' && (await ev(page, () => window.__cus.G.s.inv.door_brace || 0)) === brace0 + 1);
+
+  // ---- Defenses at the cabin: shutters, traps, cameras ----
+  await ev(page, () => { const c = window.__cus; for (const [k, n] of [['shutter_kit', 2], ['bear_trap', 2], ['camera_kit', 1]]) c.dbg.addItem(k, n, true); });
+  await tp(page, 24, 32.5, 'cabin');
+  await setTime(page, 14 * 60);
+  await sleep(300);
+  await tp(page, 28.5, 27.6); await faceTo(page, 28.5, 26.5); await sleep(150); await pressE(page); await sleep(200);
+  if (await page.isVisible('[data-opt]')) { const n = await page.locator('[data-opt]').count(); for (let i = 0; i < n; i++) { const t = await page.locator('[data-opt]').nth(i).textContent(); if (t.includes('Shutters')) { await page.locator('[data-opt]').nth(i).click(); break; } } }
+  await sleep(150);
+  check('v2 Install steel shutters on a window', await ev(page, () => window.__cus.G.s.home.openings.win_fr.shutters));
+  const blocked = await ev(page, () => { const G = window.__cus.G; const w = [...G.map.blockers.values()].find((b) => b.id === 'win_fr'); let n = 0; for (let i = 0; i < 200; i++) if (w.onBullet({ owner: 'enemy', dmg: 0 })) n++; return n; });
+  check('v2 Shutters stop most bullets', blocked > 160, `${blocked}/200`);
+  await tp(page, 22, 30.5); await ev(page, () => { window.__cus.dbg.input.mouse.inside = false; window.__cus.G.player.angle = Math.PI; });
+  await page.keyboard.press('KeyI'); await sleep(100);
+  await page.click('[data-act="place"][data-id="bear_trap"]'); await sleep(150);
+  const trap = await ev(page, () => (window.__cus.G.s.home.traps || [])[0]);
+  check('v2 Place a bear trap', !!trap && trap.armed);
+  const sprung = await ev(page, (t) => { const c = window.__cus; const e = c.dbg.spawnEnemy('scout', t.cx * 32 + 16, t.cy * 32 + 16); e.alerted = true; return e.id; }, trap);
+  await sleep(300);
+  const trapRes = await ev(page, (id) => { const G = window.__cus.G; const e = G.enemies.find((x) => x.id === id); return { hp: e.hp, max: e.maxHp, stun: e.stun, armed: G.s.home.traps[0].armed }; }, sprung);
+  check('v2 Bear trap springs: damage + pinned', trapRes.hp < trapRes.max && trapRes.stun > 1 && !trapRes.armed, JSON.stringify(trapRes));
+  await ev(page, () => { window.__cus.G.enemies = []; });
+  await page.keyboard.press('KeyI'); await sleep(100);
+  await page.click('[data-act="install"][data-id="camera_kit"]'); await sleep(150);
+  await page.keyboard.press('Escape'); await sleep(100);
+  check('v2 Install security cameras', await ev(page, () => window.__cus.G.s.home.upgrades.camera));
+
+  // ---- New enemies ----
+  await setTime(page, 22 * 60);
+  await tp(page, 40, 33);
+  await ev(page, () => { const c = window.__cus; c.G.player.invuln = 999; c.dbg.startSiege({ plan: { kind: 'raid', hpMult: 1, waves: [{ dir: 'north', types: ['arsonist', 'lieutenant', 'scout'], delay: 0 }] } }); });
+  await sleep(1500);
+  const camSpot = await ev(page, () => window.__cus.G.enemies.every((e) => e.spotted > 0));
+  check('v2 Cameras mark every attacker during a siege', camSpot);
+  const insp = await ev(page, () => { const G = window.__cus.G; const s = G.enemies.find((e) => e.type === 'scout'); const l = G.enemies.find((e) => e.type === 'lieutenant'); s.x = l.x + 30; s.y = l.y; return true; });
+  await sleep(200);
+  check('v2 Lieutenant inspires nearby attackers', insp && await ev(page, () => window.__cus.G.enemies.find((e) => e.type === 'scout').inspired));
+  // Arsonist sets fire to the cabin
+  await ev(page, () => { const G = window.__cus.G; const a = G.enemies.find((e) => e.type === 'arsonist'); a.x = 24.5 * 32; a.y = 12 * 32; a.alerted = false; a.fireCd = 0; G.player.x = 45 * 32; G.player.y = 38 * 32; for (const e of G.enemies) if (e !== a) e.stun = 999; });
+  let fired = false;
+  for (let i = 0; i < 60 && !fired; i++) { await sleep(250); fired = await ev(page, () => window.__cus.G.fires.length > 0 || window.__cus.G.lobs.length > 0); }
+  check('v2 Arsonist throws molotovs', fired);
+  await sleep(2500);
+  await page.screenshot({ path: OUT + 'v2-fire.png' });
+  const burnt = await ev(page, () => { const o = window.__cus.G.s.home.openings; return o.back_door.hp < 100 || o.win_w.glass < 20 || o.win_e.glass < 20 || window.__cus.G.fires.length > 0; });
+  check('v2 Fire burns doors/windows', burnt);
+  const weak = await ev(page, () => { const G = window.__cus.G; const bs = [...G.map.blockers.values()].filter((b) => !b.rec.npc && b.kind !== 'cover'); const d = bs.find((b) => b.id === 'back_door'); const w = bs.find((b) => b.id === 'win_w'); return [window.__cus.dbg.openingStrength(d), window.__cus.dbg.openingStrength(w)]; });
+  check('v2 Raiders rate braced doors stronger than plain windows', weak[0] > weak[1], JSON.stringify(weak));
+  for (let i = 0; i < 60 && await ev(page, () => window.__cus.G.siegeActive); i++) { await ev(page, () => { const G = window.__cus.G; for (const e of G.enemies) if (!e.dead) window.__cus.dbg.damageEnemy(e, 999, 0, 'bullet'); if (G.siege) G.siege.t += 5; }); await sleep(200); }
+  await sleep(2500);
+  if (await page.isVisible('.modal [data-close]')) await page.keyboard.press('Escape');
+  await sleep(300);
+  await ev(page, () => { window.__cus.G.player.invuln = 0; window.__cus.G.fires = []; });
+
+  // ---- Chapter 2 ----
+  await setTime(page, 10 * 60, (await ev(page, () => window.__cus.G.s.time.day)) + 1);
+  await tp(page, 24, 32.5, 'cabin'); await faceTo(page, 26, 32.5); await sleep(200);
+  await pressE(page); await sleep(200);
+  if (await page.isVisible('[data-opt]')) { const n = await page.locator('[data-opt]').count(); for (let i = 0; i < n; i++) { const t = await page.locator('[data-opt]').nth(i).textContent(); if (t.includes('Leave')) { await page.locator('[data-opt]').nth(i).click(); break; } } }
+  await sleep(150);
+  await page.click('[data-yes]'); await sleep(400);
+  await page.screenshot({ path: OUT + 'v2-chapter2-card.png' });
+  await page.click('[data-go]'); await sleep(300);
+  const moved = await ev(page, () => ({ ch: window.__cus.G.s.chapter, map: window.__cus.G.map.id, step: window.__cus.G.s.story.step, cam: window.__cus.G.s.inv.camera_kit, rifle: window.__cus.G.s.inv.rifle, lvl: window.__cus.G.s.stats.level }));
+  check('v2 Move to Chapter 2 (Millbrook) keeps gear and packs upgrades', moved.ch === 2 && moved.map === 'millbrook' && moved.step === 'ch2_arrive' && moved.cam === 1 && moved.rifle === 1, JSON.stringify(moved));
+  await page.screenshot({ path: OUT + 'v2-millbrook.png' });
+  await tp(page, 24.5, 36); await sleep(400); await skipDialogues(page);
+  check('Ch2: enter house -> meet Marcus', (await step(page)) === 'ch2_meet_marcus');
+  await sleep(300);
+  await talk('marcus'); await skipDialogues(page);
+  check('Ch2: Marcus -> find work', (await step(page)) === 'ch2_find_work');
+  await talk('pete'); await skipDialogues(page);
+  check('Ch2: Pete -> first job', (await step(page)) === 'ch2_job');
+  await tp(page, 43.4, 12.2); await faceTo(page, 43.4, 11.5); await sleep(150); await pressE(page); await sleep(200);
+  await page.click('[data-accept="woodcut"]'); await sleep(150);
+  const need2 = await ev(page, () => window.__cus.G.s.job.need);
+  await ev(page, (n) => window.__cus.dbg.addItem('wood', n, true), need2);
+  await tp(page, 34.5, 15.6); await sleep(150); await pressE(page); await sleep(300); await skipDialogues(page);
+  check('Ch2: job at Kowalski Moving pays and advances story', (await step(page)) === 'ch2_rosa');
+  await talk('rosa'); await skipDialogues(page);
+  check('Ch2: Rosa -> check the mailbox (+2 shutters)', (await step(page)) === 'ch2_letter');
+  await tp(page, 21.5, 32.4); await faceTo(page, 20.5, 32.5); await sleep(150); await pressE(page); await sleep(200); await skipDialogues(page);
+  check('Ch2: letter -> fortify', (await step(page)) === 'ch2_fortify');
+  // two defenses: shutters on the front-left window, then a trap
+  await tp(page, 21.5, 32.2); await faceTo(page, 21.5, 33.5); await sleep(150); await pressE(page); await sleep(200);
+  if (await page.isVisible('[data-opt]')) { const n = await page.locator('[data-opt]').count(); for (let i = 0; i < n; i++) { const t = await page.locator('[data-opt]').nth(i).textContent(); if (t.includes('Shutters')) { await page.locator('[data-opt]').nth(i).click(); break; } } }
+  await sleep(200);
+  await tp(page, 13.5, 30.5); await ev(page, () => { window.__cus.dbg.input.mouse.inside = false; window.__cus.G.player.angle = Math.PI; });
+  await page.keyboard.press('KeyI'); await sleep(100);
+  await page.click('[data-act="place"][data-id="bear_trap"]'); await sleep(200); await skipDialogues(page);
+  check('Ch2: two defenses -> Sal\'s siege scheduled', (await step(page)) === 'ch2_siege' && await ev(page, () => !!window.__cus.G.s.world.siege));
+  await tp(page, 24.5, 36.5);
+  await setTime(page, 21 * 60 + 50);
+  for (let i = 0; i < 80 && !(await ev(page, () => window.__cus.G.siegeActive)); i++) await sleep(150);
+  check('Ch2: story siege starts', await ev(page, () => window.__cus.G.siegeActive));
+  await ev(page, () => { window.__cus.G.player.invuln = 999; });
+  await sleep(1500);
+  for (let i = 0; i < 120 && await ev(page, () => window.__cus.G.siegeActive); i++) { await ev(page, () => { const G = window.__cus.G; for (const e of G.enemies) if (!e.dead) window.__cus.dbg.damageEnemy(e, 999, 0, 'bullet'); if (G.siege) G.siege.t += 4; }); await sleep(200); }
+  check('Ch2: Sal\'s siege survived', !(await ev(page, () => window.__cus.G.siegeActive)));
+  await sleep(2500);
+  if (await page.isVisible('.modal [data-close]')) await page.keyboard.press('Escape');
+  await sleep(1800); await skipDialogues(page);
+  const burner = await ev(page, () => { const p = window.__cus.G.pickups.find((x) => x.kind === 'burner'); return p ? { x: p.x / 32, y: p.y / 32 } : null; });
+  if (burner) { await tp(page, burner.x, burner.y); await sleep(800); }
+  await sleep(3000); await skipDialogues(page);
+  check('Ch2: burner phone -> Marcus', (await step(page)) === 'ch2_marcus_truth', await step(page));
+  await ev(page, () => { window.__cus.G.player.invuln = 0; });
+  await setTime(page, 13 * 60); await sleep(300);
+  await talk('marcus'); await skipDialogues(page); await sleep(300);
+  check('Ch2: chapter 2 ending screen', (await page.textContent('#modal-root')).includes('LARCH STREET') && (await step(page)) === 'ch2_free');
+  await page.screenshot({ path: OUT + 'v2-chapter2-end.png' });
+  await page.keyboard.press('Escape'); await sleep(100);
+  // Save/reload in chapter 2
+  await ev(page, () => window.__cus.saveGame('test'));
+  await page.reload(); await page.waitForSelector('#t-continue:not(.hidden)'); await page.click('#t-continue'); await sleep(500);
+  check('Ch2: save/reload restores chapter 2', await ev(page, () => window.__cus.G.s.chapter === 2 && window.__cus.G.map.id === 'millbrook' && window.__cus.G.s.story.step === 'ch2_free'));
+  // A real v1 save (from before this update) still loads.
+  const v1ok = await page.evaluate(async () => {
+    const v1 = { version: 1, chapter: 'cabin', player: { map: 'cabin', x: 784, y: 1072, hp: 80, stamina: 100, mag: 6 }, stats: { level: 3, xp: 10, attrPoints: 0, attrs: { vit: 2, end: 1, pre: 1, awa: 1, res: 1 } },
+      jp: { survivor: 5 }, inv: { ammo: 20 }, home: { openings: { front_door: { kind: 'door', hp: 50, reinforced: true, open: false } }, upgrades: { floodlight: false, alarm: true, extMag: true }, covers: [] },
+      story: { step: 'free', flags: {}, chapterComplete: true }, time: { day: 9, minute: 600 }, world: { threat: 30 } };
+    localStorage.setItem('cabinUnderSiege.save', JSON.stringify(v1));
+    window.__cus.continueGame();
+    await new Promise((r) => setTimeout(r, 300));
+    const s = window.__cus.G.s;
+    return s.chapter === 1 && s.weaponMods.extMag && s.home.upgrades.alarm && s.story.step === 'leave_town' && s.player.mags.pistol === 6 && s.home.openings.win_e && window.__cus.G.map.id === 'cabin';
+  });
+  check('v2 Version-1 saves migrate and load', v1ok);
   await ctx.close();
 }
 
@@ -546,12 +764,14 @@ async function faceTo(page, x, y) { await ev(page, ([x, y]) => { const p = windo
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: tps([[jx, jy], [mb.x + mb.width / 2, mb.y + mb.height / 2]]) });
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   await sleep(150);
-  const menuWhileMoving = await page.isVisible('.paused-tag');
+  const menuWhileMoving = await page.isVisible('.menu-head');
+  await sleep(400);
   await page.tap('[data-close]');
   await sleep(150);
   await page.touchscreen.tap(mb.x - 6, mb.y + mb.height + 8); // just outside the visible button
   await sleep(150);
-  const menuEdge = await page.isVisible('.paused-tag');
+  const menuEdge = await page.isVisible('.menu-head');
+  await sleep(400);
   if (menuEdge) await page.tap('[data-close]');
   await sleep(150);
   check('Pause button opens reliably (multi-touch + edge taps)', menuWhileMoving && menuEdge);
@@ -574,7 +794,7 @@ async function faceTo(page, x, y) { await ev(page, ([x, y]) => { const p = windo
     document.dispatchEvent(new Event('visibilitychange'));
   });
   await sleep(200);
-  const pausedMenu = await page.isVisible('.paused-tag');
+  const pausedMenu = await page.isVisible('.menu-head');
   const t0 = await ev(page, () => window.__cus.G.s.time.minute);
   await sleep(800);
   const t1 = await ev(page, () => window.__cus.G.s.time.minute);
