@@ -297,6 +297,7 @@ export function damagePlayer(dmg, fromX, fromY, kind = 'bullet') {
   if (p.inCover && kind === 'bullet') amount *= 0.65;
   amount = Math.round(amount);
   p.hp -= amount;
+  G.events.emit('playerHurt', p.x, p.y, amount);
   p.invuln = d.graceTime;
   p.lastHurt = 0;
   p.lastCombat = 0;

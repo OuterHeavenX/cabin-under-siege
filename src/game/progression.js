@@ -1,6 +1,7 @@
 // Character XP / levels, attributes, JP and skills, relationships and the
 // derived stats every other system reads.
 import { G, hasSkill } from './state.js';
+import { weatherMods } from './weather.js';
 import { ATTRIBUTES, ATTR_POINTS_PER_LEVEL, MAX_ATTR, PATHS, SKILLS, xpForLevel } from '../data/skills.js';
 import { NPCS, relLevel } from '../data/npcs.js';
 import { toast } from '../ui/hud.js';
@@ -22,7 +23,7 @@ export function derived() {
     healMult: (1 + 0.05 * lvlBonus(a.res)) * (sk('field_recovery') ? 1.35 : 1),
     regenCap: 0.3 + 0.05 * lvlBonus(a.res),
     graceTime: 0.55 + 0.05 * lvlBonus(a.res),
-    seeRadius: 170 + 20 * lvlBonus(a.awa) + (sk('keen_eye') ? 60 : 0),
+    seeRadius: (170 + 20 * lvlBonus(a.awa) + (sk('keen_eye') ? 60 : 0)) * weatherMods().see,
     warnLead: 15 + 4 * lvlBonus(a.awa) + (sk('watchful') ? 30 : 0) + (G.s.home.upgrades.alarm ? 45 : 0),
     showDirections: sk('watchful') || G.s.home.upgrades.alarm,
     noticeMult: sk('quiet_steps') ? 0.6 : 1,

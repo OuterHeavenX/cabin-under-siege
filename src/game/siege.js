@@ -15,6 +15,7 @@ import { chapter, homeMap, homeMapId, atHome } from './chapters.js';
 import { NPCS } from '../data/npcs.js';
 import { allyStartSiege, allyEndSiege } from './ally.js';
 import { diff } from './difficulty.js';
+import { playCutscene } from '../ui/cutscene.js';
 
 export const absNow = () => G.s.time.day * 1440 + G.s.time.minute;
 export const absOf = (s) => s.day * 1440 + s.minute;
@@ -246,9 +247,22 @@ export function startSiege(s, immediate = false) {
   setMusic('tense');
   sfx('warning');
   const label = s.plan.kind === 'story' ? 'THEY FOUND YOU' : s.plan.kind === 'ambush' ? 'AMBUSH' : 'SIEGE';
-  centerMessage(label, s.plan.kind === 'ambush' ? 'Get to cover!' : 'Defend your home', 2.6);
+  const first = s.plan.waves[0] && homeMap().spawns[s.plan.waves[0].dir];
+  if (s.plan.kind === 'story' && first && !G.sleeping) playCutscene({ focus: first, zoom: 1.1, title: label, sub: `Headlights on ${first.label}.`, hold: 1.6 });
+  else centerMessage(label, s.plan.kind === 'ambush' ? 'Get to cover!' : 'Defend your home', 2.6);
   if (G.sleeping) G.events.emit('wake', 'Shouts outside! You scramble out of bed.');
   G.events.emit('siegeStart', s.plan);
+}
+
+const BOSS_LINES = {
+  'Big Carmine': ['The family\'s collector', '"Frankie! Come out and say hello to your family!"'],
+  'Sal Benedetto': ['Leo\'s accountant', '"Nobody walks away from the books, Frankie. Nobody."'],
+  'Vinnie Vescari': ['Leo\'s nephew', '"You took something of ours. I\'m here to collect."'],
+  'Nico Vescari': ['Leo\'s son', '"My father sends his love. I came to deliver it."'],
+};
+function bossEntrance(e) {
+  const [role, line] = BOSS_LINES[e.name] || ['', ''];
+  playCutscene({ focus: { x: e.x, y: e.y }, zoom: 1.45, title: e.name.toUpperCase(), sub: role ? `${role} — ${line}` : '', hold: 2.2 });
 }
 
 export function updateSiege(dt) {
@@ -266,6 +280,7 @@ export function updateSiege(dt) {
       else if (t === 'lieutenant') opts.name = 'Lieutenant';
       if (wave.named && wave.named[i]) opts.name = wave.named[i];
       const e = spawnEnemy(t, pos.x, pos.y, opts);
+      if (opts.carriesNote && sg.plan.kind === 'story') bossEntrance(e);
       if (sg.plan.kind === 'ambush') e.alerted = true;
       sg.spawned++;
     });

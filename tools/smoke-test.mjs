@@ -45,12 +45,14 @@ async function skipDialogues(page, pick = 0) {
   for (let i = 0; i < 40; i++) {
     const state = await page.evaluate(() => {
       const d = document.getElementById('dialogue');
+      if (d.classList.contains('hidden') && document.body.classList.contains('cine')) return 'cine';
       if (d.classList.contains('hidden')) return 'none';
       const ch = document.querySelectorAll('#dlg-choices .choice');
       if (ch.length && !document.getElementById('dlg-choices').classList.contains('hidden')) return 'choice';
       return 'text';
     });
     if (state === 'none') return;
+    if (state === 'cine') { await page.evaluate(() => window.__cus.dbg.skipCutscene()); await sleep(120); continue; }
     if (state === 'choice') await page.locator('#dlg-choices .choice').nth(pick).click();
     else await page.click('#dlg-skip').catch(() => page.keyboard.press('Space'));
     await sleep(80);
@@ -857,7 +859,7 @@ if (want('audio')) {
   await page.click('#t-new');
   await sleep(200); if (await page.isVisible('[data-diff-pick]')) await page.click('[data-diff-pick="normal"]');
   await sleep(1200);
-  const names = ['shot', 'shotgun', 'rifleShot', 'enemyShot', 'rifle', 'reload', 'shell', 'swap', 'hit', 'hurt', 'thud', 'ricochet', 'impact', 'glass', 'wood', 'chop', 'treefall', 'door', 'doorBreak', 'crash', 'explode', 'dig', 'splash', 'suppressed', 'hammer', 'trap', 'molotov', 'step', 'dodge', 'pickup', 'coin', 'heal', 'eat', 'car', 'phone', 'alarm', 'warning', 'ui', 'chime', 'jobDone', 'levelup', 'victory', 'defeat'];
+  const names = ['shot', 'shotgun', 'rifleShot', 'enemyShot', 'rifle', 'reload', 'shell', 'swap', 'hit', 'hurt', 'thud', 'ricochet', 'impact', 'glass', 'wood', 'chop', 'treefall', 'door', 'doorBreak', 'crash', 'explode', 'dig', 'splash', 'suppressed', 'drip', 'thunder', 'bark', 'growl', 'boat', 'hammer', 'trap', 'molotov', 'step', 'dodge', 'pickup', 'coin', 'heal', 'eat', 'car', 'phone', 'alarm', 'warning', 'ui', 'chime', 'jobDone', 'levelup', 'victory', 'defeat'];
   const lv = await page.evaluate(async (names) => {
     const d = window.__cus.dbg; const out = {};
     for (const n of names) out[n] = await d.renderOffline(() => d.sfx(n), 2);

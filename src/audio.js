@@ -19,6 +19,7 @@ let musicSamples = {};
 let musicMode = 'off';
 let ambMode = 'off';
 let fireLevel = 0, firePan = 0;
+let rainLevel = 0, rainIndoor = false, thunderT = 20;
 
 /* ------------------------------------------------------------------ */
 /* Setup                                                               */
@@ -411,6 +412,17 @@ export function sfx(name, opts = {}) {
       break;
     case 'dig': nz(out, t, { type: 'brown', dur: 0.14, peak: 0.6, lp: 600 }); for (let i = 0; i < 4; i++) nz(out, t + 0.05 + i * 0.02, { dur: 0.015, peak: 0.12, bp: 1800, q: 2 }); break;
     case 'splash': nz(out, t, { dur: 0.25, a: 0.01, peak: 0.5, bp: 1200, q: 0.7 }); nz(out, t + 0.03, { type: 'pink', dur: 0.5, peak: 0.25, lp: 2500, lpTo: 600 }); break;
+    case 'drip': modal(out, t, [[1800 + Math.random() * 1400, 1]], { q: 25, peak: 0.08 * (opts.vol ?? 1), dur: 0.05 }); break;
+    case 'thunder':
+      nz(out, t, { type: 'brown', dur: 3.5, a: 0.08, peak: 1.3 * (opts.vol ?? 1), lp: 900, lpTo: 80 });
+      for (let i = 0; i < 4; i++) nz(out, t + 0.1 + i * (0.3 + Math.random() * 0.4), { type: 'brown', dur: 0.9, a: 0.02, peak: 0.7 * (opts.vol ?? 1), lp: 500, lpTo: 120 });
+      nz(out, t, { dur: 0.15, peak: 0.25 * (opts.vol ?? 1), lp: 3000 });
+      break;
+    case 'bark': // big dog: two sharp formant bursts
+      for (const dt2 of [0, 0.22]) { nz(out, t + dt2, { type: 'pink', dur: 0.12, a: 0.004, peak: 0.9 * (opts.vol ?? 1), bp: 650, q: 2.5 }); osc(out, t + dt2, { f: 330, fTo: 210, sweep: 0.1, dur: 0.12, peak: 0.45 * (opts.vol ?? 1), a: 0.004 }); }
+      break;
+    case 'growl': nz(out, t, { type: 'brown', dur: 0.7, a: 0.05, peak: 0.6 * (opts.vol ?? 1), bp: 260, q: 3 }); osc(out, t, { f: 95, fTo: 80, sweep: 0.6, dur: 0.7, peak: 0.25, a: 0.05 }); break;
+    case 'boat': carSound(out, t, 0.5); nz(out, t, { type: 'pink', dur: 1.4, a: 0.2, peak: 0.25, bp: 900, q: 0.6 }); break;
     case 'doorBreak':
       for (let i = 0; i < 5; i++) woodKnock(out, t + i * 0.035, 0.8 + Math.random() * 0.8, 0.8, 0.12);
       nz(out, t, { type: 'pink', dur: 0.4, peak: 0.9, lp: 2500, lpTo: 300 }); osc(out, t, { f: 80, fTo: 40, sweep: 0.2, dur: 0.25, peak: 0.6 });
@@ -699,7 +711,7 @@ function scheduleStep(song, step, t) {
 /* ------------------------------------------------------------------ */
 /* Ambience: continuous wind bed + scheduled events                    */
 /* ------------------------------------------------------------------ */
-let wind = null, rustle = null, crickets = null, traffic = null, fireBed = null;
+let wind = null, rustle = null, crickets = null, traffic = null, fireBed = null, rainHiss = null, rainDrum = null;
 let ambT = 0, birdT = 2, owlT = 20;
 
 function loopNoise(type, filterType, freq, q) {
@@ -738,6 +750,8 @@ function startAmbienceBeds() {
   rustle = loopNoise('pink', 'highpass', 3500, 0.5);
   traffic = loopNoise('brown', 'lowpass', 220, 0.7);
   fireBed = loopNoise('pink', 'bandpass', 700, 0.6);
+  rainHiss = loopNoise('pink', 'highpass', 1400, 0.5);
+  rainDrum = loopNoise('brown', 'lowpass', 420, 0.7);
   const src = ctx.createBufferSource(); src.buffer = cricketBuffer(); src.loop = true;
   const g = ctx.createGain(); g.gain.value = 0; src.connect(g); g.connect(ambBus); src.start();
   crickets = { src, g };
@@ -746,6 +760,8 @@ function startAmbienceBeds() {
 export function setAmbient(mode) { ambMode = mode; }
 /** Intensity (0..1) and stereo position of nearby fire, for the crackle bed. */
 export function setFireLevel(level, pan = 0) { fireLevel = level; firePan = pan; }
+/** Rain intensity 0..1; indoors it becomes a muffled drum on the roof. */
+export function setRain(level, indoor = false) { rainLevel = level; rainIndoor = indoor; }
 
 function bird(t) {
   const out = voiceOut({ vol: 0.5, verb: 1.6 });
@@ -806,12 +822,17 @@ export function updateAudio(dt) {
   traffic.g.gain.setTargetAtTime(town ? 0.08 : 0, now, tc);
   crickets.g.gain.setTargetAtTime(night ? 0.22 : 0, now, 1.2);
   fireBed.g.gain.setTargetAtTime(0.25 * fireLevel, now, 0.3);
+  rainHiss.g.gain.setTargetAtTime(off ? 0 : rainLevel * (rainIndoor ? 0.03 : 0.16), now, 1.5);
+  rainDrum.g.gain.setTargetAtTime(off ? 0 : rainLevel * (rainIndoor ? 0.22 : 0.08), now, 1.5);
+  if (rainLevel > 0.1 && !off && Math.random() < rainLevel * 0.25) sfx('drip', { vol: 0.4 + Math.random() * 0.5 });
+  thunderT -= dt * rainLevel;
+  if (thunderT <= 0) { thunderT = 25 + Math.random() * 50; if (rainLevel > 0.6 && !off) sfx('thunder', { vol: rainIndoor ? 0.6 : 1 }); }
   if (fireLevel > 0.02 && Math.random() < fireLevel * 0.5) sfx('fire', { vol: fireLevel, verb: 0.5 });
   void firePan;
   // Scheduled wildlife
   birdT -= dt;
   if (birdT <= 0) {
-    if (ambMode === 'day' || ambMode === 'town') bird(now + 0.05);
+    if ((ambMode === 'day' || ambMode === 'town') && rainLevel < 0.3) bird(now + 0.05);
     birdT = ambMode === 'town' ? 4 + Math.random() * 7 : 1.5 + Math.random() * 4;
   }
   owlT -= dt;

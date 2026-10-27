@@ -93,6 +93,7 @@ export function updateBullets(dt) {
         if (map.bulletCell(cx, cy, b)) {
           b.dead = true;
           spawnParticles(b.x - sx, b.y - sy, '#d8c7a0', 4, 80, 0.25, 2);
+          if (map.getSolid(cx, cy) !== 0 || map.blockerAt(cx, cy)) G.events.emit('bulletWall', b.x - sx, b.y - sy);
           const pd = G.player ? dist(b.x, b.y, G.player.x, G.player.y) : 999;
           if (pd < 500 && Math.random() < 0.6) sfx(Math.random() < 0.5 ? 'ricochet' : 'impact', { x: b.x, y: b.y });
           break;

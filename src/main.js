@@ -35,6 +35,9 @@ import { addPickup, damageEnemy } from './game/combat.js';
 import { updateFire, startFire } from './game/fire.js';
 import { spawnEnemy, openingStrength } from './game/enemies.js';
 import { initActivityEvents } from './game/activities.js';
+import { setWeather } from './game/weather.js';
+import { initAtmosphere, updateAtmosphere } from './world/atmosphere.js';
+import { updateCutscene, skipCutscene, endCutscene, playCutscene } from './ui/cutscene.js';
 import { lowQuality } from './game/difficulty.js';
 import { startEndless, updateEndless, unlockEndlessFor } from './game/endless.js';
 import { startSiege, makeRaidPlan, scheduleSiege, addSign, storyPlan } from './game/siege.js';
@@ -67,7 +70,8 @@ function resize() {
   canvas.height = Math.round(h * dpr);
   canvas.style.width = `${w}px`;
   canvas.style.height = `${h}px`;
-  G.camera.zoom = clamp(Math.min(w / 900, h / 480), 0.82, 2.4);
+  G.camera.baseZoom = clamp(Math.min(w / 900, h / 480), 0.82, 2.4);
+  if (!G.cutscene) G.camera.zoom = G.camera.baseZoom;
   document.body.classList.toggle('portrait', h > w);
 }
 
@@ -217,9 +221,15 @@ function updateCamera(dt) {
   const p = G.player;
   const c = G.camera;
   const lead = 30;
-  const tx = p.x + Math.cos(p.angle) * lead * (input.aim.active || input.mouse.inside ? 1 : 0.3);
-  const ty = p.y + Math.sin(p.angle) * lead * (input.aim.active || input.mouse.inside ? 1 : 0.3);
-  const k = 1 - Math.pow(0.0015, dt);
+  const cs = G.cutscene;
+  let tx = p.x + Math.cos(p.angle) * lead * (input.aim.active || input.mouse.inside ? 1 : 0.3);
+  let ty = p.y + Math.sin(p.angle) * lead * (input.aim.active || input.mouse.inside ? 1 : 0.3);
+  if (cs) { tx = cs.x; ty = cs.y; }
+  // Cutscenes drift slowly and push in; afterwards the zoom eases back.
+  const base = c.baseZoom || c.zoom;
+  const wantZoom = cs ? base * cs.zoom : base;
+  c.zoom += (wantZoom - c.zoom) * (1 - Math.pow(0.05, dt));
+  const k = 1 - Math.pow(cs ? 0.12 : 0.0015, dt);
   c.x += (tx - c.x) * k;
   c.y += (ty - c.y) * k;
   // clamp to map
@@ -288,15 +298,18 @@ function frame(ts) {
   const raw = Math.max(0, (ts - last) / 1000);
   const dt = Math.min(0.05, raw);
   last = ts;
+  G.frameDt = G.paused || (G.modal && G.modal !== 'dialogue') ? 0 : dt;
   if (raw < 0.5) watchPerf(raw);
   G.time += dt;
   try {
     if (G.running) {
       handleGlobalKeys();
+      if (G.cutscene) updateCutscene(dt);
       if (G.transition) updateTransition(dt);
       else if (!G.paused && !G.modal) update(dt);
       if (G.modal === 'dialogue') updateDialogue(dt);
       if (G.player) {
+        updateAtmosphere(dt);
         updateCamera(dt);
         computeHudInfo(dt);
         hudInfo.target = G.modal ? null : G.interactTarget;
@@ -319,6 +332,10 @@ function frame(ts) {
 }
 
 function handleGlobalKeys() {
+  if (G.cutscene && G.cutscene.phase !== 'talk') {
+    if (consume('pause') || consume('interact') || consume('advance')) skipCutscene();
+    return;
+  }
   const top = topModal();
   if (top && (top.name === 'repair' || top.name === 'fishing') && G.repairGameHit) {
     if (consume('interact') || consume('dodge') || consume('advance')) G.repairGameHit();
@@ -358,6 +375,7 @@ function initEvents() {
   initEnemyEvents();
   initSiegeEvents();
   initActivityEvents();
+  initAtmosphere();
   G.events.on('qualityChanged', () => { G.autoLow = false; perf.slow = 0; resize(); });
   initTimeEvents();
   initHomeEvents();
@@ -453,7 +471,12 @@ function moveToChapter(n) {
   G.player.hp = derived().maxHp;
   loadMap(m.id, m.points.start);
   saveGame('move', { force: true });
-  showChapterStart(n, () => banner(`New objective: ${objectiveText()}`, 'objective', 5));
+  showChapterStart(n, () => {
+    const hi = m.homeInfo && m.homeInfo.interior;
+    const place = { 2: ['MILLBROOK, OHIO', 'A quiet street. A house with a past.'], 3: ['KETTLE CROSSING', 'Two hundred acres, one broken gate.'], 4: ['WHITCOMBE ESTATE', 'Old money. High walls. Open water.'] }[n] || ['', ''];
+    if (hi) playCutscene({ focus: { x: hi.cx * TILE + 16, y: hi.cy * TILE + 16 }, zoom: 0.8, title: place[0], sub: place[1], hold: 2, sting: null, onEnd: () => banner(`New objective: ${objectiveText()}`, 'objective', 5) });
+    else banner(`New objective: ${objectiveText()}`, 'objective', 5);
+  });
 }
 
 /* ---------------- start / title ---------------- */
@@ -501,6 +524,7 @@ function continueGame() {
 }
 
 function quitToTitle() {
+  if (G.cutscene) { G.cutscene.onEnd = null; endCutscene(); }
   G.running = false;
   G.endless = null;
   G.siegeActive = false; G.siege = null; G.enemies = [];
@@ -567,7 +591,7 @@ function boot() {
   // Test/debug handle (harmless in production; used by the automated smoke test).
   window.__cus = {
     G, newGame, continueGame, travel, loadMap, saveGame, quitToTitle,
-    dbg: { closeAll: () => closeAllModals(), birdCall, renderOffline, musicBar, sfx, audioDebug, input, openingStrength, homeMapId, openMenu, startFire, damageEnemy, spawnEnemy, startSiege, makeRaidPlan, scheduleSiege, addSign, addItem, addXP, addJP, buySkill, derived, damagePlayer, count, moveToChapter, storyPlan },
+    dbg: { closeAll: () => closeAllModals(), birdCall, renderOffline, musicBar, sfx, audioDebug, input, openingStrength, homeMapId, openMenu, startFire, damageEnemy, spawnEnemy, startSiege, makeRaidPlan, scheduleSiege, addSign, addItem, addXP, addJP, buySkill, derived, damagePlayer, count, moveToChapter, storyPlan, skipCutscene, endCutscene, setWeather },
   };
 }
 

@@ -4,6 +4,7 @@ import { G } from './state.js';
 import { addItem, count } from './inventory.js';
 import { addJP, addRel, addXP } from './progression.js';
 import { addSign, addThreat, scheduleSiege, storyPlan } from './siege.js';
+import { playCutscene } from '../ui/cutscene.js';
 import { playDialogue } from '../ui/dialogue.js';
 import { banner, toast } from '../ui/hud.js';
 import { showChapterEnd } from '../ui/menus.js';
@@ -500,15 +501,15 @@ function readLedger() {
   const f = G.s.story.flags;
   if (f.ledgerRead) return;
   f.ledgerRead = true;
-  playDialogue([
+  playCutscene({ focus: { x: G.player.x, y: G.player.y }, zoom: 1.7, title: 'THE LEDGER', sub: 'Twenty years of Vescari money, in Vinnie\'s handwriting.', hold: 1.8, sting: null, lines: [
     { who: ME, text: 'A leather ledger. Twenty years of Vescari money: payoffs, shell companies, safe deposit boxes.' },
     { who: ME, text: 'Page forty-one: "C. Mott — $2,000/mo." Page fifty: a judge in Newark. A state senator.' },
     { who: ME, text: 'Leo didn\'t send Vinnie to kill me. He sent him to find out what I took. Now I have it for real.' },
-  ], () => {
+  ], onEnd: () => {
     addXP(40, 'The ledger'); addJP('shadow', 15);
     const s = G.s.story.step;
     if (s === 'ch3_ledger' || s === 'ch3_siege') setStep('ch3_ingrid_truth');
-  });
+  } });
 }
 
 /** Mailbox hook for story letters. Returns true if the story handled it. */
@@ -598,7 +599,8 @@ export function updateStory(dt) {
 export function answerPhone() {
   const st = G.s.story;
   if (st.step === 'phone_call') {
-    playDialogue([
+    const ph = G.map.props.find((p) => p.id === 'phone') || G.player;
+    playCutscene({ focus: { x: ph.x, y: ph.y }, zoom: 1.6, title: 'PINE HOLLOW · 11:48 PM', sub: 'The phone has been ringing for a while.', hold: 1.4, sting: 'phone', lines: [
       { who: ME, text: 'Hello?' },
       { who: 'Voice', text: '...Frankie. You sound good. Country air agrees with you.' },
       { who: ME, text: 'Leo.' },
@@ -608,7 +610,7 @@ export function answerPhone() {
       { who: 'Leo Vescari', text: 'That\'s the thing, Frankie. Nobody gets to be alone. Not from family.' },
       { who: 'Leo Vescari', text: 'Next time I won\'t send boys.' },
       { who: ME, text: '(Click. Dial tone.)' },
-    ], () => {
+    ], onEnd: () => {
       st.chapterComplete = true;
       st.done[1] = true;
       st.step = 'leave_town';
@@ -617,7 +619,7 @@ export function answerPhone() {
       addXP(80, 'Chapter 1 complete');
       saveGame('chapter');
       showChapterEnd(1);
-    });
+    } });
     return true;
   }
   if (!G.s.home.phoneLine) { toast('Dead line. The phone wire by the road must be damaged.', 'warn', 3); return true; }

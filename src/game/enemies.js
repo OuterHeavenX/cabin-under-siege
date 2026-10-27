@@ -13,6 +13,7 @@ import { throwMolotov } from './fire.js';
 import { homeInterior, homeMapId } from './chapters.js';
 import { checkTrap } from './home.js';
 import { diff } from './difficulty.js';
+import { weatherMods } from './weather.js';
 
 let nextId = 1;
 
@@ -330,10 +331,11 @@ export function updateEnemies(dt) {
     }
 
     // Perception
-    const canSee = pd < Math.max(520, e.def.range) && m.los(e.x, e.y, p.x, p.y);
+    const wx = weatherMods();
+    const canSee = pd < Math.max(520, e.def.range) * wx.range && m.los(e.x, e.y, p.x, p.y);
     if (!e.alerted && !p.dead) {
       const lit = isLit(p.x, p.y) || p.muzzle > 0;
-      const base = isNight() && !lit ? 140 : 240;
+      const base = (isNight() && !lit ? 140 : 240) * wx.notice;
       if (canSee && pd < base * d.noticeMult) alertEnemy(e);
       else if (pd < 50) alertEnemy(e);
       // Searching attackers eventually start hunting (no endless stalemates).

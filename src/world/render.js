@@ -4,6 +4,7 @@ import { G, isNight } from '../game/state.js';
 import { TILE } from '../config.js';
 import { GR, SO } from './map.js';
 import { lowQuality } from '../game/difficulty.js';
+import { drawDecals, drawWorldWeather, drawScreenAtmosphere } from './atmosphere.js';
 import { hash2, dist, clamp } from '../util.js';
 import { activeLights, darkness, inFloodlight } from './lights.js';
 import { derived } from '../game/progression.js';
@@ -515,6 +516,7 @@ export function render(ctx) {
   const sx = Math.max(0, Math.floor(vx0)), sy = Math.max(0, Math.floor(vy0));
   const sw = Math.min(m.groundCanvas.width - sx, Math.ceil(vx1 - vx0)), sh = Math.min(m.groundCanvas.height - sy, Math.ceil(vy1 - vy0));
   if (sw > 0 && sh > 0) ctx.drawImage(m.groundCanvas, sx, sy, sw, sh, sx, sy, sw, sh);
+  drawDecals(ctx, inView);
 
   const t = G.time;
   const cx0 = Math.max(0, Math.floor(vx0 / TILE)), cy0 = Math.max(0, Math.floor(vy0 / TILE));
@@ -769,6 +771,8 @@ export function render(ctx) {
     else drawWindow(ctx, b, x, y);
   }
 
+  drawWorldWeather(ctx, vx0, vy0, vx1, vy1, G.frameDt || 1 / 60);
+
   // Lighting
   const dk = darkness();
   if (dk > 0.02) drawLighting(ctx, dk, ox, oy, z);
@@ -797,6 +801,7 @@ export function render(ctx) {
 
   // Screen-space effects
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  drawScreenAtmosphere(ctx, w, h, dk, G.frameDt || 1 / 60);
   drawScreenFx(ctx, ox, oy, z);
 }
 
