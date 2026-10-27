@@ -2,12 +2,38 @@
 // through doors, windows and placed cover, and lights up the night.
 import { G } from './state.js';
 import { TILE } from '../config.js';
+import { SO } from '../world/map.js';
 import { dist } from '../util.js';
 import { damagePlayer } from './player.js';
 import { damageEnemy, spawnParticles } from './combat.js';
 import { sfx } from '../audio.js';
 
+/** Where a thrown bottle actually lands: it shatters on the first wall, rock,
+ *  closed door, or boarded/shuttered window in its path (plain glass it smashes
+ *  through), instead of sailing over the house. */
+function landingPoint(sx, sy, tx, ty) {
+  const m = G.map;
+  const d = dist(sx, sy, tx, ty), steps = Math.ceil(d / 6);
+  let lx = sx, ly = sy;
+  const startCell = m.idx(Math.floor(sx / TILE), Math.floor(sy / TILE));
+  for (let i = 1; i <= steps; i++) {
+    const x = sx + (tx - sx) * (i / steps), y = sy + (ty - sy) * (i / steps);
+    const cx = Math.floor(x / TILE), cy = Math.floor(y / TILE);
+    if (!m.inBounds(cx, cy)) break;
+    if (m.idx(cx, cy) !== startCell) {
+      const s = m.getSolid(cx, cy);
+      if (s === SO.WALL || s === SO.ROCK || s === SO.CAR) return { x: lx, y: ly };
+      const b = m.blockerAt(cx, cy);
+      if (b && b.kind === 'door' && !b.passable) return { x: lx, y: ly };
+      if (b && b.kind === 'window' && (b.boarded || b.shuttered)) return { x: lx, y: ly };
+    }
+    lx = x; ly = y;
+  }
+  return { x: tx, y: ty };
+}
+
 export function throwMolotov(from, tx, ty) {
+  ({ x: tx, y: ty } = landingPoint(from.x, from.y, tx, ty));
   const d = dist(from.x, from.y, tx, ty);
   G.lobs.push({ sx: from.x, sy: from.y, tx, ty, t: 0, dur: 0.45 + d / 600 });
   sfx('swing', { x: from.x, y: from.y });
@@ -32,8 +58,9 @@ export function updateFire(dt) {
     f.tick -= dt;
     if (f.tick > 0) continue;
     f.tick = 0.5; // damage pulses twice a second
-    if (!p.dead && dist(p.x, p.y, f.x, f.y) < f.r + p.radius * 0.5) damagePlayer(9, f.x, f.y, 'fire');
-    for (const e of G.enemies) if (!e.dead && !e.gone && e.type !== 'arsonist' && dist(e.x, e.y, f.x, f.y) < f.r) damageEnemy(e, 6, 0, 'fire', 0);
+    // Flames don't reach through walls.
+    if (!p.dead && dist(p.x, p.y, f.x, f.y) < f.r + p.radius * 0.5 && m.los(f.x, f.y, p.x, p.y)) damagePlayer(9, f.x, f.y, 'fire');
+    for (const e of G.enemies) if (!e.dead && !e.gone && e.type !== 'arsonist' && dist(e.x, e.y, f.x, f.y) < f.r && m.los(f.x, f.y, e.x, e.y)) damageEnemy(e, 6, 0, 'fire', 0);
     const c0x = Math.floor((f.x - f.r - 16) / TILE), c1x = Math.floor((f.x + f.r + 16) / TILE);
     const c0y = Math.floor((f.y - f.r - 16) / TILE), c1y = Math.floor((f.y + f.r + 16) / TILE);
     for (let cy = c0y; cy <= c1y; cy++) for (let cx = c0x; cx <= c1x; cx++) {

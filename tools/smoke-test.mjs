@@ -1324,6 +1324,40 @@ if (want('v7')) {
   await A.context().close(); await B.context().close();
 }
 
+/* Regressions: the Map tab after Chapter 1, molotovs and fire through walls. */
+if (want('v7')) {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const page = await ctx.newPage();
+  watch(page, 'fixes');
+  await page.goto(URL); await page.waitForSelector('#t-new');
+  await ev(page, () => window.__cus.newGame('normal')); await sleep(600);
+  await skipDialogues(page); await ev(page, () => window.__cus.dbg.closeAll()); await skipDialogues(page);
+  await ev(page, () => { const c = window.__cus; c.G.s.story.flags.firstSiegeDone = true; c.G.s.story.step = 'free'; c.G.s.story.done = { 1: true }; c.G.s.time.minute = 13 * 60; });
+  // Molotov from outside a solid wall lands outside, and its fire doesn't burn you through the wall.
+  const mol = await ev(page, async () => {
+    const c = window.__cus, G = c.G;
+    G.enemies = []; G.fires = []; G.lobs = [];
+    const p = G.player; p.x = 19.5 * 32; p.y = 24.5 * 32; p.hp = 100; p.invuln = 0;
+    const { throwMolotov } = await import('./src/game/fire.js');
+    throwMolotov({ x: 15 * 32, y: 24.5 * 32 }, p.x, p.y);
+    const lob = G.lobs[0];
+    let burned = false, sawFire = false;
+    for (let i = 0; i < 30; i++) { await new Promise((r) => setTimeout(r, 100)); p.x = 19.5 * 32; p.y = 24.5 * 32; if (G.fires.length) sawFire = true; if (p.hp < 100) burned = true; }
+    // Control: the same fire right next to you does burn.
+    p.hp = 100; p.invuln = 0; G.fires = [{ x: p.x + 20, y: p.y, r: 38, life: 3, max: 3, tick: 0 }];
+    await new Promise((r) => setTimeout(r, 700));
+    return { landX: lob.tx / 32, sawFire, burned, controlHp: p.hp, modal: G.modal };
+  });
+  check('Fix: a molotov thrown from outside shatters on the wall, not inside the house', mol.landX < 18, JSON.stringify(mol));
+  check('Fix: fire outside a wall doesn\'t burn you through it (but does when you stand in it)', mol.sawFire && !mol.burned && mol.controlHp < 100, JSON.stringify(mol));
+  // The Map tab works in later chapters.
+  await ev(page, () => { const c = window.__cus; c.G.s.chapter = 4; c.G.s.story.done = { 1: true, 2: true, 3: true, 4: true }; c.dbg.moveToChapter(5); }); await sleep(500);
+  await ev(page, () => { window.__cus.dbg.closeAll(); window.__cus.dbg.openMenu('inv'); }); await sleep(200);
+  await page.click('[data-tab="map"]'); await sleep(300);
+  check('Fix: the Map tab opens in Chapter 5 (it was hard-wired to Chapter 1\'s maps)', await ev(page, () => document.querySelector('.tab.on').textContent === 'Map' && !!document.querySelector('#minimap') && document.querySelectorAll('.places span').length > 0));
+  await ctx.close();
+}
+
 /* Packaged Electron app (only when `node tools/build-desktop.mjs` has been run). */
 if (want('electron')) {
   const exe = decodeURIComponent(new globalThis.URL('../desktop/out/Cabin Under Siege-linux-x64/cabin-under-siege', import.meta.url).pathname);

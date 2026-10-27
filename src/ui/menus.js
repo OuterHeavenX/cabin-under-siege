@@ -309,8 +309,12 @@ function homeTab() {
 function mapTab() {
   const m = G.map;
   const disc = G.s.world.discovered;
-  const all = [...G.maps.cabin.discover, ...G.maps.town.discover];
-  return `<div class="stat-line">You are at: <b>${escapeHtml(m.name)}</b>. Travel between the cabin and Pine Hollow with your car (or walk the road).</div>
+  // Places on every map of the current chapter (each chapter has its own).
+  const all = Object.values(G.maps).flatMap((mm) => mm.discover || []);
+  const travel = G.s.chapter === 1 ? 'Travel between the cabin and Pine Hollow with your car (or walk the road).'
+    : G.s.chapter === 5 ? 'Everything on Millburn Avenue is in walking distance. The Vescari house is up the ridge (by car, after dark).'
+      : `Everything in ${escapeHtml(chapter().place)} is within walking distance.`;
+  return `<div class="stat-line">You are at: <b>${escapeHtml(m.name)}</b>. ${G.endless || G.prequel ? '' : travel}</div>
     <canvas id="minimap" class="minimap"></canvas>
     <div class="legend"><span><i style="background:#fff"></i>You</span><span><i style="background:#5bc0de"></i>People</span><span><i style="background:#ffd166"></i>Objective</span><span><i style="background:#e74c3c"></i>Attackers</span><span><i style="background:#9b7b55"></i>Buildings</span></div>
     <div class="places">${all.map((d) => `<span class="${disc.includes(d.id) ? '' : 'muted'}">${disc.includes(d.id) ? '✓' : '?'} ${disc.includes(d.id) ? escapeHtml(d.name) : 'Undiscovered'}</span>`).join('')}</div>`;
