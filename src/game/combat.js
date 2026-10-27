@@ -1,5 +1,6 @@
 // Bullets, damage resolution, pickups and lightweight visual effects.
 import { G } from './state.js';
+import { dogBulletCheck } from './dog.js';
 import { TILE } from '../config.js';
 import { dist, rand, randInt } from '../util.js';
 import { sfx } from '../audio.js';
@@ -8,6 +9,7 @@ import { addItem, count } from './inventory.js';
 import { addMoney } from './progression.js';
 import { toast } from '../ui/hud.js';
 import { allyBulletCheck } from './ally.js';
+import { ITEMS } from '../data/items.js';
 
 const MAX_PARTICLES = 220;
 
@@ -34,6 +36,20 @@ export function spawnParticles(x, y, color, n, speed = 120, life = 0.4, size = 2
 export function addFloater(x, y, text, color = '#fff', life = 0.9) {
   if (!G.settings.showDamageNumbers && /^-?\d/.test(text)) return;
   G.floaters.push({ x, y, text, color, life, max: life });
+}
+
+/** Attackers sometimes carry something worth taking: their gun, its ammo, or a part. */
+function dropGear(e) {
+  const t = e.type, owns = (id) => count(id) > 0;
+  const drop = (item, n) => addPickup('item', e.x + rand(-12, 12), e.y + rand(-12, 12), n, { item });
+  if (t === 'sniper') { if (!owns('rifle') && Math.random() < 0.35) drop('rifle', 1); else if (Math.random() < 0.55) drop('rifle_ammo', 4); }
+  else if (t === 'lieutenant') { if (!owns('shotgun') && Math.random() < 0.6) drop('shotgun', 1); else drop('shells', 6); }
+  else if (t === 'gunman' && owns('rifle') && Math.random() < 0.15) drop('rifle_ammo', 3);
+  else if (t === 'enforcer' && owns('shotgun') && Math.random() < 0.15) drop('shells', 4);
+  if (Math.random() < 0.03) {
+    const parts = ['suppressor', 'ext_mag', 'scope', 'choke'].filter((id) => !owns(id) && !(G.s.weaponMods || {})[ITEMS[id].install]);
+    if (parts.length) drop(parts[Math.floor(Math.random() * parts.length)], 1);
+  }
 }
 
 export function addPickup(kind, x, y, amount, extra = {}) {
@@ -67,6 +83,7 @@ export function damageEnemy(e, dmg, angle, src, knock = 90) {
     addPickup('cash', e.x + rand(-8, 8), e.y + rand(-8, 8), cash);
     if (Math.random() < 0.85) addPickup('ammo', e.x + rand(-10, 10), e.y + rand(-10, 10), randInt(def.ammoDrop[0], def.ammoDrop[1]));
     if (Math.random() < 0.2) addPickup('bandage', e.x + rand(-10, 10), e.y + rand(-10, 10), 1);
+    if (!def.dog) dropGear(e);
     if (e.carriesNote) G.events.emit('bossDropped', e);
     G.events.emit('enemyKilled', e);
   }
@@ -112,7 +129,7 @@ export function updateBullets(dt) {
           }
         }
       } else if (b.owner === 'enemy') {
-        if (allyBulletCheck(b)) { b.dead = true; break; }
+        if (allyBulletCheck(b) || dogBulletCheck(b)) { b.dead = true; break; }
         const p = G.player;
         const r = p.radius + 1;
         if (!p.dead && (p.x - b.x) ** 2 + (p.y - b.y) ** 2 < r * r) {
@@ -168,6 +185,10 @@ function collect(pk) {
   } else if (pk.kind === 'note' || pk.kind === 'burner') {
     addItem(pk.kind, 1, true);
     G.events.emit(pk.kind === 'note' ? 'noteFound' : 'burnerFound');
+  } else if (pk.kind === 'item') {
+    const got = addItem(pk.item, pk.amount, true);
+    if (got <= 0) return;
+    toast(`Taken from the body: ${ITEMS[pk.item].name}${got > 1 ? ' ×' + got : ''}`, 'item', 2.5);
   } else if (pk.kind === 'ledger') {
     addItem('ledger', 1, true);
     G.events.emit('ledgerFound');

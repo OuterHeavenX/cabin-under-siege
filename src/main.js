@@ -35,6 +35,7 @@ import { addPickup, damageEnemy } from './game/combat.js';
 import { updateFire, startFire } from './game/fire.js';
 import { spawnEnemy, openingStrength } from './game/enemies.js';
 import { initActivityEvents } from './game/activities.js';
+import { spawnDog, updateDog, dogMorning } from './game/dog.js';
 import { setWeather } from './game/weather.js';
 import { initAtmosphere, updateAtmosphere } from './world/atmosphere.js';
 import { updateCutscene, skipCutscene, endCutscene, playCutscene } from './ui/cutscene.js';
@@ -121,6 +122,7 @@ export function loadMap(id, pos) {
   G.map.pushOut(p, p.radius, 'player');
   G.camera.x = p.x; G.camera.y = p.y;
   spawnNpcs();
+  spawnDog();
   G.events.emit('mapLoaded', id);
   updateMood(true);
 }
@@ -191,6 +193,7 @@ function update(dt) {
   updateFire(dt);
   updateEffects(dt);
   updateNpcs(dt);
+  updateDog(dt);
   updateJobs(dt);
   if (!G.endless) { updateStory(dt); checkDiscovery(); }
 
@@ -399,6 +402,7 @@ function initEvents() {
     confirmBox('Leave for good and start the next chapter? You can\'t come back here. Your level, skills, money, weapons and gear come with you.', 'Leave', () => ruthFarewell(next), 'Not yet');
   });
   G.events.on('newDay', (day) => {
+    dogMorning();
     applyChopped(G.map);
     if (atHome()) refreshSignProps();
     if (!G.sleeping) banner(`Day ${day} begins.`, 'info', 3);

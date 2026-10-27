@@ -29,6 +29,20 @@ export const ENEMY_TYPES = {
     preferDist: [130, 240], breachDamage: 8, retreatAt: 0.45, bravery: 0.3,
     xp: 22, cash: [8, 18], ammoDrop: [2, 5],
   },
+  handler: {
+    name: 'Dog Handler', hp: 80, speed: 80, radius: 10,
+    color: '#3b3226', trim: '#e0a542',
+    weapon: 'pistol', damage: 9, fireCooldown: 1.6, telegraph: 0.45, spread: 0.14, range: 300,
+    preferDist: [140, 260], breachDamage: 10, retreatAt: 0.3, bravery: 0.5,
+    xp: 24, cash: [8, 18], ammoDrop: [3, 6], pack: 2,
+  },
+  attack_dog: {
+    name: 'Attack Dog', hp: 40, speed: 150, radius: 9, dog: true, melee: true,
+    color: '#3a3a3a', trim: '#c23b3b',
+    weapon: 'bite', damage: 11, fireCooldown: 0.8, telegraph: 0.22, spread: 0, range: 22,
+    preferDist: [0, 18], breachDamage: 4, retreatAt: 0.15, bravery: 0.9,
+    xp: 10, cash: [0, 0], ammoDrop: [0, 0],
+  },
   sniper: {
     name: 'Sniper', hp: 70, speed: 70, radius: 10,
     color: '#3d4a2f', trim: '#e8e85a',

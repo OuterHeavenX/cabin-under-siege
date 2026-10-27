@@ -31,6 +31,12 @@ export function spawnEnemy(type, x, y, opts = {}) {
     entry: opts.entry || null, walkPhase: 0, hpMultApplied: opts.hpMult || 1,
   };
   G.enemies.push(e);
+  // Handlers bring their dogs.
+  if (def.pack) for (let i = 0; i < def.pack; i++) {
+    const a = Math.random() * Math.PI * 2;
+    const dgo = spawnEnemy('attack_dog', x + Math.cos(a) * 24, y + Math.sin(a) * 24, { hpMult: opts.hpMult, noDiff: true });
+    G.map && G.map.pushOut(dgo, dgo.radius, 'enemy');
+  }
   return e;
 }
 
@@ -64,6 +70,7 @@ const costFn = makeCost({ id: 0 });
 function alertEnemy(e) {
   if (e.alerted || e.dead) return;
   e.alerted = true;
+  if (e.def.dog) sfx('bark', { x: e.x, y: e.y });
   e.path = null;
   e.fireCd = Math.max(e.fireCd, 0.6);
   // Nearby allies hear the shout.
@@ -160,8 +167,8 @@ function startAim(e, p) {
 
 function doFire(e, p) {
   const def = e.def;
-  if (def.weapon === 'bat') {
-    sfx('swing', { x: e.x, y: e.y });
+  if (def.weapon === 'bat' || def.weapon === 'bite') {
+    sfx(def.weapon === 'bite' ? 'growl' : 'swing', { x: e.x, y: e.y, vol: 0.8 });
     const d = dist(e.x, e.y, p.x, p.y);
     if (d < def.range + p.radius + e.radius + 10 && Math.abs(angleDiff(e.aimAngle, angleTo(e.x, e.y, p.x, p.y))) < 1.2) {
       if (damagePlayer(def.damage * diff().dmg, e.x, e.y, 'melee')) {
@@ -413,7 +420,7 @@ export function updateEnemies(dt) {
 
     // --- Alerted behaviours ---
     const [minD, maxD] = e.def.preferDist;
-    if (e.type === 'enforcer') {
+    if (e.type === 'enforcer' || e.def.melee) {
       if (pd < e.def.range + p.radius + e.radius && canSee) {
         if (e.fireCd <= 0) startAim(e, p);
         e.angle = angleTo(e.x, e.y, p.x, p.y);

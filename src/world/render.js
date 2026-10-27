@@ -11,6 +11,7 @@ import { derived } from '../game/progression.js';
 import { jobProps } from '../game/jobs.js';
 import { questProps } from '../game/quests.js';
 import { homeMapId } from '../game/chapters.js';
+import { ITEMS } from '../data/items.js';
 
 let lightCanvas = null, lctx = null;
 
@@ -490,6 +491,7 @@ const ENEMY_LOOK = {
   gunman: { hair: '#1a1a1a', skin: '#e0b494', hat: '#1f2328' },
   sniper: { hair: '#2a2a1a', skin: '#d8a888', hat: '#3d4a2f' },
   truck: { hair: '#000', skin: '#000', hat: null },
+  handler: { hair: '#3a2a1a', skin: '#d8a888', hat: '#4a3a24' },
 };
 
 /* ------------------------------------------------------------------ */
@@ -517,6 +519,14 @@ export function render(ctx) {
   const sw = Math.min(m.groundCanvas.width - sx, Math.ceil(vx1 - vx0)), sh = Math.min(m.groundCanvas.height - sy, Math.ceil(vy1 - vy0));
   if (sw > 0 && sh > 0) ctx.drawImage(m.groundCanvas, sx, sy, sw, sh, sx, sy, sw, sh);
   drawDecals(ctx, inView);
+  if (m.homeInfo && G.s.home.upgrades.safeRoom) {
+    const bed = m.props.find((pr) => pr.id === 'bed');
+    if (bed) {
+      ctx.strokeStyle = 'rgba(160,170,180,0.55)'; ctx.lineWidth = 3; ctx.setLineDash([6, 4]);
+      ctx.strokeRect(bed.x - 50, bed.y - 50, 100, 100); ctx.setLineDash([]);
+      for (const [x, y] of [[-50, -50], [50, -50], [-50, 50], [50, 50]]) { ctx.fillStyle = '#7d858e'; ctx.fillRect(bed.x + x - 3, bed.y + y - 3, 6, 6); }
+    }
+  }
 
   const t = G.time;
   const cx0 = Math.max(0, Math.floor(vx0 / TILE)), cy0 = Math.max(0, Math.floor(vy0 / TILE));
@@ -655,6 +665,11 @@ export function render(ctx) {
     else if (pk.kind === 'ammo') { ctx.fillStyle = '#c9a43a'; ctx.fillRect(pk.x - 6, pk.y - 5 + bob, 12, 9); ctx.fillStyle = '#5a4a1a'; ctx.fillRect(pk.x - 6, pk.y - 5 + bob, 12, 3); }
     else if (pk.kind === 'bandage') { ctx.fillStyle = '#f2f2f2'; ctx.fillRect(pk.x - 6, pk.y - 6 + bob, 12, 12); ctx.fillStyle = '#d63b3b'; ctx.fillRect(pk.x - 1.5, pk.y - 4 + bob, 3, 8); ctx.fillRect(pk.x - 4, pk.y - 1.5 + bob, 8, 3); }
     else if (pk.kind === 'note' || pk.kind === 'burner' || pk.kind === 'ledger') { ctx.fillStyle = pk.kind === 'burner' ? '#222' : pk.kind === 'ledger' ? '#6b3e1f' : '#f6eed8'; ctx.fillRect(pk.x - 6, pk.y - 8 + bob, 12, 14); ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(pk.x, pk.y + bob, 13 + Math.sin(t * 6) * 2, 0, Math.PI * 2); ctx.stroke(); }
+    else if (pk.kind === 'item') {
+      ctx.fillStyle = '#2a1414'; ctx.strokeStyle = '#e0474a'; ctx.lineWidth = 1.5;
+      ctx.fillRect(pk.x - 9, pk.y - 9 + bob, 18, 16); ctx.strokeRect(pk.x - 9, pk.y - 9 + bob, 18, 16);
+      ctx.font = '12px system-ui'; ctx.textAlign = 'center'; ctx.fillText((ITEMS[pk.item] || {}).icon || '?', pk.x, pk.y + 4 + bob);
+    }
   }
 
   // Entities (y-sorted)
@@ -662,9 +677,12 @@ export function render(ctx) {
   for (const n of G.npcs) if (n.present && inView(n.x, n.y)) ents.push(n);
   for (const e of G.enemies) if (!e.gone && inView(e.x, e.y)) ents.push(e);
   ents.push(G.player);
+  if (G.dog && inView(G.dog.x, G.dog.y)) ents.push(G.dog);
   ents.sort((a, b) => a.y - b.y);
   const p = G.player;
   for (const e of ents) {
+    if (e === G.dog) { drawGuardDog(ctx, e, t); continue; }
+    if (e.def && e.def.dog) { drawAttackDog(ctx, e, t); continue; }
     if (e === p) {
       if (p.dead) continue;
       const blink = p.invuln > 0 && p.dodgeT <= 0 && Math.floor(t * 20) % 2 === 0;
@@ -701,7 +719,7 @@ export function render(ctx) {
   for (const e of G.enemies) {
     if (e.dead || e.gone || !(e.aimT > 0)) continue;
     const prog = 1 - e.aimT / e.def.telegraph;
-    if (e.def.weapon === 'bat') {
+    if (e.def.weapon === 'bat' || e.def.weapon === 'bite') {
       ctx.strokeStyle = `rgba(255,80,60,${0.4 + prog * 0.5})`; ctx.lineWidth = 3;
       ctx.beginPath(); ctx.arc(e.x, e.y, 30, e.aimAngle - 1, e.aimAngle + 1); ctx.stroke();
     } else {
@@ -945,7 +963,7 @@ function drawTruck(ctx, e) {
 
 function drawEnemy(ctx, e, t) {
   if (e.def.vehicle) { drawTruck(ctx, e); return; }
-  const look = ENEMY_LOOK[e.type];
+  const look = ENEMY_LOOK[e.type] || ENEMY_LOOK.gunman;
   if (e.dead) {
     ctx.globalAlpha = Math.max(0, 1 - e.deadT / 25);
     ctx.fillStyle = 'rgba(90,20,20,0.5)'; ctx.beginPath(); ctx.ellipse(e.x, e.y + 3, e.radius + 6, e.radius, 0, 0, Math.PI * 2); ctx.fill();
@@ -1322,6 +1340,40 @@ function drawFireflies(ctx, t, dk, x0, y0, x1, y1) {
     ctx.fillStyle = g; ctx.beginPath(); ctx.arc(px, py, 7, 0, Math.PI * 2); ctx.fill();
   }
   ctx.restore();
+}
+
+/** A dog seen from above, facing `a`. */
+function dogShape(ctx, x, y, a, walk, coat, dark, scale = 1) {
+  ctx.save(); ctx.translate(x, y); ctx.rotate(a); ctx.scale(scale, scale);
+  const leg = Math.sin(walk) * 3;
+  ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(1, 3, 14, 7, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = dark;
+  for (const [lx, ly, s] of [[6, -5, 1], [6, 5, -1], [-7, -5, -1], [-7, 5, 1]]) ctx.fillRect(lx + leg * s - 1.5, ly - 1.5, 4, 3);
+  ctx.fillStyle = coat; ctx.beginPath(); ctx.ellipse(0, 0, 11, 5.5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = dark; ctx.beginPath(); ctx.ellipse(-1, 0, 7, 3.6, 0, 0, Math.PI * 2); ctx.fill(); // saddle
+  ctx.fillStyle = coat; ctx.beginPath(); ctx.ellipse(12, 0, 4.6, 4, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = dark; ctx.beginPath(); ctx.ellipse(16, 0, 2.6, 2, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(11, -3); ctx.lineTo(10, -7); ctx.lineTo(13, -4); ctx.moveTo(11, 3); ctx.lineTo(10, 7); ctx.lineTo(13, 4); ctx.fill();
+  ctx.strokeStyle = coat; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(-11, 0); ctx.quadraticCurveTo(-16, Math.sin(walk * 1.5) * 4, -19, Math.sin(walk * 1.5) * 5); ctx.stroke();
+  ctx.restore();
+}
+
+function drawGuardDog(ctx, d, t) {
+  ctx.globalAlpha = d.hurt ? 0.6 : 1;
+  ctx.strokeStyle = '#6fdc7a'; ctx.lineWidth = 2; ctx.setLineDash([3, 3]);
+  ctx.beginPath(); ctx.arc(d.x, d.y, 14, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+  dogShape(ctx, d.x, d.y, d.angle, d.walk, d.hitT > 0 ? '#fff' : '#b07a3c', '#2a1e14', 1);
+  ctx.globalAlpha = 1;
+  if (G.siegeActive || d.hp < 90) bar(ctx, d.x - 12, d.y + 13, 24, 3, d.hp / 90, '#6fdc7a');
+  void t;
+}
+
+function drawAttackDog(ctx, e, t) {
+  if (e.dead) { ctx.globalAlpha = Math.max(0, 1 - e.deadT / 25) * 0.7; dogShape(ctx, e.x, e.y, e.angle + 1.4, 0, '#3a3a3a', '#111', 0.9); ctx.globalAlpha = 1; return; }
+  ctx.strokeStyle = e.retreating ? '#f0c040' : '#ff3b30'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(e.x, e.y, 13, 0, Math.PI * 2); ctx.stroke();
+  dogShape(ctx, e.x, e.y, e.angle, e.walkPhase, e.hitT > 0 ? '#fff' : '#3a3a3a', '#111', 0.9);
+  void t;
 }
 
 function drawCalf(ctx, x, y, t) {

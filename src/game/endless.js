@@ -65,7 +65,7 @@ export function startEndless(siteId, begin) {
 
 function wavePlan(n) {
   const size = Math.min(16, 3 + Math.floor(n * 1.4));
-  const w = [['gunman', 0.36], ['scout', 0.22], ['enforcer', Math.min(0.25, 0.08 + n * 0.02)], ['arsonist', n >= 3 ? 0.08 : 0], ['sniper', n >= 4 && ENEMY_TYPES.sniper ? 0.08 : 0]];
+  const w = [['gunman', 0.36], ['scout', 0.22], ['enforcer', Math.min(0.25, 0.08 + n * 0.02)], ['arsonist', n >= 3 ? 0.08 : 0], ['handler', n >= 2 ? 0.07 : 0], ['sniper', n >= 4 && ENEMY_TYPES.sniper ? 0.08 : 0]];
   const tot = w.reduce((a, [, x]) => a + x, 0);
   const types = pickSpawnTypes(size, w.map(([t, x]) => [t, x / tot]));
   const dirs = Object.keys(G.map.spawns);

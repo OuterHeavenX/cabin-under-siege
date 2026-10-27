@@ -1,5 +1,6 @@
 // The player character: movement, aiming, shooting, melee, dodge, damage.
 import { G } from './state.js';
+import { inSafeRoom } from './home.js';
 import { PLAYER_RADIUS, PLAYER_SPEED, SPRINT_SPEED, TILE } from '../config.js';
 import { input, consume, readMove } from '../input.js';
 import { derived, addJP } from './progression.js';
@@ -66,6 +67,7 @@ export function updatePlayer(dt) {
   p.lastHurt += dt; p.lastCombat += dt;
   p.flinch = Math.max(0, p.flinch - dt * 2.5);
   if (p.regenBuff > 0) p.regenBuff -= dt;
+  if (inSafeRoom() && !p.dead && p.hp < d.maxHp * 0.6) p.hp = Math.min(d.maxHp * 0.6, p.hp + 3 * dt);
   if (p.wellFed > 0) { p.wellFed -= dt; if (p.wellFed <= 0) { const d0 = derived(); p.hp = Math.min(p.hp, d0.maxHp); p.stamina = Math.min(p.stamina, d0.maxStamina); } }
   if (p.hp > d.maxHp) p.hp = d.maxHp;
 
@@ -295,6 +297,7 @@ export function damagePlayer(dmg, fromX, fromY, kind = 'bullet') {
   const d = derived();
   let amount = dmg;
   if (p.inCover && kind === 'bullet') amount *= 0.65;
+  if (inSafeRoom()) amount *= 0.5;
   amount = Math.round(amount);
   p.hp -= amount;
   G.events.emit('playerHurt', p.x, p.y, amount);

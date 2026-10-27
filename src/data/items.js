@@ -82,6 +82,14 @@ export const ITEMS = {
     name: 'Tripwire Alarm Kit', icon: '🔔', cat: 'Upgrade', cap: 1, sell: 30, install: 'alarm',
     desc: 'Install on the cabin: warns you about 45 minutes earlier before an attack, wakes you, and reveals which directions attackers come from.',
   },
+  guard_dog: {
+    name: 'Guard Dog (Duke)', icon: '🐕', cat: 'Upgrade', cap: 1, sell: 0, install: 'dog',
+    desc: 'Adopt Duke, a trained German shepherd. He follows you around home, barks and marks strangers, and bites attackers (pinning them). Moves with you to new homes.',
+  },
+  safe_room_kit: {
+    name: 'Safe Room Kit', icon: '🛡', cat: 'Upgrade', cap: 1, sell: 60, install: 'safeRoom',
+    desc: 'Steel-plate the bedroom. During an attack, standing by your bed you take half damage and slowly recover health. Stays with the house.',
+  },
   ext_mag: {
     name: 'Extended Magazine', icon: '▮', cat: 'Upgrade', cap: 1, sell: 40, install: 'extMag',
     desc: 'Handgun magazine holds 12 rounds instead of 8. Applied immediately.',
@@ -173,6 +181,8 @@ export const SHOPS = {
       { id: 'camera_kit', qty: 1, price: 90 },
       { id: 'choke', qty: 1, price: 80 },
       { id: 'scope', qty: 1, price: 110 },
+      { id: 'safe_room_kit', qty: 1, price: 140 },
+      { id: 'guard_dog', qty: 1, price: 150 },
     ],
   },
 };
@@ -196,6 +206,7 @@ SHOPS.rosa = {
     { id: 'bear_trap', qty: 1, price: 30 }, { id: 'floodlight_kit', qty: 1, price: 60 }, { id: 'alarm_kit', qty: 1, price: 75 },
     { id: 'camera_kit', qty: 1, price: 90 },
     { id: 'fishing_rod', qty: 1, price: 30 }, { id: 'scope', qty: 1, price: 110 }, { id: 'choke', qty: 1, price: 80 }, { id: 'suppressor', qty: 1, price: 120 },
+    { id: 'safe_room_kit', qty: 1, price: 140 }, { id: 'guard_dog', qty: 1, price: 150 },
   ],
 };
 

@@ -1,5 +1,6 @@
 // Cabin defenses: repairs, reinforcements, placeable cover, upgrades, crafting.
 import { G, hasSkill } from './state.js';
+import { adoptDog } from './dog.js';
 import { TILE } from '../config.js';
 import { Cover, COVER_HP, GLASS_HP, defenseMult } from '../world/blockers.js';
 import { ITEMS, RECIPES } from '../data/items.js';
@@ -194,6 +195,7 @@ export function installBrace(d) {
 export function installUpgrade(id) {
   const def = ITEMS[id];
   if (!def || !def.install) return false;
+  if (def.install === 'dog') { if (!adoptDog()) return false; removeItem(id, 1); saveGame('install'); return true; }
   const gunMod = ['extMag', 'scope', 'choke', 'suppressor'].includes(def.install);
   if (!gunMod && !atHome()) { toast('Install this at home.', 'warn'); return false; }
   const mods = G.s.weaponMods || (G.s.weaponMods = {});
@@ -204,7 +206,7 @@ export function installUpgrade(id) {
   if (!removeItem(id, 1)) return false;
   if (gunMod) mods[def.install] = true; else G.s.home.upgrades[def.install] = true;
   sfx('hammer'); sfx('chime');
-  const msg = { camera: 'Cameras mounted on every corner. Nobody sneaks up on you now.', floodlight: 'Floodlight mounted over the porch.', alarm: 'Tripwires strung through the treeline. You\'ll hear them coming.', extMag: 'Extended magazine fitted: 12 rounds.', scope: 'Scope mounted. The rifle reaches out and touches someone.', choke: 'Choke threaded on. Tighter pattern, longer reach.', suppressor: 'Suppressor fitted. Your handgun whispers now.' }[def.install];
+  const msg = { camera: 'Cameras mounted on every corner. Nobody sneaks up on you now.', floodlight: 'Floodlight mounted over the porch.', alarm: 'Tripwires strung through the treeline. You\'ll hear them coming.', extMag: 'Extended magazine fitted: 12 rounds.', safeRoom: 'Steel plates bolted around the bedroom. When it gets bad, fall back to the bed.', scope: 'Scope mounted. The rifle reaches out and touches someone.', choke: 'Choke threaded on. Tighter pattern, longer reach.', suppressor: 'Suppressor fitted. Your handgun whispers now.' }[def.install];
   toast(msg, 'info', 3);
   if (!gunMod) { addJP('handyman', 8, 'install', 6); G.events.emit('defenseInstalled', def.install); }
   saveGame('install');
@@ -281,4 +283,11 @@ export function homeStatus() {
     rows.push({ label: b.label, kind: b.kind, cond: b.condition, status, extras, repair: need ? need.cost : 0 });
   }
   return rows;
+}
+
+/** Standing in the steel-plated bedroom during an attack. */
+export function inSafeRoom() {
+  if (!G.siegeActive || !G.s.home.upgrades.safeRoom || !atHome() || !G.player) return false;
+  const bed = G.map.props.find((p) => p.id === 'bed');
+  return !!bed && Math.hypot(G.player.x - bed.x, G.player.y - bed.y) < 52;
 }

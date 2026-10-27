@@ -23,6 +23,7 @@ const ASSETS = [
   "./src/game/ally.js",
   "./src/game/chapters.js",
   "./src/game/difficulty.js",
+  "./src/game/dog.js",
   "./src/game/endless.js",
   "./src/game/combat.js",
   "./src/game/enemies.js",

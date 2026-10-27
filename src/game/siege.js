@@ -49,7 +49,7 @@ export function makeRaidPlan(size, kind = 'raid') {
   if (kind === 'ambush') types = pickSpawnTypes(n, [['scout', 0.8], ['gunman', 0.2]]);
   else if (G.s.world.threat < 40 && lvl < 3 && G.s.chapter < 2) types = pickSpawnTypes(n, [['scout', 0.7], ['gunman', 0.2], ['enforcer', 0.1]]);
   else types = pickSpawnTypes(n, late
-    ? [['scout', 0.32], ['gunman', 0.26], ['enforcer', 0.22], ['arsonist', 0.2]]
+    ? [['scout', 0.28], ['gunman', 0.24], ['enforcer', 0.2], ['arsonist', 0.18], ['handler', 0.1]]
     : [['scout', 0.4], ['gunman', 0.28], ['enforcer', 0.22], ['arsonist', 0.1]]);
   // Big raids are led by a lieutenant.
   if (kind === 'raid' && n >= 6) types[types.length - 1] = 'lieutenant';
