@@ -6,7 +6,7 @@ import { count } from './inventory.js';
 import { interactNpc, npcPresent } from './npcs.js';
 import { chopTree, jobProps, onDeliver, onLogDrop, onRepairTarget, onShed, onStoreCounter, onSupplyDrop } from './jobs.js';
 import { installBoards, installBrace, installShutters, pickUpCover, repairNeed, startRepair, trapAt, rearmTrap, pickUpTrap } from './home.js';
-import { atHome, chapter } from './chapters.js';
+import { atHome, chapter, LAST_CHAPTER } from './chapters.js';
 import { questProps, questPropAction } from './quests.js';
 import { answerPhone, storyMail } from './story.js';
 import { openBedMenu, openCraft, openActions, openShop, openJobBoard } from '../ui/menus.js';
@@ -111,9 +111,10 @@ function carAction() {
     const toWork = G.map.id === ch.homeMap;
     opts.push({ label: toWork ? `Drive to ${ch.place} (20 min)` : 'Drive home (20 min)', action: () => travelFn && travelFn(toWork ? ch.workMap : ch.homeMap, 'car') });
   }
-  if (G.s.story.step === 'leave_town' && G.map.id === ch.homeMap) opts.push({ label: 'Leave for good — start the next chapter', action: () => G.events.emit('requestMove') });
+  const canLeave = (G.s.story.done || {})[G.s.chapter] && G.s.chapter < LAST_CHAPTER && G.map.id === ch.homeMap;
+  if (canLeave) opts.push({ label: 'Leave for good — start the next chapter', action: () => G.events.emit('requestMove') });
   if (!opts.length) return { label: 'Your car (everything here is within walking distance)', short: 'CAR', action: () => toast('Everything in Millbrook is within walking distance.', 'info') };
-  if (opts.length === 1) return { label: opts[0].label, short: 'DRIVE', action: opts[0].action, prio: G.s.story.step === 'leave_town' ? 3 : 0 };
+  if (opts.length === 1) return { label: opts[0].label, short: 'DRIVE', action: opts[0].action, prio: canLeave ? 3 : 0 };
   return { label: 'Your car: 2 options', short: 'DRIVE', action: () => openActions('Your Car', opts), prio: 3 };
 }
 

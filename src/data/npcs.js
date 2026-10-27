@@ -154,6 +154,82 @@ export const NPCS = {
       'Whoever you were before Millbrook — doesn\'t matter. You\'re one of us now.',
     ],
   },
+  // ---------------- Chapter 3: Kettle Crossing, Wisconsin ----------------
+  ingrid: {
+    name: 'Ingrid Haugen',
+    title: 'Dairy farmer next door',
+    bio: 'Runs the dairy across the pasture with her late father\'s stubbornness. Quietly helped Marcus hide people for twenty years. Trusts cows more than people.',
+    body: '#6a4e7a', hair: '#e6d3a0', skin: '#f0c7a5',
+    map: 'farm',
+    home: ['farm', 'ingrid_in'],
+    schedule: [
+      [6 * 60, 12 * 60, 'farm', 'ingrid_yard'],
+      [12 * 60, 21 * 60, 'farm', 'ingrid_porch'],
+    ],
+    homeLine: 'The Haugen farmhouse is dark. Milking starts at five.',
+    idle: [
+      'Cows don\'t lie and they don\'t gossip. That\'s more than I can say for Kettle Crossing.',
+      'Snow comes early up here. Get your woodpile in.',
+      'Marcus said you were trouble. He also said you were worth it. Prove one of those.',
+      'If a car comes down our road after dark, it\'s not lost.',
+      'There\'s a root cellar under your house. Pa dug it in \'62. Good place to keep things.',
+    ],
+    friendly: [
+      'You milk like a city boy, but you show up. That counts.',
+      'I left a jar of cream on your step. Don\'t make a thing of it.',
+      'Pa hid two families in that farmhouse. You\'re in good company.',
+    ],
+  },
+  bo: {
+    name: 'Bo Lindqvist',
+    title: 'Feed & supply store owner',
+    bio: 'Third-generation owner of Lindqvist Feed & Supply. Talks slowly, notices everything, and keeps a shotgun under the counter "for raccoons".',
+    body: '#7a6a3a', hair: '#c9a46a', skin: '#e8b898',
+    map: 'farm',
+    home: ['farm', 'bo_home'],
+    schedule: [
+      [8 * 60, 20 * 60, 'farm', 'bo_store'],
+      [20 * 60, 22 * 60, 'farm', 'bo_porch'],
+    ],
+    homeLine: "Bo's lights are out. He'll open at eight sharp.",
+    idle: [
+      'Feed, seed, shells and coffee. In that order of importance.',
+      'Ya, the winters are long. The people are longer.',
+      'Fella came through last week asking about a farmhand from out east. I said we grow our own.',
+      'You pay cash, you don\'t haggle, you don\'t talk my ear off. You\'re my favorite customer.',
+      'Ice fishing starts in December. Pond behind your place has bass.',
+    ],
+    friendly: [
+      'Put the good shells aside for you. Raccoons have been bold this year.',
+      'My grandpa ran booze for the Chicago boys in the twenties. I know the type that\'s looking for you.',
+      'Anything you need, you come to me first. Not the deputy.',
+    ],
+  },
+  tess: {
+    name: 'Tess Albright',
+    title: 'Grain co-op manager & job contact',
+    bio: 'Runs the Kettle Crossing grain co-op with a clipboard and zero patience. Former long-haul trucker; knows every back road in three counties.',
+    body: '#3a6a5a', hair: '#2b1a12', skin: '#8a5a3e',
+    map: 'farm',
+    home: ['farm', 'tess_home'],
+    schedule: [
+      [7 * 60, 17 * 60, 'farm', 'tess_yard'],
+      [17 * 60, 21 * 60, 'farm', 'tess_porch'],
+    ],
+    homeLine: "Tess's truck is parked. She's off the clock.",
+    idle: [
+      'Board\'s by the office. Harvest, deliveries, fix-it jobs. Pick one and go.',
+      'Eleven years driving rigs. Nothing on a farm scares me.',
+      'You\'re the new hand at the old Haugen place? Pa Haugen would\'ve hated you. That\'s a compliment.',
+      'Fish fry Friday at the cafe. Bring a pan or bring an appetite.',
+      'Deputy Mott\'s been asking about you. Mott asks about everybody he wants something from.',
+    ],
+    friendly: [
+      'You work like you\'ve got something to prove. Keep proving it.',
+      'If you ever need to leave town fast, I know a road that isn\'t on any map.',
+      'Co-op looks out for its own. You\'re one of ours now.',
+    ],
+  },
 };
 
 // Unnamed townsfolk who walk around during the day, per map.
@@ -162,6 +238,10 @@ export const TOWNSFOLK = {
     { id: 'folk1', name: 'Mr. Henderson', body: '#8a7a5a', hair: '#bbbbbb', skin: '#e0b08f', route: ['walk_a', 'walk_e', 'walk_f'] },
     { id: 'folk2', name: 'Pastor Abe', body: '#2e2e2e', hair: '#5a4632', skin: '#a8754f', route: ['walk_e', 'walk_c', 'walk_a'] },
     { id: 'folk3', name: 'Jenny Miller', body: '#c98c3a', hair: '#e6c26a', skin: '#f0c7a5', route: ['walk_d', 'walk_a', 'walk_b'] },
+  ],
+  farm: [
+    { id: 'folk7', name: 'Pastor Lund', body: '#2e2e2e', hair: '#d0d0d0', skin: '#f0c7a5', route: ['walk_a', 'walk_b', 'walk_c'] },
+    { id: 'folk8', name: 'Hank the trucker', body: '#8a3a2a', hair: '#5a4632', skin: '#c58c69', route: ['walk_b', 'walk_d', 'walk_a'] },
   ],
   millbrook: [
     { id: 'folk4', name: 'Mrs. Ortiz', body: '#b0567a', hair: '#3a2416', skin: '#c58c69', route: ['walk_b', 'walk_d', 'walk_e'] },
@@ -178,6 +258,13 @@ export const FOLK_LINES = {
   'Gus is hiring again. He always is.',
   'Quiet town. That\'s how we like it.',
 ],
+  farm: [
+  'Ya, you\'re the new fella at the Haugen place? Welcome to Kettle Crossing.',
+  'Bo\'s got the best coffee in the county. It\'s also the only coffee in the county.',
+  'Storm\'s coming. Always is, up here.',
+  'Deputy Mott drives a new truck. On a deputy\'s salary. Funny, that.',
+  'Tess runs that co-op like a battleship.',
+  ],
   millbrook: [
   'You\'re the new fella on Larch? Welcome to Millbrook!',
   'Rosa\'s got the best prices in the county. Don\'t tell her I said so.',

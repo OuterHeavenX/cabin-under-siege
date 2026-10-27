@@ -10,6 +10,7 @@ import { sfx } from '../audio.js';
 import { toast } from '../ui/hud.js';
 import { isNight } from './state.js';
 import { WEAPONS, WEAPON_ORDER } from '../data/weapons.js';
+import { tryAllyRevive } from './ally.js';
 
 const SURFACE = { 0: 'grass', 1: 'dirt', 2: 'hard', 3: 'wood', 4: 'wood', 5: 'grass', 6: 'gravel', 7: 'hard', 8: 'dirt', 9: 'hard', 10: 'hard' };
 function surfaceAt(map, x, y) {
@@ -305,6 +306,7 @@ export function damagePlayer(dmg, fromX, fromY, kind = 'bullet') {
   addFloater(p.x, p.y - 18, `-${amount}`, '#ff6b6b');
   if (p.hp <= 0) {
     p.hp = 0;
+    if (tryAllyRevive()) return true;
     p.dead = true;
     G.events.emit('playerDown');
   }

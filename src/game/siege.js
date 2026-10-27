@@ -12,6 +12,7 @@ import { saveGame } from './save.js';
 import { fmtClock } from '../util.js';
 import { chapter, homeMap, homeMapId, atHome } from './chapters.js';
 import { NPCS } from '../data/npcs.js';
+import { allyStartSiege, allyEndSiege } from './ally.js';
 
 export const absNow = () => G.s.time.day * 1440 + G.s.time.minute;
 export const absOf = (s) => s.day * 1440 + s.minute;
@@ -58,6 +59,17 @@ export function makeRaidPlan(size, kind = 'raid') {
 }
 
 export function storyPlan() {
+  const ch = G.s.choices || {};
+  if (G.s.chapter === 3) {
+    const waves = [
+      { dir: 'west', types: ['truck', 'scout', 'scout'], delay: 0 },
+      { dir: 'east', types: ['sniper', 'gunman'], delay: 18 },
+      { dir: 'south', types: ['lieutenant', 'enforcer', 'arsonist'], delay: 42, boss: 0 },
+    ];
+    if (ch.deputy === 'refuse') waves[1].types.push('sniper');
+    if (ch.deputy === 'cooperate') waves[0].types.pop();
+    return { kind: 'story', hpMult: 1.15, bossName: 'Vinnie Vescari', bossItem: 'ledger', waves };
+  }
   if (G.s.chapter === 2) {
     return {
       kind: 'story', hpMult: 1.1, bossName: 'Sal "the Knife" Benedetto', bossItem: 'burner',
@@ -71,7 +83,7 @@ export function storyPlan() {
   return {
     kind: 'story', hpMult: 1, bossName: 'Big Carmine', bossItem: 'note',
     waves: [
-      { dir: 'north', types: ['scout', 'scout'], delay: 0 },
+      { dir: 'north', types: ch.stranger === 'threaten' ? ['scout', 'scout', 'gunman'] : ['scout', 'scout'], delay: 0, named: ch.stranger === 'threaten' ? { 2: 'The Grey Coat' } : null },
       { dir: 'east', types: ['gunman', 'scout'], delay: 22 },
       { dir: 'west', types: ['enforcer', 'gunman'], delay: 45, boss: 0 },
     ],
@@ -173,6 +185,11 @@ export function updateThreatClock() {
       toast(`The phone line is dead — if ${nbName} tried to call, it didn't get through.`, 'warn', 4);
     }
   }
+  if (s && !s.mottCalled && s.plan.kind === 'story' && G.s.chapter === 3 && (G.s.choices || {}).deputy === 'bribe' && siegeTonight() && G.s.time.minute >= 17 * 60) {
+    s.mottCalled = true; s.extraLead = Math.max(s.extraLead || 0, 90);
+    sfx('phone');
+    banner('📞 Deputy Mott: "Friendly call. Trucks on the county road tonight, around ten. You didn\'t hear it from me."', 'danger', 7);
+  }
   if (!s || G.siegeActive) return;
   const now = absNow();
   const at = absOf(s);
@@ -219,6 +236,7 @@ function missedSiege(s) {
 export function startSiege(s, immediate = false) {
   G.siegeActive = true;
   clearBanners('danger');
+  allyStartSiege();
   G.siege = { plan: s.plan, t: 0, waveIdx: 0, spawned: 0, killed: 0, fled: 0, total: s.plan.waves.reduce((a, w) => a + w.types.length, 0), startHp: G.player.hp };
   G.s.world.siege = null;
   setMusic('tense');
@@ -242,6 +260,7 @@ export function updateSiege(dt) {
       const opts = { hpMult: sg.plan.hpMult };
       if (sg.plan.kind === 'story' && wave.boss === i) { opts.name = sg.plan.bossName || 'Big Carmine'; opts.hpMult = t === 'lieutenant' ? 1 : 1.35; opts.carriesNote = sg.plan.bossItem || 'note'; }
       else if (t === 'lieutenant') opts.name = 'Lieutenant';
+      if (wave.named && wave.named[i]) opts.name = wave.named[i];
       const e = spawnEnemy(t, pos.x, pos.y, opts);
       if (sg.plan.kind === 'ambush') e.alerted = true;
       sg.spawned++;
@@ -287,6 +306,7 @@ function endSiege() {
   const w = G.s.world;
   const kind = sg.plan.kind;
   G.siegeActive = false;
+  allyEndSiege();
   w.threat = clamp(w.threat - (kind === 'ambush' ? 8 : 20), 0, 100);
   w.lastSiegeDay = G.s.time.day;
   w.quietUntilDay = G.s.time.day + (kind === 'ambush' ? 1 : 2);
@@ -357,6 +377,7 @@ function recoverFromDefeat({ lost, story, onCabin }) {
   const w = G.s.world;
   const plan = G.siege ? G.siege.plan : null;
   G.siegeActive = false;
+  allyEndSiege();
   G.siege = null;
   G.enemies = [];
   G.bullets = [];

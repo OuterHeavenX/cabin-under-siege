@@ -188,6 +188,10 @@ function drawFence(g, m, cx, cy, x, y) {
   g.fillRect(x + 12, y + 12, 8, 8);
 }
 
+function roundRectG(g, x, y, w, h, r) {
+  g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath();
+}
+
 function drawDecor(g, d) {
   const x = d.x * TILE, y = d.y * TILE, w = d.w * TILE, h = d.h * TILE;
   switch (d.kind) {
@@ -261,6 +265,52 @@ function drawDecor(g, d) {
       g.fillStyle = '#5a4128'; g.fillRect(x + 4, y + 18, 4, 12); g.fillRect(x + 24, y + 18, 4, 12);
       g.fillStyle = '#8b6b44'; g.fillRect(x + 1, y + 2, 30, 18);
       g.fillStyle = '#efe6cf'; g.fillRect(x + 4, y + 5, 8, 6); g.fillRect(x + 14, y + 4, 8, 7); g.fillRect(x + 22, y + 6, 6, 8);
+      break;
+    case 'hay':
+      for (let j = 0; j < d.h; j++) for (let i = 0; i < d.w; i++) {
+        const hx = x + i * TILE, hy = y + j * TILE;
+        g.fillStyle = '#c9a44a'; g.fillRect(hx + 2, hy + 3, TILE - 4, TILE - 6);
+        g.strokeStyle = '#8a6a2a'; g.lineWidth = 1;
+        for (let k = 0; k < 4; k++) { g.beginPath(); g.moveTo(hx + 4, hy + 7 + k * 6); g.lineTo(hx + TILE - 4, hy + 6 + k * 6); g.stroke(); }
+        g.fillStyle = '#6b4a2b'; g.fillRect(hx + 9, hy + 3, 2, TILE - 6); g.fillRect(hx + 21, hy + 3, 2, TILE - 6);
+      }
+      break;
+    case 'silo':
+      g.fillStyle = 'rgba(0,0,0,0.3)'; g.beginPath(); g.arc(x + w / 2 + 5, y + h / 2 + 6, w / 2, 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#9aa3a8'; g.beginPath(); g.arc(x + w / 2, y + h / 2, w / 2 - 1, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = '#6d7378'; g.lineWidth = 1.5;
+      for (let r2 = 8; r2 < w / 2; r2 += 7) { g.beginPath(); g.arc(x + w / 2, y + h / 2, r2, 0, Math.PI * 2); g.stroke(); }
+      g.fillStyle = '#c9cdd2'; g.beginPath(); g.arc(x + w / 2 - 6, y + h / 2 - 6, 6, 0, Math.PI * 2); g.fill();
+      break;
+    case 'tractor':
+      g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(x + 6, y + 8, w - 6, h - 6);
+      g.fillStyle = '#1f1f1f'; g.fillRect(x + 2, y + 4, 14, 22); g.fillRect(x + w - 16, y + 8, 12, 16);
+      g.fillStyle = '#2f7a3a'; g.fillRect(x + 12, y + 10, w - 22, h - 20);
+      g.fillStyle = '#d9b84a'; g.fillRect(x + w - 22, y + 18, 8, 4);
+      g.fillStyle = '#c9e2f0'; g.fillRect(x + 18, y + 16, 12, 10);
+      break;
+    case 'windmill':
+      g.fillStyle = 'rgba(0,0,0,0.3)'; g.beginPath(); g.ellipse(x + 20, y + 22, 10, 6, 0, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = '#8a8f94'; g.lineWidth = 2;
+      for (let k = 0; k < 8; k++) { const a = (k / 8) * Math.PI * 2; g.beginPath(); g.moveTo(x + 16, y + 16); g.lineTo(x + 16 + Math.cos(a) * 15, y + 16 + Math.sin(a) * 15); g.stroke(); }
+      g.fillStyle = '#b5523a'; g.beginPath(); g.arc(x + 16, y + 16, 4, 0, Math.PI * 2); g.fill();
+      break;
+    case 'cows':
+      for (const [cx, cy] of [[0, 1], [1, 4], [0, 7]]) {
+        const ox = x + cx * TILE + 16, oy = y + cy * TILE + 16;
+        g.fillStyle = 'rgba(0,0,0,0.3)'; g.beginPath(); g.ellipse(ox + 3, oy + 4, 16, 9, 0, 0, Math.PI * 2); g.fill();
+        g.fillStyle = '#f2efe6'; g.beginPath(); g.ellipse(ox, oy, 15, 9, 0, 0, Math.PI * 2); g.fill();
+        g.fillStyle = '#2a2a2a'; g.beginPath(); g.ellipse(ox - 4, oy - 2, 5, 4, 0.4, 0, Math.PI * 2); g.ellipse(ox + 6, oy + 3, 4, 3, 0, 0, Math.PI * 2); g.fill();
+        g.fillStyle = '#f2efe6'; g.beginPath(); g.arc(ox + 15, oy - 1, 5, 0, Math.PI * 2); g.fill();
+        g.fillStyle = '#e8a0a0'; g.beginPath(); g.arc(ox + 18, oy - 1, 2.5, 0, Math.PI * 2); g.fill();
+      }
+      break;
+    case 'camper':
+      g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(x + 6, y + 8, w - 4, h - 4);
+      g.fillStyle = '#e8e2d0'; roundRectG(g, x + 2, y + 2, w - 4, h - 4, 8); g.fill();
+      g.fillStyle = '#4f7a9a'; g.fillRect(x + 8, y + 10, 18, 12); g.fillRect(x + w - 28, y + 10, 18, 12);
+      g.fillStyle = '#b5523a'; g.fillRect(x + 2, y + h / 2 + 6, w - 4, 4);
+      g.fillStyle = '#7a5a36'; g.fillRect(x + w / 2 - 6, y + h - 8, 12, 6);
       break;
     case 'gazebo':
       g.fillStyle = 'rgba(0,0,0,0.3)'; g.beginPath(); g.arc(x + w / 2 + 4, y + h / 2 + 5, w / 2, 0, Math.PI * 2); g.fill();
@@ -436,6 +486,8 @@ const ENEMY_LOOK = {
   scout: { hair: '#2a2a2a', skin: '#d8a888', hat: '#3d3d46' },
   enforcer: { hair: '#1a1a1a', skin: '#caa07e', hat: null },
   gunman: { hair: '#1a1a1a', skin: '#e0b494', hat: '#1f2328' },
+  sniper: { hair: '#2a2a1a', skin: '#d8a888', hat: '#3d4a2f' },
+  truck: { hair: '#000', skin: '#000', hat: null },
 };
 
 /* ------------------------------------------------------------------ */
@@ -550,6 +602,7 @@ export function render(ctx) {
   for (const pr of questProps(m.id)) {
     if (!inView(pr.x, pr.y)) continue;
     if (pr.kind === 'quest_find' && pr.dog) drawDog(ctx, pr.x, pr.y, t);
+    if (pr.kind === 'quest_find' && pr.animal === 'calf') drawCalf(ctx, pr.x, pr.y, t);
     else if (pr.kind === 'quest_find') {
       const tw = (Math.sin(t * 5) + 1) / 2;
       ctx.fillStyle = `rgba(255,240,180,${0.5 + tw * 0.5})`;
@@ -581,7 +634,7 @@ export function render(ctx) {
     if (pk.kind === 'cash') { ctx.fillStyle = '#3fae5a'; ctx.fillRect(pk.x - 7, pk.y - 5 + bob, 14, 8); ctx.fillStyle = '#c9f2d0'; ctx.fillRect(pk.x - 2, pk.y - 3 + bob, 4, 4); }
     else if (pk.kind === 'ammo') { ctx.fillStyle = '#c9a43a'; ctx.fillRect(pk.x - 6, pk.y - 5 + bob, 12, 9); ctx.fillStyle = '#5a4a1a'; ctx.fillRect(pk.x - 6, pk.y - 5 + bob, 12, 3); }
     else if (pk.kind === 'bandage') { ctx.fillStyle = '#f2f2f2'; ctx.fillRect(pk.x - 6, pk.y - 6 + bob, 12, 12); ctx.fillStyle = '#d63b3b'; ctx.fillRect(pk.x - 1.5, pk.y - 4 + bob, 3, 8); ctx.fillRect(pk.x - 4, pk.y - 1.5 + bob, 8, 3); }
-    else if (pk.kind === 'note' || pk.kind === 'burner') { ctx.fillStyle = pk.kind === 'burner' ? '#222' : '#f6eed8'; ctx.fillRect(pk.x - 6, pk.y - 8 + bob, 12, 14); ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(pk.x, pk.y + bob, 13 + Math.sin(t * 6) * 2, 0, Math.PI * 2); ctx.stroke(); }
+    else if (pk.kind === 'note' || pk.kind === 'burner' || pk.kind === 'ledger') { ctx.fillStyle = pk.kind === 'burner' ? '#222' : pk.kind === 'ledger' ? '#6b3e1f' : '#f6eed8'; ctx.fillRect(pk.x - 6, pk.y - 8 + bob, 12, 14); ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(pk.x, pk.y + bob, 13 + Math.sin(t * 6) * 2, 0, Math.PI * 2); ctx.stroke(); }
   }
 
   // Entities (y-sorted)
@@ -611,7 +664,16 @@ export function render(ctx) {
     } else {
       // NPC
       const d = e.def;
-      drawPerson(ctx, e, { angle: e.angle, r: 10, walk: e.walkPhase, body: d.body, skin: d.skin, hair: d.hair, ring: e.stranger ? '#b9a4e0' : '#5bc0de', dashed: !e.named });
+      if (e.ally && e.downed) ctx.globalAlpha = 0.55;
+      drawPerson(ctx, e, { angle: e.downed ? e.angle + 1.4 : e.angle, r: 10, walk: e.downed ? 0 : e.walkPhase, body: d.body, skin: d.skin, hair: d.hair,
+        ring: e.ally ? '#6fdc7a' : e.stranger ? '#b9a4e0' : e.deputy ? '#d4af37' : '#5bc0de', ringW: e.ally ? 3 : 2, dashed: !e.named, weapon: e.ally ? 'shotgun' : null, flash: e.hitT > 0 ? e.hitT : 0 });
+      ctx.globalAlpha = 1;
+      if (e.ally) {
+        if (e.muzzle > 0) { e.muzzle -= 1 / 60; muzzleFlash(ctx, e.x + Math.cos(e.angle) * 24, e.y + Math.sin(e.angle) * 24, e.angle); }
+        bar(ctx, e.x - 14, e.y + 16, 28, 4, e.hp / 140, '#6fdc7a');
+        ctx.font = '600 9px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = e.downed ? '#ffb3a7' : '#c9f5cd';
+        ctx.fillText(e.downed ? 'RUTH — WOUNDED' : 'RUTH (ALLY)', e.x, e.y + 30);
+      }
     }
   }
 
@@ -766,6 +828,13 @@ function drawDoor(ctx, b, x, y) {
   } else if (b.rec.open) {
     ctx.fillStyle = '#3a2a1c'; ctx.fillRect(0, 0, 4, TILE); ctx.fillRect(TILE - 4, 0, 4, TILE);
     ctx.fillStyle = '#7b5532'; ctx.fillRect(4, 0, 5, TILE);
+  } else if (b.rec.gate) {
+    ctx.fillStyle = '#8a8f94';
+    for (let k = 0; k < 4; k++) ctx.fillRect(1, 4 + k * 8, TILE - 2, 3);
+    ctx.fillRect(1, 2, 4, TILE - 4); ctx.fillRect(TILE - 5, 2, 4, TILE - 4);
+    ctx.strokeStyle = '#5b6268'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(3, TILE - 4); ctx.lineTo(TILE - 3, 4); ctx.stroke();
+    if (b.rec.reinforced) { ctx.fillStyle = '#c0392b'; ctx.fillRect(TILE / 2 - 3, 2, 6, TILE - 4); }
+    if (b.condition < 0.5) { ctx.strokeStyle = '#3a2a1c'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(6, 6); ctx.lineTo(14, 20); ctx.stroke(); }
   } else {
     ctx.fillStyle = b.rec.reinforced ? '#5d4a3a' : '#7b5532';
     ctx.fillRect(1, 1, TILE - 2, TILE - 2);
@@ -827,7 +896,30 @@ function muzzleFlash(ctx, x, y, a) {
   ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(a - 0.3) * 14, y + Math.sin(a - 0.3) * 14); ctx.lineTo(x + Math.cos(a + 0.3) * 14, y + Math.sin(a + 0.3) * 14); ctx.fill();
 }
 
+function drawTruck(ctx, e) {
+  ctx.save();
+  ctx.translate(e.x, e.y); ctx.rotate(e.angle + Math.PI / 2);
+  ctx.fillStyle = 'rgba(0,0,0,0.4)'; ctx.fillRect(-24, -40, 52, 86);
+  ctx.fillStyle = e.dead ? '#1a1a1a' : e.hitT > 0 ? '#5a5d63' : e.def.color; roundRect(ctx, -24, -44, 48, 88, 8); ctx.fill();
+  if (!e.dead) {
+    ctx.fillStyle = 'rgba(160,200,230,0.7)'; roundRect(ctx, -18, -24, 36, 14, 3); ctx.fill();
+    ctx.fillStyle = '#1b1d21'; ctx.fillRect(-20, -4, 40, 44); // open bed
+    ctx.strokeStyle = e.def.trim; ctx.lineWidth = 2; ctx.strokeRect(-20, -4, 40, 44);
+    ctx.fillStyle = '#9aa0a6'; ctx.fillRect(-26, -50, 52, 6); // push bar
+    ctx.fillStyle = '#fff6c4'; ctx.fillRect(-20, -45, 9, 4); ctx.fillRect(11, -45, 9, 4);
+  } else {
+    ctx.fillStyle = 'rgba(255,140,30,0.5)'; ctx.beginPath(); ctx.arc(0, -6, 14 + Math.sin(performance.now() / 90) * 3, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+  if (!e.dead) {
+    const w = 46, f = e.hp / e.maxHp;
+    ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(e.x - w / 2, e.y - 58, w, 5);
+    ctx.fillStyle = '#ff3b30'; ctx.fillRect(e.x - w / 2, e.y - 58, w * f, 5);
+  }
+}
+
 function drawEnemy(ctx, e, t) {
+  if (e.def.vehicle) { drawTruck(ctx, e); return; }
   const look = ENEMY_LOOK[e.type];
   if (e.dead) {
     ctx.globalAlpha = Math.max(0, 1 - e.deadT / 25);
@@ -841,12 +933,12 @@ function drawEnemy(ctx, e, t) {
   }
   drawPerson(ctx, e, {
     angle: e.angle, r: e.radius, walk: e.walkPhase, body: e.def.color, trim: e.def.trim, skin: look.skin, hair: look.hair, hat: look.hat,
-    weapon: e.def.weapon, swing: e.aimT > 0 && e.def.weapon === 'bat' ? 1 - e.aimT / e.def.telegraph : 0,
+    weapon: e.def.weapon === 'srifle' ? 'rifle' : e.def.weapon, swing: e.aimT > 0 && e.def.weapon === 'bat' ? 1 - e.aimT / e.def.telegraph : 0,
     ring: e.retreating ? '#f0c040' : '#ff3b30', ringW: e.def.boss ? 4 : 2.5, dashed: e.retreating, flash: e.hitT > 0 ? e.hitT : 0,
   });
   if (e.def.boss) { ctx.strokeStyle = '#d4af37'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(e.x, e.y, e.radius + 8, 0, Math.PI * 2); ctx.stroke(); }
   if (e.trapped > 0) { e.trapped -= 1 / 60; ctx.strokeStyle = '#9aa0a6'; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(e.x, e.y + 6, 8, 0, Math.PI * 2); ctx.stroke(); }
-  if (e.muzzle > 0) muzzleFlash(ctx, e.x + Math.cos(e.angle) * (e.def.weapon === 'rifle' ? 34 : 24), e.y + Math.sin(e.angle) * (e.def.weapon === 'rifle' ? 34 : 24), e.angle);
+  if (e.muzzle > 0) muzzleFlash(ctx, e.x + Math.cos(e.angle) * (e.def.weapon === 'rifle' || e.def.weapon === 'srifle' ? 34 : 24), e.y + Math.sin(e.angle) * (e.def.weapon === 'rifle' || e.def.weapon === 'srifle' ? 34 : 24), e.angle);
 }
 
 function drawLighting(ctx, dk, ox, oy, z) {
@@ -1203,6 +1295,16 @@ function drawFireflies(ctx, t, dk, x0, y0, x1, y1) {
     ctx.fillStyle = g; ctx.beginPath(); ctx.arc(px, py, 7, 0, Math.PI * 2); ctx.fill();
   }
   ctx.restore();
+}
+
+function drawCalf(ctx, x, y, t) {
+  const bob = Math.sin(t * 3) * 1;
+  ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(x + 2, y + 6, 18, 8, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#f2ece0'; ctx.beginPath(); ctx.ellipse(x, y + bob, 16, 9, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#3a2a1a'; ctx.beginPath(); ctx.ellipse(x - 5, y - 2 + bob, 6, 5, 0.4, 0, Math.PI * 2); ctx.ellipse(x + 6, y + 3 + bob, 4, 3, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#e8d8c8'; ctx.beginPath(); ctx.ellipse(x + 18, y - 1, 6, 5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#d4af37'; ctx.beginPath(); ctx.arc(x + 14, y + 4, 2.2, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#ffd166'; ctx.font = 'bold 12px system-ui'; ctx.textAlign = 'center'; ctx.fillText('?', x, y - 16 + Math.sin(t * 4) * 2);
 }
 
 function drawDog(ctx, x, y, t) {

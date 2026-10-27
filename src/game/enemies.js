@@ -125,7 +125,7 @@ function goalCellFor(e, p) {
     const g = entryGoal();
     if (g) return g;
   }
-  if (e.type === 'gunman' && e.cover) return { cx: e.cover.cx, cy: e.cover.cy };
+  if ((e.type === 'gunman' || e.type === 'sniper') && e.cover) return { cx: e.cover.cx, cy: e.cover.cy };
   return { cx: Math.floor(p.x / TILE), cy: Math.floor(p.y / TILE) };
 }
 
@@ -182,13 +182,108 @@ function doFire(e, p) {
     if (inFloodlight(e.x, e.y)) spread *= 1.5; // glare
     if (G.player.dodgeT > 0) spread *= 1.3;
     const a = e.aimAngle + (Math.random() - 0.5) * 2 * spread;
-    spawnBullet({ x: e.x + Math.cos(a) * 14, y: e.y + Math.sin(a) * 14, angle: a, speed: def.weapon === 'rifle' ? 820 : 640, dmg: def.damage, owner: 'enemy', range: def.range + 80, source: e });
-    const pd = dist(e.x, e.y, p.x, p.y);
-    sfx(def.weapon === 'rifle' ? 'rifle' : 'enemyShot', { x: e.x, y: e.y });
+    spawnBullet({ x: e.x + Math.cos(a) * 14, y: e.y + Math.sin(a) * 14, angle: a, speed: def.weapon === 'srifle' ? 1150 : def.weapon === 'rifle' ? 820 : 640, dmg: def.damage, owner: 'enemy', range: def.range + 80, source: e });
+    sfx(def.weapon === 'rifle' || def.weapon === 'srifle' ? 'rifle' : 'enemyShot', { x: e.x, y: e.y });
     e.spotted = Math.max(e.spotted, 1.6); // muzzle flash reveals the shooter
     e.muzzle = 0.07;
   }
   e.fireCd = def.fireCooldown * rand(0.8, 1.25) * (e.inspired ? 0.75 : 1);
+}
+
+/* ---------------- ram truck ---------------- */
+// Drives up the road to the gate (or the nearest weak opening), smashes it,
+// drops off a couple of attackers and leaves. Can be shot up and destroyed.
+function truckCost(cx, cy) {
+  const m = G.map;
+  if (m.getSolid(cx, cy) !== 0) return Infinity;
+  const b = m.blockerAt(cx, cy);
+  if (b && (b.kind === 'cover' || b.blocksMove('enemy'))) return Infinity;
+  let pen = 0;
+  for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (m.getSolid(cx + dx, cy + dy) !== 0) pen += 4;
+  return pen;
+}
+
+function truckTarget(e, m) {
+  if (e.phase === 'leave') return nearestExit(e);
+  const g = m.homeInfo && m.homeInfo.gate;
+  if (g) return { x: g.cx * TILE + 16, y: (g.cy - 1) * TILE + 16, cells: [[g.cx, g.cy], [g.cx - 1, g.cy], [g.cx + 1, g.cy]] };
+  // No gate: aim for the weakest opening of the home.
+  let best = null, bs = Infinity;
+  for (const b of m.blockers.values ? m.blockers.values() : []) {
+    if (b.kind === 'cover' || !b.blocksMove('enemy')) continue;
+    const st = openingStrength(b);
+    if (st < bs) { bs = st; best = b; }
+  }
+  if (!best) return null;
+  return { x: best.cx * TILE + 16, y: best.cy * TILE + 16, cells: [[best.cx, best.cy]] };
+}
+
+function updateTruck(e, dt, p, m) {
+  e.phase = e.phase || 'drive';
+  e.ramCd = (e.ramCd || 0) - dt;
+  e.engineT = (e.engineT || 0) - dt;
+  if (e.engineT <= 0) { e.engineT = 2.2; sfx('car', { x: e.x, y: e.y, vol: 0.7 }); }
+  if (e.phase === 'unload') {
+    e.unloadT -= dt;
+    if (e.unloadT <= 0) { e.phase = 'leave'; e.path = null; }
+    return;
+  }
+  const t = truckTarget(e, m);
+  if (!t) { e.phase = 'leave'; return; }
+  if (!e.path || e.pathT <= 0) {
+    e.pathT = 1.5;
+    e.path = m.findPath(Math.floor(e.x / TILE), Math.floor(e.y / TILE), Math.floor(t.x / TILE), Math.floor(t.y / TILE), truckCost, 6000) || [];
+  }
+  const td = dist(e.x, e.y, t.x, t.y);
+  if (e.phase === 'drive' && td < 30) return truckRam(e, t, m);
+  if (e.phase === 'leave' && td < 50) { e.gone = true; G.events.emit('enemyFled', e); return; }
+  const n = e.path[0];
+  const tx = n ? n.cx * TILE + 16 : t.x, ty = n ? n.cy * TILE + 16 : t.y;
+  if (n && dist(e.x, e.y, tx, ty) < 10) { e.path.shift(); return; }
+  e.spd = Math.min(e.def.speed, (e.spd || 0) + 90 * dt);
+  const want = Math.atan2(ty - e.y, tx - e.x);
+  const turn = angleDiff(e.angle, want);
+  e.angle += Math.max(-dt * 4, Math.min(dt * 4, turn));
+  if (Math.abs(turn) > 1.2) e.spd = Math.min(e.spd, 50); // slow for sharp turns
+  const ox = e.x, oy = e.y;
+  m.moveCircle(e, Math.cos(e.angle) * e.spd * dt, Math.sin(e.angle) * e.spd * dt, 'enemy');
+  const moved = dist(ox, oy, e.x, e.y);
+  e.stuckT = moved < e.spd * dt * 0.25 ? (e.stuckT || 0) + dt : 0;
+  if (e.stuckT > 3) {
+    e.stuckT = 0;
+    if (e.phase === 'leave') { e.gone = true; G.events.emit('enemyFled', e); return; }
+    if (td < 120) return truckRam(e, t, m);
+    e.path = null; e.spd = 0;
+  }
+  // Running someone over.
+  const pd = dist(e.x, e.y, p.x, p.y);
+  if (pd < e.radius + p.radius + 2 && e.ramCd <= 0 && e.spd > 50 && !p.dead) {
+    e.ramCd = 1.2;
+    if (damagePlayer(28, e.x, e.y, 'melee')) { p.x += Math.cos(e.angle) * 26; p.y += Math.sin(e.angle) * 26; m.pushOut(p, p.radius, 'player'); shake(6); }
+  }
+}
+
+function truckRam(e, t, m) {
+  for (const [cx, cy] of t.cells) {
+    const b = m.blockerAt(cx, cy);
+    if (b && b.kind !== 'cover' && b.blocksMove('enemy')) { b.damage(e.def.breachDamage); G.events.emit('breachHit', b); }
+  }
+  sfx('crash', { x: t.x, y: t.y });
+  shake(8);
+  spawnParticles(t.x, t.y + 16, '#a0784a', 16, 160);
+  // Drop off the passengers.
+  const types = ['gunman', 'enforcer'];
+  if (G.s.difficulty === 'hard' || Math.random() < 0.4) types.push('scout');
+  types.forEach((ty, i) => {
+    const a = e.angle + Math.PI / 2 * (i % 2 ? 1 : -1);
+    const x = e.x + Math.cos(a) * 34 - Math.cos(e.angle) * 10, y = e.y + Math.sin(a) * 34 - Math.sin(e.angle) * 10;
+    const q = spawnEnemy(ty, x, y, { hpMult: e.hpMultApplied });
+    m.pushOut(q, q.radius, 'enemy');
+    q.alerted = true;
+    if (G.siege) G.siege.spawned++;
+  });
+  G.events.emit('truckRammed', e);
+  e.phase = 'unload'; e.unloadT = 1.6; e.spd = 0; e.path = null;
 }
 
 export function updateEnemies(dt) {
@@ -201,7 +296,7 @@ export function updateEnemies(dt) {
   for (const e of alive) {
     e.inspired = !e.def.boss && bosses.some((b) => dist(b.x, b.y, e.x, e.y) < 240);
     if (camera) e.spotted = Math.max(e.spotted, 0.4);
-    checkTrap(e);
+    if (!e.def.vehicle) checkTrap(e);
   }
 
   for (const e of G.enemies) {
@@ -215,6 +310,7 @@ export function updateEnemies(dt) {
       m.moveCircle(e, e.kx * dt, e.ky * dt, 'enemy');
       e.kx *= Math.pow(0.002, dt); e.ky *= Math.pow(0.002, dt);
     }
+    if (e.def.vehicle) { updateTruck(e, dt, p, m); continue; }
     if (e.stun > 0) { e.aimT = 0; continue; }
 
     const pd = dist(e.x, e.y, p.x, p.y);
@@ -231,7 +327,7 @@ export function updateEnemies(dt) {
     }
 
     // Perception
-    const canSee = pd < 520 && m.los(e.x, e.y, p.x, p.y);
+    const canSee = pd < Math.max(520, e.def.range) && m.los(e.x, e.y, p.x, p.y);
     if (!e.alerted && !p.dead) {
       const lit = isLit(p.x, p.y) || p.muzzle > 0;
       const base = isNight() && !lit ? 140 : 240;
@@ -322,7 +418,7 @@ export function updateEnemies(dt) {
         e.angle = a; e.walkPhase += dt * 9;
       } else followPath(e, dt, e.def.speed);
     } else {
-      if (e.type === 'gunman' && (e.coverT <= 0 || (e.cover && !m.los(e.cover.x, e.cover.y, p.x, p.y)))) {
+      if ((e.type === 'gunman' || e.type === 'sniper') && (e.coverT <= 0 || (e.cover && !m.los(e.cover.x, e.cover.y, p.x, p.y)))) {
         e.cover = findCover(e, p);
         e.coverT = 3.5 + Math.random() * 1.5;
       }

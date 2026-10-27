@@ -17,7 +17,7 @@ export class Door {
     this.id = id; this.cx = cx; this.cy = cy; this.rec = rec; this.label = label; this.vertical = vertical;
     this.hitT = 0;
   }
-  get maxHp() { return DOOR_BASE_HP + (this.rec.reinforced ? Math.round(DOOR_BRACE_HP * defenseMult()) : 0); }
+  get maxHp() { return (this.rec.baseHp || DOOR_BASE_HP) + (this.rec.reinforced ? Math.round(DOOR_BRACE_HP * defenseMult()) : 0); }
   get broken() { return this.rec.hp <= 0; }
   get passable() { return this.broken || this.rec.open; }
   blocksMove(who) { return who === 'npc' ? false : !this.passable; }

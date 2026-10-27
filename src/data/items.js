@@ -90,6 +90,46 @@ export const ITEMS = {
     name: 'Burner Phone', icon: '📱', cat: 'Story', cap: 1, sell: 0, story: true,
     desc: 'Taken from Sal Benedetto. One saved number, labeled only "L".',
   },
+  ledger: {
+    name: 'Leo\'s Ledger', icon: '📒', cat: 'Story', cap: 1, sell: 0, story: true,
+    desc: 'Vinnie Vescari\'s copy of the family books — every payoff, every account, every name.',
+  },
+  fishing_rod: {
+    name: 'Fishing Rod', icon: '🎣', cat: 'Tools', cap: 1, sell: 10,
+    desc: 'Stand at the water\'s edge and press ACT to cast. Fish can be sold, cooked, or delivered.',
+  },
+  fish: {
+    name: 'Fresh Fish', icon: '🐟', cat: 'Food', cap: 12, sell: 6,
+    desc: 'Caught with a rod. Cook it at a stove, sell it, or deliver it.',
+  },
+  vegetables: {
+    name: 'Vegetables', icon: '🥕', cat: 'Food', cap: 20, sell: 3,
+    desc: 'Picked on the farm. Cook them at a stove or deliver them to the co-op.',
+  },
+  fish_fry: {
+    name: 'Fish Fry', icon: '🍤', cat: 'Food', cap: 6, heal: 35, stamina: 100, sell: 8, quick: true, food: true,
+    desc: 'Cooked from 2 fish. Restores 35 health and refills stamina.',
+  },
+  veg_stew: {
+    name: 'Garden Stew', icon: '🍲', cat: 'Food', cap: 6, heal: 30, stamina: 100, regenBuff: 150, sell: 7, quick: true, food: true,
+    desc: 'Cooked from 3 vegetables. Restores 30 health, refills stamina, faster stamina for 2½ minutes.',
+  },
+  hearty_meal: {
+    name: 'Hearty Supper', icon: '🍽', cat: 'Food', cap: 4, heal: 60, stamina: 100, regenBuff: 180, wellFed: 240, sell: 12, quick: true, food: true,
+    desc: 'Cooked from 1 fish + 2 vegetables + 1 sandwich. Restores 60 health, and you are Well Fed for 4 minutes (+25 max stamina, +10% max health).',
+  },
+  scope: {
+    name: 'Rifle Scope', icon: '🔭', cat: 'Upgrade', cap: 1, sell: 40, install: 'scope',
+    desc: 'Fits the hunting rifle: half the spread and 30% more range.',
+  },
+  choke: {
+    name: 'Shotgun Choke', icon: '◎', cat: 'Upgrade', cap: 1, sell: 30, install: 'choke',
+    desc: 'Fits the pump shotgun: tighter pellet spread and 25% more range.',
+  },
+  suppressor: {
+    name: 'Pistol Suppressor', icon: '🔇', cat: 'Upgrade', cap: 1, sell: 45, install: 'suppressor',
+    desc: 'Fits the handgun: shots are much quieter — distant attackers aren\'t alerted, and gunfire in town doesn\'t raise your Heat.',
+  },
   note: {
     name: 'Folded Note', icon: '✉', cat: 'Story', cap: 1, sell: 0, story: true,
     desc: 'Found on the big man after the attack. "Pine Hollow. The cabin off Route 9."',
@@ -113,6 +153,8 @@ export const SHOPS = {
       { id: 'shells', qty: 8, price: 12 },
       { id: 'rifle', qty: 1, price: 220 },
       { id: 'rifle_ammo', qty: 10, price: 15 },
+      { id: 'fishing_rod', qty: 1, price: 30 },
+      { id: 'suppressor', qty: 1, price: 120 },
     ],
   },
   gus: {
@@ -129,6 +171,8 @@ export const SHOPS = {
       { id: 'shutter_kit', qty: 1, price: 55 },
       { id: 'bear_trap', qty: 1, price: 30 },
       { id: 'camera_kit', qty: 1, price: 90 },
+      { id: 'choke', qty: 1, price: 80 },
+      { id: 'scope', qty: 1, price: 110 },
     ],
   },
 };
@@ -151,5 +195,20 @@ SHOPS.rosa = {
     { id: 'door_brace', qty: 1, price: 70 }, { id: 'shutter_kit', qty: 1, price: 55 }, { id: 'sandbags', qty: 1, price: 35 },
     { id: 'bear_trap', qty: 1, price: 30 }, { id: 'floodlight_kit', qty: 1, price: 60 }, { id: 'alarm_kit', qty: 1, price: 75 },
     { id: 'camera_kit', qty: 1, price: 90 },
+    { id: 'fishing_rod', qty: 1, price: 30 }, { id: 'scope', qty: 1, price: 110 }, { id: 'choke', qty: 1, price: 80 }, { id: 'suppressor', qty: 1, price: 120 },
   ],
 };
+
+// Chapter 3: the feed store at Kettle Crossing.
+SHOPS.bo = {
+  name: 'Lindqvist Feed & Supply',
+  owner: 'bo',
+  stock: [...SHOPS.rosa.stock.map((s) => ({ ...s, price: Math.round(s.price * (s.id === 'wood' ? 0.8 : 1)) }))],
+};
+
+// Stove recipes (cooking).
+export const COOK_RECIPES = [
+  { id: 'fish_fry', label: 'Fish Fry', needs: { fish: 2 } },
+  { id: 'veg_stew', label: 'Garden Stew', needs: { vegetables: 3 } },
+  { id: 'hearty_meal', label: 'Hearty Supper', needs: { fish: 1, vegetables: 2, sandwich: 1 } },
+];

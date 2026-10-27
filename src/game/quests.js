@@ -15,6 +15,7 @@ import { choose } from '../util.js';
 import { hasSkill } from './state.js';
 import { ITEMS } from '../data/items.js';
 import { scheduleSpot } from './npcs.js';
+import { chapter } from './chapters.js';
 
 const T = (x, y) => ({ x: x * TILE, y: y * TILE });
 
@@ -95,6 +96,56 @@ export const QUESTS = {
     done: [{ who: 'Pete Kowalski', text: 'BISCUIT! Oh, buddy. Frank, I owe you big. Here — and I got you a box of shells from Rosa\'s.' }],
     reward: { money: 40, xp: 40, rel: 14, jp: ['survivor', 6], items: { shells: 16 } },
   },
+  ingrid_calf: {
+    npc: 'ingrid', map: 'farm', type: 'find', title: 'The Runaway Calf', animal: 'calf',
+    spots: [[62.5, 44.5], [4.5, 46.5], [44.5, 47.5], [70.5, 30.5]], label: 'Clover the calf',
+    objective: 'Find Ingrid\'s calf, Clover, somewhere out past the fields.',
+    offer: [
+      { who: 'Ingrid Haugen', text: 'Clover got through the wire again. Six hundred pounds of stupid with a bell on.' },
+      { who: 'Ingrid Haugen', text: 'Coyotes are bad this year. Find her before they do and I\'ll make it right.' },
+    ],
+    found: 'Clover moos at you, offended, then follows you home like it was her idea.',
+    done: [
+      { who: 'Ingrid Haugen', text: 'There\'s my idiot. Thank you, Frank.' },
+      { who: 'Ingrid Haugen', text: 'Pa\'s old hunting scope. Bolt it on that rifle of yours. Out here the trouble comes from a long way off.' },
+    ],
+    reward: { money: 30, xp: 45, rel: 14, jp: ['survivor', 8], items: { scope: 1 } },
+  },
+  bo_fish: {
+    npc: 'bo', map: 'farm', type: 'bring', title: 'Friday Fish Fry', needItem: 'fish', needCount: 3,
+    objective: 'Catch 3 fish at the pond for Bo\'s Friday fish fry (needs a Fishing Rod).',
+    offer: [
+      { who: 'Bo Lindqvist', text: 'Whole town comes out for the Friday fish fry, and my supplier in Green Bay flaked.' },
+      { who: 'Bo Lindqvist', text: 'Three fish from the pond would save my reputation. You have a rod? I sell rods. Funny how that works.' },
+    ],
+    done: [{ who: 'Bo Lindqvist', text: 'Look at these! Here, for the trouble — and a choke for that scattergun. Tightens the spread.' }],
+    reward: { money: 55, xp: 35, rel: 12, jp: ['neighbor', 6], items: { choke: 1 } },
+  },
+  tess_scale: {
+    npc: 'tess', map: 'farm', type: 'repair', title: 'Crooked Scale',
+    target: [50.5, 12.6], label: 'Fix the co-op truck scale',
+    objective: 'Repair the truck scale outside the Grain Co-op (Toolkit).',
+    offer: [
+      { who: 'Tess Albright', text: 'The truck scale\'s reading forty pounds heavy. Half the county thinks I\'m robbing them.' },
+      { who: 'Tess Albright', text: 'You\'ve got a toolkit. I\'ve got a problem. Let\'s make a deal.' },
+    ],
+    found: 'The needle settles on zero. Honest weight again.',
+    done: [{ who: 'Tess Albright', text: 'Dead on. You\'re hired for life, whether you like it or not. Here — and take some shutters from the back.' }],
+    reward: { money: 60, xp: 45, rel: 14, jp: ['handyman', 8], items: { shutter_kit: 1 } },
+  },
+  ruth_supper: {
+    npc: 'ruth', map: 'farm', type: 'bring', title: 'Supper Like Harold Made', needItem: 'vegetables', needCount: 4, companion: true,
+    objective: 'Pick 4 vegetables from the farm garden for Ruth.',
+    offer: [
+      { who: 'Ruth Calloway', text: 'Harold used to make a garden stew every fall. I never wrote it down. I think I remember it.' },
+      { who: 'Ruth Calloway', text: 'Bring me four good vegetables from that garden and I\'ll try. Don\'t expect miracles.' },
+    ],
+    done: [
+      { who: 'Ruth Calloway', text: 'It\'s not his. But it\'s close. ...Thank you, Frank. For bringing me along.' },
+      { who: 'Ruth Calloway', text: 'I made extra. Take it for the long nights.' },
+    ],
+    reward: { money: 0, xp: 40, rel: 10, jp: ['neighbor', 8], items: { hearty_meal: 2, medkit: 1 } },
+  },
 };
 
 const qstate = () => G.s.quests || (G.s.quests = {});
@@ -102,10 +153,11 @@ const qstate = () => G.s.quests || (G.s.quests = {});
 /** A favor this NPC can offer right now, or null. */
 export function questOffer(npc) {
   const st = qstate();
+  const maps = chapter().maps;
   for (const [id, q] of Object.entries(QUESTS)) {
-    if (q.npc !== npc || st[id]) continue;
+    if (q.npc !== npc || st[id] || !maps.includes(q.map)) continue;
     if (relOf(npc) < 1) return null;
-    if (Object.entries(st).some(([qid, s]) => QUESTS[qid] && QUESTS[qid].npc === npc && s.state !== 'done')) return null;
+    if (Object.entries(st).some(([qid, s]) => QUESTS[qid] && QUESTS[qid].npc === npc && maps.includes(QUESTS[qid].map) && s.state !== 'done')) return null;
     return id;
   }
   return null;
@@ -135,7 +187,8 @@ function startQuest(id) {
 }
 
 export function activeQuests() {
-  return Object.entries(qstate()).filter(([id, s]) => QUESTS[id] && s.state !== 'done').map(([id, s]) => ({ id, ...QUESTS[id], rec: s }));
+  const maps = chapter().maps;
+  return Object.entries(qstate()).filter(([id, s]) => QUESTS[id] && s.state !== 'done' && maps.includes(QUESTS[id].map)).map(([id, s]) => ({ id, ...QUESTS[id], rec: s }));
 }
 
 export function questHint(q) {
@@ -149,7 +202,7 @@ export function questProps(mapId) {
   const out = [];
   for (const q of activeQuests()) {
     if (q.map !== mapId || q.rec.state !== 'active') continue;
-    if (q.type === 'find') out.push({ id: 'q_' + q.id, kind: 'quest_find', quest: q.id, ...T(...q.rec.spot), r: 46, label: q.dog ? 'Call Biscuit' : 'Search here', dog: q.dog });
+    if (q.type === 'find') out.push({ id: 'q_' + q.id, kind: 'quest_find', quest: q.id, ...T(...q.rec.spot), r: 46, label: q.dog ? 'Call Biscuit' : q.animal === 'calf' ? 'Lead Clover home' : 'Search here', dog: q.dog, animal: q.animal });
     else if (q.type === 'deliver') out.push({ id: 'q_' + q.id, kind: 'quest_done', quest: q.id, ...T(...q.target), r: 46, label: q.label });
     else if (q.type === 'chop') out.push({ id: 'q_' + q.id, kind: 'quest_chop', quest: q.id, ...T(...q.target), r: 52, label: `${q.label} (${q.chops - q.rec.progress} swings left)` });
     else if (q.type === 'repair') out.push({ id: 'q_' + q.id, kind: 'quest_repair', quest: q.id, ...T(...q.target), r: 48, label: q.label });
@@ -161,7 +214,7 @@ export function questWaypoint() {
   for (const q of activeQuests()) {
     if (q.rec.state === 'return' || q.type === 'bring') {
       if (q.type === 'bring' && count(q.needItem) < q.needCount) continue;
-      const spot = scheduleSpot(NPCS[q.npc], G.s.time.minute);
+      const spot = q.companion ? { map: G.map.id, pt: companionSpot() } : scheduleSpot(NPCS[q.npc], G.s.time.minute);
       const pt = G.maps[spot.map] && G.maps[spot.map].points[spot.pt];
       if (pt) return { map: spot.map, ...pt, label: NPCS[q.npc].name.split(' ')[0].replace(/"/g, '') };
       continue;
@@ -170,6 +223,11 @@ export function questWaypoint() {
     if (pt) return { map: q.map, ...T(...pt), label: q.title };
   }
   return null;
+}
+
+function companionSpot() {
+  const r = G.npcs.find((n) => n.id === 'ruth');
+  return r ? r.spot : 'ruth_c_day';
 }
 
 function progressDone(id) {

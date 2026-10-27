@@ -7,6 +7,7 @@ import { damagePlayer } from './player.js';
 import { addItem, count } from './inventory.js';
 import { addMoney } from './progression.js';
 import { toast } from '../ui/hud.js';
+import { allyBulletCheck } from './ally.js';
 
 const MAX_PARTICLES = 220;
 
@@ -46,7 +47,7 @@ export function damageEnemy(e, dmg, angle, src, knock = 90) {
   e.hp -= dmg;
   e.hitT = 0.15;
   e.lastHit = 0;
-  e.kx += Math.cos(angle) * knock; e.ky += Math.sin(angle) * knock;
+  if (!e.def.vehicle) { e.kx += Math.cos(angle) * knock; e.ky += Math.sin(angle) * knock; }
   if (!e.alerted) G.events.emit('enemyAlert', e, 'hurt');
   spawnParticles(e.x, e.y, '#b0302a', 5, 110);
   addFloater(e.x + rand(-6, 6), e.y - 20, `${Math.round(dmg)}`, '#ffd166');
@@ -57,6 +58,11 @@ export function damageEnemy(e, dmg, angle, src, knock = 90) {
     e.dead = true;
     e.deadT = 0;
     const def = e.def;
+    if (def.vehicle) {
+      spawnParticles(e.x, e.y, '#ff9f1c', 18, 200); shake(6); sfx('explode', { x: e.x, y: e.y });
+      G.events.emit('enemyKilled', e);
+      return;
+    }
     const cash = randInt(def.cash[0], def.cash[1]);
     addPickup('cash', e.x + rand(-8, 8), e.y + rand(-8, 8), cash);
     if (Math.random() < 0.85) addPickup('ammo', e.x + rand(-10, 10), e.y + rand(-10, 10), randInt(def.ammoDrop[0], def.ammoDrop[1]));
@@ -92,7 +98,7 @@ export function updateBullets(dt) {
           break;
         }
       }
-      if (b.owner === 'player') {
+      if (b.owner === 'player' || b.owner === 'ally') {
         for (const e of G.enemies) {
           if (e.dead || e.gone) continue;
           const r = e.radius + 2;
@@ -105,6 +111,7 @@ export function updateBullets(dt) {
           }
         }
       } else if (b.owner === 'enemy') {
+        if (allyBulletCheck(b)) { b.dead = true; break; }
         const p = G.player;
         const r = p.radius + 1;
         if (!p.dead && (p.x - b.x) ** 2 + (p.y - b.y) ** 2 < r * r) {
@@ -160,6 +167,9 @@ function collect(pk) {
   } else if (pk.kind === 'note' || pk.kind === 'burner') {
     addItem(pk.kind, 1, true);
     G.events.emit(pk.kind === 'note' ? 'noteFound' : 'burnerFound');
+  } else if (pk.kind === 'ledger') {
+    addItem('ledger', 1, true);
+    G.events.emit('ledgerFound');
   }
   pk.taken = true;
   sfx(pk.kind === 'cash' ? 'coin' : 'pickup');

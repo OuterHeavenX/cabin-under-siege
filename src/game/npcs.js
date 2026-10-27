@@ -12,7 +12,8 @@ import { openNpcMenu } from '../ui/menus.js';
 import { toast } from '../ui/hud.js';
 import { hasSkill } from './state.js';
 import { dailyAllow } from './progression.js';
-import { chapter, workMapId } from './chapters.js';
+import { chapter, workMapId, homeMapId } from './chapters.js';
+import { ruthJoined, companionSchedule, updateAlly, COMPANION_LINES } from './ally.js';
 import { questOffer, questTalk } from './quests.js';
 
 function npcCost(cx, cy) {
@@ -24,6 +25,7 @@ function npcCost(cx, cy) {
 }
 
 export function scheduleSpot(def, minute) {
+  if (def === NPCS.ruth && G.s && G.s.chapter > 1 && ruthJoined()) return { map: homeMapId(), pt: companionSchedule(minute) };
   for (const [a, b, map, pt] of def.schedule) if (minute >= a && minute < b) return { map, pt };
   return { map: def.home[0], pt: def.home[1] };
 }
@@ -34,7 +36,9 @@ export function spawnNpcs() {
   const m = G.map;
   const minute = G.s.time.minute;
   for (const [id, def] of Object.entries(NPCS)) {
-    if (def.map !== m.id) continue;
+    const followsYou = id === 'ruth' && G.s.chapter > 1 && ruthJoined() && m.id === homeMapId();
+    if (def.map !== m.id && !followsYou) continue;
+    if (id === 'ruth' && G.s.chapter > 1 && !followsYou) continue;
     const spot = scheduleSpot(def, minute);
     const p = m.points[spot.pt];
     G.npcs.push({ id, def, named: true, x: p.x, y: p.y, radius: 10, angle: Math.PI / 2, spot: spot.pt, path: null, walkPhase: 0, idleT: 0 });
@@ -47,6 +51,10 @@ export function spawnNpcs() {
     G.npcs.push({ id: 'stranger', def: { name: 'Man in a Grey Coat', body: '#3b3f46', hair: '#111', skin: '#d6a98a' }, stranger: true,
       x: m.points.stranger.x, y: m.points.stranger.y, radius: 10, angle: Math.PI / 2, path: null, walkPhase: 0, spot: 'stranger' });
   }
+  if (m.points.deputy) {
+    G.npcs.push({ id: 'deputy', def: { name: 'Deputy Carl Mott', body: '#6b5a3a', hair: '#3a2a1a', skin: '#e0b08a', hat: true }, deputy: true,
+      x: m.points.deputy.x, y: m.points.deputy.y, radius: 10, angle: -Math.PI / 2, path: null, walkPhase: 0, spot: 'deputy' });
+  }
 }
 
 export function npcPresent(n) {
@@ -58,6 +66,7 @@ export function npcPresent(n) {
     const signActive = s && !s.done && s.day === G.s.time.day;
     return (storyWants || signActive) && minute >= 8 * 60 && minute < 19 * 60;
   }
+  if (n.deputy) return G.s.story.step === 'ch3_deputy' && minute >= 8 * 60 && minute < 19 * 60;
   return true;
 }
 
@@ -67,6 +76,7 @@ export function updateNpcs(dt) {
   for (const n of G.npcs) {
     n.present = npcPresent(n);
     if (!n.present) continue;
+    if (n.id === 'ruth' && updateAlly(dt)) continue;
     let target = null;
     if (n.named) {
       const spot = scheduleSpot(n.def, minute);
@@ -113,6 +123,7 @@ export function interactNpc(n) {
     return;
   }
   if (n.stranger) { G.events.emit('talkStranger', n); return; }
+  if (n.deputy) { G.events.emit('talkDeputy', n); return; }
   // Story conversations take priority over the menu.
   const story = storyDialogue(n.id);
   if (story) { playDialogue(story.lines, story.onEnd); firstTalkBonus(n.id); return; }
@@ -132,13 +143,13 @@ export function chatWith(id) {
   const def = NPCS[id];
   const lv = relOf(id);
   const lines = [];
-  const pool = [...def.idle];
+  const pool = id === 'ruth' && G.s.chapter > 1 ? [...COMPANION_LINES] : [...def.idle];
   if (hasSkill('familiar_face') || lv >= 3) pool.push(...def.friendly);
   lines.push({ who: def.name, text: choose(pool) });
   const w = G.s.world;
   const ch = chapter();
   const first = def.name.split(' ')[0].replace(/"/g, '');
-  if (id === ch.neighbor) {
+  if (id === ch.neighbor || (id === 'ruth' && G.s.chapter > 1)) {
     if (lv >= 2 && siegeTonight()) {
       lines.push({ who: def.name, text: id === 'ruth'
         ? 'Frank. I saw a car idling by your mailbox with its lights off. Twice. I\'ve got a bad feeling about tonight.'

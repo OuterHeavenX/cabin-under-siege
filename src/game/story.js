@@ -42,7 +42,18 @@ export const STEPS = {
   ch2_siege: { obj: 'Sal Benedetto is coming. Be home by 10 PM — and survive.' },
   ch2_phone: { obj: 'Search Sal for anything useful.' },
   ch2_marcus_truth: { obj: 'Show Marcus what you found.' },
-  ch2_free: { obj: 'Chapter 2 complete. Work, fortify, and stay alive. (Chapter 3 is planned for a future update.)' },
+  ch2_free: { obj: 'Chapter 2 complete. Keep playing — or, when you\'re ready, use your car at the house to leave for the Wisconsin farm (Chapter 3).' },
+  // ---- Chapter 3: The Wisconsin Farm ----
+  ch3_arrive: { obj: 'Look around the farm — step into the farmhouse.' },
+  ch3_meet_ingrid: { obj: 'Meet your neighbor at the dairy across the pasture.' },
+  ch3_find_work: { obj: 'Find Tess Albright at the Grain Co-op in Kettle Crossing.' },
+  ch3_job: { obj: 'Take and complete a job from the co-op board.' },
+  ch3_deputy: { obj: 'A sheriff\'s deputy is waiting at your farmhouse (daytime).' },
+  ch3_fortify: { obj: 'Repair the farm gate (both halves) and install two defenses.' },
+  ch3_siege: { obj: 'Vinnie Vescari is coming. Be home by 10 PM — and hold the farm.' },
+  ch3_ledger: { obj: 'Search Vinnie for whatever he was carrying.' },
+  ch3_ingrid_truth: { obj: 'Show Ingrid what you found.' },
+  ch3_free: { obj: 'Chapter 3 complete. Work, fortify, and stay alive. (Chapter 4 — the Vescari estate — is planned for a future update.)' },
 };
 
 export function objectiveText() {
@@ -109,6 +120,20 @@ export function storyWaypoint() {
       return pk ? { map: G.map.id, x: pk.x, y: pk.y, label: 'Phone' } : null;
     }
     case 'ch2_marcus_truth': return { ...npcPoint('marcus'), label: 'Marcus' };
+    case 'ch2_free': return G.s.job ? jobWaypoint() : null;
+    case 'ch3_arrive': return { map: 'farm', ...G.maps.farm.points.cabin_front, label: 'Farmhouse' };
+    case 'ch3_meet_ingrid': return { ...npcPoint('ingrid'), label: 'Ingrid' };
+    case 'ch3_find_work': return { ...npcPoint('tess'), label: 'Tess' };
+    case 'ch3_job': {
+      if (G.s.job) return jobWaypoint();
+      const jb = G.maps.farm.props.find((p) => p.id === 'jobboard');
+      return { map: 'farm', x: jb.x, y: jb.y, label: 'Job board' };
+    }
+    case 'ch3_deputy': return { map: 'farm', ...G.maps.farm.points.deputy, label: 'Deputy' };
+    case 'ch3_fortify': return { map: 'farm', ...G.maps.farm.points.gate, label: 'Gate' };
+    case 'ch3_siege': return { map: 'farm', ...G.maps.farm.points.cabin_in, label: 'Farmhouse' };
+    case 'ch3_ledger': { const pk = G.pickups.find((p) => p.kind === 'ledger'); return pk ? { map: G.map.id, x: pk.x, y: pk.y, label: 'Ledger' } : null; }
+    case 'ch3_ingrid_truth': return { ...npcPoint('ingrid'), label: 'Ingrid' };
     default: return G.s.job ? jobWaypoint() : null;
   }
 }
@@ -200,7 +225,11 @@ export function storyDialogue(id) {
         { who: 'Marcus Bell', text: 'The Vescaris don\'t send a Benedetto for a nobody. You know something Leo is afraid of.' },
         { who: ME, text: 'I know where the money goes. All of it.' },
         { who: 'Marcus Bell', text: 'Then you can\'t outrun them. Not forever. But you can outlast them — with the right friends and the right place.' },
-        { who: 'Marcus Bell', text: 'There\'s a farm in Wisconsin. Off every book I ever kept. When you\'re ready, I\'ll make a call.' },
+        { who: 'Marcus Bell', text: 'There\'s a farm in Wisconsin. Off every book I ever kept. A woman named Ingrid Haugen keeps an eye on it. Want me to make the call?',
+          choices: [
+            { text: '"Make the call. I trust you."', effect: () => { G.s.choices.marcusHelp = true; return [{ who: 'Marcus Bell', text: 'Good. Ingrid will be expecting you. She\'ll have things ready.' }]; } },
+            { text: '"I\'ll find my own way. Fewer people who know, the better."', effect: () => { G.s.choices.marcusHelp = false; return [{ who: 'Marcus Bell', text: 'Can\'t argue with the logic. The farm\'s still yours — but Ingrid won\'t know you from Adam.' }]; } },
+          ] },
       ],
       onEnd: () => {
         st.done[2] = true;
@@ -211,6 +240,57 @@ export function storyDialogue(id) {
         addXP(120, 'Chapter 2 complete');
         saveGame('chapter');
         showChapterEnd(2);
+      },
+    };
+  }
+  if (id === 'ingrid' && st.step === 'ch3_meet_ingrid') {
+    const helped = G.s.choices.marcusHelp;
+    return {
+      lines: helped ? [
+        { who: 'Ingrid Haugen', text: 'You\'re Marcus\'s friend. He said you\'d be taller.' },
+        { who: 'Ingrid Haugen', text: 'Pa hid people on that farm for thirty years. Root cellar\'s stocked, gate\'s busted, and the deputy in Kettle Crossing is a snake. That\'s the tour.' },
+        { who: 'Ingrid Haugen', text: 'I put two med kits and a box of shells in your kitchen. Tess at the co-op needs hands. Go earn your keep.' },
+      ] : [
+        { who: 'Ingrid Haugen', text: 'The old Haugen place sold sight unseen to a cash buyer. That\'d be you.' },
+        { who: 'Ingrid Haugen', text: 'I don\'t know you, mister, and out here that means something. The gate\'s broken. The deputy\'s nosy. Tess at the co-op is hiring.' },
+        { who: ME, text: '(She doesn\'t trust you yet. Without Marcus\'s call, you\'re a stranger here.)' },
+      ],
+      onEnd: () => {
+        if (helped) { addItem('medkit', 2, true); addItem('shells', 8, true); addRel('ingrid', 25); toast('Ingrid stocked your kitchen: 2 first-aid kits, 8 shells.', 'item', 3); }
+        else addRel('ingrid', 4);
+        addXP(25, 'Met Ingrid'); setStep('ch3_find_work');
+      },
+    };
+  }
+  if (id === 'tess' && st.step === 'ch3_find_work') {
+    return {
+      lines: [
+        { who: 'Tess Albright', text: 'You\'re the cash buyer at the Haugen place. Can you lift, drive, and fix things without whining?' },
+        { who: ME, text: 'Yes, yes, and mostly.' },
+        { who: 'Tess Albright', text: 'Good enough. Board\'s out front. Harvest your own fields and bring the produce here, run deliveries, fix what\'s broke. Co-op pays Fridays. And every other day, because I\'m not a monster.' },
+      ],
+      onEnd: () => { addRel('tess', 6); addXP(25, 'Met Tess'); setStep('ch3_job'); },
+    };
+  }
+  if (id === 'ingrid' && st.step === 'ch3_ingrid_truth') {
+    return {
+      lines: [
+        { who: 'Ingrid Haugen', text: 'I counted eleven of them. You and that old woman held the whole farm. Pa would\'ve poured you a whiskey.' },
+        { who: ME, text: 'Vinnie had this. Leo\'s books. Every payoff, every account, every judge and every cop on the take — including Deputy Mott.' },
+        { who: 'Ingrid Haugen', text: '...That\'s not a ledger, Frank. That\'s a war.' },
+        { who: ME, text: 'Leo won\'t stop. Not while I\'m breathing and not while this exists. So I stop running.' },
+        { who: 'Ingrid Haugen', text: 'Marcus knows a federal prosecutor who\'d sell his mother for that book. But Leo will see it coming.' },
+        { who: ME, text: 'Then I go to him first. The Vescari estate. Before he comes here again.' },
+      ],
+      onEnd: () => {
+        st.done[3] = true;
+        st.step = 'ch3_free';
+        G.s.world.threat = Math.max(G.s.world.threat, 55);
+        G.s.world.quietUntilDay = G.s.time.day + 2;
+        addRel('ingrid', 12);
+        addXP(150, 'Chapter 3 complete');
+        saveGame('chapter');
+        showChapterEnd(3);
       },
     };
   }
@@ -241,6 +321,7 @@ export function initStoryEvents() {
   ev.on('jobDone', () => {
     if (G.s.story.step === 'first_job') setStep('see_dee');
     if (G.s.story.step === 'ch2_job') setStep('ch2_rosa');
+    if (G.s.story.step === 'ch3_job') setStep('ch3_deputy');
   });
   ev.on('defenseInstalled', () => {
     const st = G.s.story;
@@ -257,11 +338,21 @@ export function initStoryEvents() {
       { who: ME, text: 'He\'ll bring firebugs — Sal always liked fire. Keep moving, and keep them off the walls.' },
     ]);
   });
+  ev.on('defenseInstalled', () => { if (G.s.story.step === 'ch3_fortify') { G.s.story.flags.fortified = (G.s.story.flags.fortified || 0) + 1; checkFarmReady(); } });
+  ev.on('repaired', () => { if (G.s.story.step === 'ch3_fortify') checkFarmReady(); });
+  ev.on('talkDeputy', (n) => deputyTalk(n));
+  ev.on('ledgerFound', () => {
+    const f = G.s.story.flags;
+    if (f.ledgerRead) return;
+    if (G.siegeActive) { f.ledgerPending = true; toast('You grab Vinnie\'s ledger. Read it when it\'s safe.', 'info', 3); return; }
+    readLedger();
+  });
   ev.on('bossDropped', (e) => {
     const kind = e.carriesNote;
     const f = G.s.story.flags;
     if (kind === 'note' && !f.noteRead && count('note') === 0) addPickup('note', e.x, e.y + 6, 1, { map: G.map.id });
     if (kind === 'burner' && !f.burnerRead && count('burner') === 0) addPickup('burner', e.x, e.y + 6, 1, { map: G.map.id });
+    if (kind === 'ledger' && !f.ledgerRead && count('ledger') === 0) addPickup('ledger', e.x, e.y + 6, 1, { map: G.map.id });
   });
   ev.on('burnerFound', () => {
     const f = G.s.story.flags;
@@ -288,6 +379,18 @@ export function initStoryEvents() {
   ev.on('siegeWon', (sg) => {
     if (sg.plan.kind !== 'story') return;
     const f = G.s.story.flags;
+    if (G.s.chapter === 3) {
+      f.firstSiegeDone = true;
+      if (f.ledgerPending) { f.ledgerPending = false; setTimeout(readLedger, 2500); return; }
+      if (f.ledgerRead) return;
+      if (!G.pickups.some((p) => p.kind === 'ledger') && count('ledger') === 0) {
+        const p = G.map.points.porch;
+        addPickup('ledger', p.x + 30, p.y - 20, 1, { map: G.map.id });
+        toast('Vinnie dropped something by the porch as he fled.', 'info', 4);
+      }
+      setTimeout(() => { if (G.s.story.step === 'ch3_siege') setStep('ch3_ledger'); }, 3800);
+      return;
+    }
     if (G.s.chapter === 2) {
       f.firstSiegeDone = true;
       if (f.burnerPending) { f.burnerPending = false; setTimeout(readBurner, 2500); return; }
@@ -351,6 +454,62 @@ function readBurner() {
   });
 }
 
+function checkFarmReady() {
+  const o = G.s.home.openings;
+  const gateOk = ['gate_l', 'gate_r'].every((k) => o[k] && o[k].hp >= (o[k].baseHp || 100) + (o[k].reinforced ? 150 : 0) - 0.5);
+  const n = G.s.story.flags.fortified || 0;
+  if (!gateOk || n < 2) {
+    toast(`Farm defenses: gate ${gateOk ? 'repaired ✓' : 'still broken'} · defenses ${Math.min(2, n)}/2`, 'info', 3);
+    return;
+  }
+  const t = G.s.time;
+  const day = t.minute < 20 * 60 + 30 ? t.day : t.day + 1;
+  scheduleSiege(storyPlan(), day, 22 * 60);
+  addSign('strange_car');
+  setStep('ch3_siege');
+  playDialogue([
+    { who: ME, text: 'Gate\'s fixed. House is ready. If Leo sent Vinnie himself, he\'ll come hard and loud.' },
+    { who: ME, text: 'Trucks. Rifles in the treeline. Keep moving, keep them off the house.' },
+  ]);
+}
+
+/** The deputy's visit: a choice with consequences for the coming attack. */
+function deputyTalk(n) {
+  const st = G.s.story;
+  const canBribe = G.s.money >= 100;
+  playDialogue([
+    { who: 'Deputy Carl Mott', text: 'Afternoon. Carl Mott, county sheriff\'s department. Just being neighborly.' },
+    { who: 'Deputy Carl Mott', text: 'Funny thing. Fella from Chicago called the office asking about a cash buyer up here. Said there might be a reward. You wouldn\'t know anything about that?',
+      choices: [
+        { text: '"Frank Lowe. Here\'s my license. Anything else, Deputy?"', effect: () => { G.s.choices.deputy = 'cooperate'; addJP('shadow', 10); return [{ who: 'Deputy Carl Mott', text: 'Ohio license. Clean. Well. I suppose I\'ll tell the man there\'s nobody here by that description.' }, { who: ME, text: '(He bought it — mostly. Fewer people will come for you.)' }]; } },
+        { text: '"Get off my land."', effect: () => { G.s.choices.deputy = 'refuse'; addThreat(10, 'you made an enemy of the deputy'); return [{ who: 'Deputy Carl Mott', text: 'Suit yourself. Chicago\'ll be happy to hear where you live.' }, { who: ME, text: '(He\'ll sell you out. Expect more guns.)' }]; } },
+        ...(canBribe ? [{ text: '"$100 says you never met me."', effect: () => { G.s.choices.deputy = 'bribe'; G.s.money -= 100; addThreat(-10); return [{ who: 'Deputy Carl Mott', text: 'Never met you. And if somebody\'s planning a visit, maybe I\'ll call ahead. Friends do that.' }, { who: ME, text: '(Bought and paid for. He\'ll warn you early — but now you\'re in bed with him.)' }]; } }] : []),
+      ] },
+  ], () => {
+    G.npcs = G.npcs.filter((x) => x !== n);
+    st.flags.metDeputy = true;
+    toast('Deputy Mott drives off in a truck far too new for a deputy\'s salary.', 'info', 3.5);
+    addXP(30, 'Met the deputy');
+    setStep('ch3_fortify');
+    checkFarmReady();
+  });
+}
+
+function readLedger() {
+  const f = G.s.story.flags;
+  if (f.ledgerRead) return;
+  f.ledgerRead = true;
+  playDialogue([
+    { who: ME, text: 'A leather ledger. Twenty years of Vescari money: payoffs, shell companies, safe deposit boxes.' },
+    { who: ME, text: 'Page forty-one: "C. Mott — $2,000/mo." Page fifty: a judge in Newark. A state senator.' },
+    { who: ME, text: 'Leo didn\'t send Vinnie to kill me. He sent him to find out what I took. Now I have it for real.' },
+  ], () => {
+    addXP(40, 'The ledger'); addJP('shadow', 15);
+    const s = G.s.story.step;
+    if (s === 'ch3_ledger' || s === 'ch3_siege') setStep('ch3_ingrid_truth');
+  });
+}
+
 /** Mailbox hook for story letters. Returns true if the story handled it. */
 export function storyMail() {
   if (G.s.story.step !== 'ch2_letter') return false;
@@ -373,9 +532,9 @@ function strangerTalk(n) {
     {
       who: 'Man in a Grey Coat', text: 'You seen anybody like that around?',
       choices: [
-        { text: '"Never heard of him."', effect: () => { addJP('shadow', 15); return [{ who: 'Man in a Grey Coat', text: 'Huh. Well. If you do, tell him the family misses him.' }, { who: ME, text: '(You kept your voice flat. He didn\'t get anything he could use.)' }]; } },
-        { text: '"Who\'s asking?"', effect: () => { addThreat(8, 'the stranger heard your accent'); addJP('shadow', 5); return [{ who: 'Man in a Grey Coat', text: 'A friend. That accent of yours — Newark? Small world.' }]; } },
-        { text: '"Get out of my town."', effect: () => { addThreat(14, 'you threatened the stranger'); addJP('gunhand', 6); return [{ who: 'Man in a Grey Coat', text: '"Your" town. Okay, friend. Okay.' }, { who: ME, text: '(That was a mistake. Now he knows exactly who you are.)' }]; } },
+        { text: '"Never heard of him."', effect: () => { G.s.choices.stranger = 'deny'; addJP('shadow', 15); return [{ who: 'Man in a Grey Coat', text: 'Huh. Well. If you do, tell him the family misses him.' }, { who: ME, text: '(You kept your voice flat. He didn\'t get anything he could use.)' }]; } },
+        { text: '"Who\'s asking?"', effect: () => { G.s.choices.stranger = 'ask'; addThreat(8, 'the stranger heard your accent'); addJP('shadow', 5); return [{ who: 'Man in a Grey Coat', text: 'A friend. That accent of yours — Newark? Small world.' }]; } },
+        { text: '"Get out of my town."', effect: () => { G.s.choices.stranger = 'threaten'; addThreat(14, 'you threatened the stranger'); addJP('gunhand', 6); return [{ who: 'Man in a Grey Coat', text: '"Your" town. Okay, friend. Okay.' }, { who: ME, text: '(That was a mistake. Now he knows exactly who you are.)' }]; } },
       ],
     },
   ], () => {
@@ -404,6 +563,18 @@ export function updateStory(dt) {
         { who: ME, text: 'Frankie Corsetti died in a Newark parking garage. Frank Lowe pays his bills on time and says good morning to his neighbors.' },
         { who: ME, text: 'There\'s a farmhouse to the east. Might as well start with "good morning."' },
       ], () => setStep('meet_ruth'));
+    }
+  }
+  if (st.step === 'ch3_arrive' && G.map.id === 'farm') {
+    const b = G.map.buildingAt(G.player.x, G.player.y);
+    if (b && b.id === 'farmhouse') {
+      st.step = 'ch3_meet_ingrid';
+      const ruth = G.s.companion && G.s.companion.ruth.joined;
+      playDialogue([
+        { who: ME, text: 'Kettle Crossing, Wisconsin. Two hundred acres, a red barn, a silo, and a gate somebody already kicked in.' },
+        ...(ruth ? [{ who: 'Ruth Calloway', text: 'Well, it\'s no Pine Hollow. But the soil\'s good. I\'ll have a garden in by Sunday.' }] : []),
+        { who: ME, text: 'There\'s a dairy across the pasture. Neighbors first. Always neighbors first.' },
+      ], () => setStep('ch3_meet_ingrid'));
     }
   }
   if (st.step === 'ch2_arrive' && G.map.id === 'millbrook') {

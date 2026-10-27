@@ -2,7 +2,7 @@
 import { G, newSave, isNight } from './game/state.js';
 import { TILE } from './config.js';
 import { clamp, dist, fmtClock, escapeHtml } from './util.js';
-import { buildCabinMap, buildTownMap, buildMillbrookMap } from './world/mapgen.js';
+import { buildCabinMap, buildTownMap, buildMillbrookMap, buildFarmMap } from './world/mapgen.js';
 import { chapter, homeMapId, workMapId, atHome, LAST_CHAPTER } from './game/chapters.js';
 import { QUESTS, questWaypoint } from './game/quests.js';
 import { newHome } from './game/state.js';
@@ -23,17 +23,18 @@ import { updateJobs, applyChopped, jobHint, JOB_TYPES } from './game/jobs.js';
 import { initStoryEvents, updateStory, objectiveText, storyWaypoint, newGameIntro } from './game/story.js';
 import { initHomeEvents, syncCovers, updateRepair } from './game/home.js';
 import { findTarget, doInteract, setTravel } from './game/interact.js';
-import { derived, addXP, addJP } from './game/progression.js';
+import { derived, addXP, addJP, relOf } from './game/progression.js';
 import { quickItem, count, addItem } from './game/inventory.js';
 import { ITEMS } from './data/items.js';
 import { NPCS } from './data/npcs.js';
+import { TRUST_LEVEL } from './game/ally.js';
 import { WEAPONS, WEAPON_ORDER } from './data/weapons.js';
 import { ownsWeapon, reloadTime } from './game/player.js';
 import { saveGame, hasSave, readSaveRaw, migrate, validateSave, deleteSave, loadSettings, canSaveNow } from './game/save.js';
 import { addPickup, damageEnemy } from './game/combat.js';
 import { updateFire, startFire } from './game/fire.js';
 import { spawnEnemy, openingStrength } from './game/enemies.js';
-import { startSiege, makeRaidPlan, scheduleSiege, addSign } from './game/siege.js';
+import { startSiege, makeRaidPlan, scheduleSiege, addSign, storyPlan } from './game/siege.js';
 import { buySkill } from './game/progression.js';
 import { damagePlayer } from './game/player.js';
 
@@ -72,6 +73,7 @@ const MAP_BUILDERS = {
   cabin: () => buildCabinMap(G.s.home),
   town: () => buildTownMap(),
   millbrook: () => buildMillbrookMap(G.s.home),
+  farm: () => buildFarmMap(G.s.home),
 };
 
 function buildMaps() {
@@ -101,7 +103,7 @@ export function loadMap(id, pos) {
   G.map = G.maps[id];
   G.enemies = [];
   G.bullets = [];
-  G.pickups = G.pickups.filter((p) => (p.kind === 'note' || p.kind === 'burner') && p.map === id);
+  G.pickups = G.pickups.filter((p) => (p.kind === 'note' || p.kind === 'burner' || p.kind === 'ledger') && p.map === id);
   G.particles = [];
   G.floaters = [];
   G.fires = []; G.lobs = []; G.casings = []; G.smoke = [];
@@ -353,7 +355,7 @@ function initEvents() {
     const next = G.s.chapter + 1;
     if (next > LAST_CHAPTER) return;
     if (G.siegeActive || G.enemies.some((e) => !e.dead && !e.gone)) { toast('Not with attackers around!', 'danger'); return; }
-    confirmBox('Leave for good and start the next chapter? You can\'t come back here. Your level, skills, money, weapons and gear come with you.', 'Leave', () => moveToChapter(next), 'Not yet');
+    confirmBox('Leave for good and start the next chapter? You can\'t come back here. Your level, skills, money, weapons and gear come with you.', 'Leave', () => ruthFarewell(next), 'Not yet');
   });
   G.events.on('newDay', (day) => {
     applyChopped(G.map);
@@ -369,6 +371,32 @@ function initEvents() {
   });
 }
 
+/** Before leaving Pine Hollow, Ruth decides whether to come — if she trusts you. */
+function ruthFarewell(next) {
+  const c = G.s.companion || (G.s.companion = { ruth: { joined: false, declined: false } });
+  if (G.s.chapter !== 1) {
+    if (c.ruth.joined) playDialogue([{ who: 'Ruth Calloway', text: 'Camper\'s hitched, shotgun\'s cleaned, thermos is full. Lead the way.' }], () => moveToChapter(next));
+    else moveToChapter(next);
+    return;
+  }
+  if (relOf('ruth') >= TRUST_LEVEL) {
+    playDialogue([
+      { who: 'Ruth Calloway', text: 'So that\'s it. You\'re running again.' },
+      { who: 'Ruth Calloway', text: 'Frank, I\'m seventy-one. My husband\'s in the churchyard, my garden can grow without me, and I haven\'t felt this useful in ten years.' },
+      { who: 'Ruth Calloway', text: 'I\'ve got Harold\'s old camper and Harold\'s old shotgun. I\'m not asking.',
+        choices: [
+          { text: '"Pack the camper. I\'d be glad to have you."', effect: () => { c.ruth.joined = true; return [{ who: 'Ruth Calloway', text: 'Good. I already did.' }, { who: 'You', text: '(Ruth will follow you to every new home, fight beside you and patch you up once per attack.)' }]; } },
+          { text: '"Stay, Ruth. It\'s too dangerous."', effect: () => { c.ruth.declined = true; addItem('medkit', 2, true); addItem('shells', 8, true); return [{ who: 'Ruth Calloway', text: '...Stubborn man. Then take these, and you write me. Under a fake name.' }, { who: 'You', text: '(Ruth stays in Pine Hollow. She gave you 2 first-aid kits and shotgun shells.)' }]; } },
+        ] },
+    ], () => moveToChapter(next));
+  } else {
+    playDialogue([
+      { who: 'Ruth Calloway', text: 'Leaving already? Well. Keep your head down, Frank. And eat a vegetable once in a while.' },
+      { who: 'You', text: '(Had Ruth trusted you more — ♥3 — she might have come along.)' },
+    ], () => { addItem('bandage', 2, true); moveToChapter(next); });
+  }
+}
+
 /** Pack up and move to the next chapter's home. */
 function moveToChapter(n) {
   const s = G.s;
@@ -380,7 +408,7 @@ function moveToChapter(n) {
   for (let i = 0; i < (old.traps || []).length; i++) addItem('bear_trap', 1, true);
   s.pastHomes[old.id || 'cabin'] = { leftOnDay: s.time.day };
   s.chapter = n;
-  s.home = newHome(n === 2 ? 'house' : 'cabin');
+  s.home = newHome(n === 3 ? 'farm' : n === 2 ? 'house' : 'cabin');
   s.job = null;
   s.story.step = chapter().firstStep;
   s.story.flags = {};
@@ -507,7 +535,7 @@ function boot() {
   // Test/debug handle (harmless in production; used by the automated smoke test).
   window.__cus = {
     G, newGame, continueGame, travel, loadMap, saveGame, quitToTitle,
-    dbg: { closeAll: () => closeAllModals(), birdCall, renderOffline, musicBar, sfx, audioDebug, input, openingStrength, homeMapId, openMenu, startFire, damageEnemy, spawnEnemy, startSiege, makeRaidPlan, scheduleSiege, addSign, addItem, addXP, addJP, buySkill, derived, damagePlayer, count },
+    dbg: { closeAll: () => closeAllModals(), birdCall, renderOffline, musicBar, sfx, audioDebug, input, openingStrength, homeMapId, openMenu, startFire, damageEnemy, spawnEnemy, startSiege, makeRaidPlan, scheduleSiege, addSign, addItem, addXP, addJP, buySkill, derived, damagePlayer, count, moveToChapter, storyPlan },
   };
 }
 

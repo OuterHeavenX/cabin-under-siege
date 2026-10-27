@@ -99,6 +99,7 @@ export function buildCabinMap(home) {
   addProp(m, { id: 'bed', kind: 'bed', x: 20 * TILE, y: 20.3 * TILE, label: 'Bed', r: 40 });
   addProp(m, { id: 'workbench', kind: 'workbench', x: 28.6 * TILE, y: 24 * TILE, label: 'Workbench', r: 40 });
   addProp(m, { id: 'phone', kind: 'phone', x: 26.5 * TILE, y: 18.4 * TILE, label: 'Telephone', r: 40 });
+  addProp(m, { id: 'stove', kind: 'stove', x: 28.5 * TILE, y: 19.4 * TILE, label: 'Stove', r: 38 });
   m.decor.push({ kind: 'phone', x: 26, y: 18, w: 1, h: 1 });
 
   // Woodpile beside the cabin (cover)
@@ -198,7 +199,7 @@ export function buildCabinMap(home) {
     { x: 48.5 * TILE, y: 27 * TILE, r: 70 },
   ];
   m.homeInfo = {
-    building: 'cabin', interior: { cx: 24, cy: 22 },
+    building: 'cabin', interior: { cx: 24, cy: 22 }, allyPost: P(20.5, 24.9),
     flood: { x: 24.5 * TILE, y: 28.6 * TILE, r: 270 }, porch: { x: 24.5 * TILE, y: 27.6 * TILE, r: 95 },
   };
   m.exits = [{ id: 'to_town', x: 59 * TILE, y: 38 * TILE, w: TILE, h: 4 * TILE, target: 'town', label: 'Walk to Pine Hollow (1 hr)' }];
@@ -385,6 +386,7 @@ export function buildMillbrookMap(home) {
   addProp(m, { id: 'bed', kind: 'bed', x: 20 * TILE, y: 36.3 * TILE, label: 'Bed', r: 40 });
   addProp(m, { id: 'workbench', kind: 'workbench', x: 27.6 * TILE, y: 40 * TILE, label: 'Workbench', r: 40 });
   addProp(m, { id: 'phone', kind: 'phone', x: 25.5 * TILE, y: 34.4 * TILE, label: 'Telephone', r: 40 });
+  addProp(m, { id: 'stove', kind: 'stove', x: 27.5 * TILE, y: 35.4 * TILE, label: 'Stove', r: 38 });
   // Driveway & car
   m.fillGround(31, 32, 3, 7, GR.GRAVEL);
   m.fillSolid(31, 34, 2, 3, SO.CAR);
@@ -398,6 +400,8 @@ export function buildMillbrookMap(home) {
   for (let cx = 17; cx <= 30; cx++) if (cx < 23 || cx > 25) m.setSolid(cx, 46, SO.FENCE);
   for (let cy = 42; cy <= 46; cy++) { m.setSolid(17, cy, SO.FENCE); m.setSolid(30, cy, SO.FENCE); }
   m.fillSolid(19, 43, 2, 1, SO.LOGS); m.decor.push({ kind: 'logs', x: 19, y: 43, w: 2, h: 1 });
+  // Ruth's camper (if she came with you)
+  m.fillSolid(26, 43, 3, 2, SO.CAR); m.decor.push({ kind: 'camper', x: 26, y: 43, w: 3, h: 2 });
 
   // Marcus Bell's house (across the street)
   building(m, { id: 'marcus_house', name: 'Bell House', x: 18, y: 19, w: 9, h: 9, roof: '#7a5230' });
@@ -455,6 +459,9 @@ export function buildMillbrookMap(home) {
   addProp(m, { id: 'logdrop', kind: 'logdrop', x: 34.5 * TILE, y: 15.6 * TILE, label: 'Firewood Drop-off', r: 54 });
   addProp(m, { id: 'shed', kind: 'shed', x: 32 * TILE, y: 15.4 * TILE, label: 'Supply Crates', r: 46 });
 
+  // Duck pond in the park
+  for (let cy = 3; cy <= 8; cy++) for (let cx = 2; cx <= 8; cx++) { const dx = (cx - 5) / 3.4, dy = (cy - 5.5) / 2.6; if (dx * dx + dy * dy < 1) { m.setGround(cx, cy, GR.WATER); m.setSolid(cx, cy, SO.WATER); } }
+
   // Park gazebo in the woods
   m.fillGround(10, 7, 8, 6, GR.DIRT);
   m.fillSolid(13, 9, 2, 2, SO.FURN); m.decor.push({ kind: 'gazebo', x: 13, y: 9, w: 2, h: 2 });
@@ -489,6 +496,7 @@ export function buildMillbrookMap(home) {
     stranger: P(46.5, 17), store_door: P(46.4, 12.5), recovery: P(22.5, 23.5),
     footprints: P(17.3, 37.5), strange_car: P(10, 29.5), woodlot: P(8, 8), ruth_porch: P(22.5, 28.5),
     walk_a: P(10, 28.4), walk_b: P(40, 31.4), walk_c: P(46.5, 6), walk_d: P(46.5, 24), walk_e: P(56, 28.4), walk_f: P(30, 31.4),
+    ruth_c_day: P(21.5, 44.5), ruth_c_eve: P(24.5, 42.5), ruth_c_home: P(25.4, 45.4),
   };
   m.deliveryTargets = {
     post: { name: 'the Post Office', ...P(46.4, 21.5) },
@@ -514,8 +522,187 @@ export function buildMillbrookMap(home) {
   for (let cy = 4; cy < 28; cy += 8) { m.lights.push({ x: 43 * TILE, y: cy * TILE, r: 120, street: true }); m.lights.push({ x: 46.9 * TILE, y: (cy + 4) * TILE, r: 120, street: true }); }
   for (const b of m.buildings) m.lights.push({ x: (b.x + b.w / 2) * TILE, y: (b.y + b.h / 2) * TILE, r: Math.max(b.w, b.h) * 16, building: b.id });
   m.homeInfo = {
-    building: 'house', interior: { cx: 24, cy: 37 },
+    building: 'house', interior: { cx: 24, cy: 37 }, allyPost: P(21.5, 34.5),
     flood: { x: 24.5 * TILE, y: 32.6 * TILE, r: 270 }, porch: { x: 24.5 * TILE, y: 32 * TILE, r: 95 },
+  };
+  return m;
+}
+
+/* ------------------------------------------------------------------ */
+/*  CHAPTER 3: THE WISCONSIN FARM + Kettle Crossing                    */
+/* ------------------------------------------------------------------ */
+export function buildFarmMap(home) {
+  const W = 76, H = 54;
+  const m = new GameMap('farm', W, H, 'Kettle Crossing');
+  const rnd = seeded(5150);
+  m.cropsPickable = true;
+
+  // County road, town road and the long farm driveway
+  m.fillGround(0, 2, W, 2, GR.ROAD);
+  m.fillGround(59, 4, 2, 27, GR.ROAD);
+  m.fillGround(20, 4, 2, 15, GR.DIRT);
+  m.fillGround(22, 14, 3, 5, GR.GRAVEL);
+
+  // Farmyard fence with a gate on the driveway and a cattle crossing to the south
+  for (let cx = 6; cx <= 40; cx++) { if (cx !== 20 && cx !== 21) m.setSolid(cx, 12, SO.FENCE); if (cx < 30 || cx > 32) m.setSolid(cx, 41, SO.FENCE); }
+  for (let cy = 12; cy <= 41; cy++) { m.setSolid(6, cy, SO.FENCE); m.setSolid(40, cy, SO.FENCE); }
+  const o = home.openings;
+  addDoor(m, 'gate_l', 20, 12, o.gate_l, 'Farm Gate (left)');
+  addDoor(m, 'gate_r', 21, 12, o.gate_r, 'Farm Gate (right)');
+  m.setGround(20, 12, GR.DIRT); m.setGround(21, 12, GR.DIRT);
+
+  // Farmhouse
+  building(m, { id: 'farmhouse', name: 'Farmhouse', x: 14, y: 20, w: 13, h: 10, roof: '#6a3a2a', isHome: true });
+  addDoor(m, 'front_door', 20, 20, o.front_door, 'Front Door');
+  addDoor(m, 'back_door', 20, 29, o.back_door, 'Back Door');
+  addWindow(m, 'win_n1', 16, 20, o.win_n1, 'Front-Left Window');
+  addWindow(m, 'win_n2', 24, 20, o.win_n2, 'Front-Right Window');
+  addWindow(m, 'win_w', 14, 24, o.win_w, 'West Window', true);
+  addWindow(m, 'win_e', 26, 24, o.win_e, 'East Window', true);
+  addWindow(m, 'win_s', 24, 29, o.win_s, 'Back Window');
+  m.fillGround(17, 19, 7, 1, GR.PORCH);
+  m.fillSolid(15, 21, 2, 2, SO.FURN); m.decor.push({ kind: 'bed', x: 15, y: 21, w: 2, h: 2 });
+  m.fillSolid(23, 21, 2, 1, SO.FURN); m.decor.push({ kind: 'stove', x: 23, y: 21, w: 2, h: 1 });
+  m.fillSolid(18, 24, 3, 2, SO.FURN); m.decor.push({ kind: 'table', x: 18, y: 24, w: 3, h: 2 });
+  m.fillSolid(25, 26, 1, 2, SO.FURN); m.decor.push({ kind: 'workbench', x: 25, y: 26, w: 1, h: 2 });
+  m.decor.push({ kind: 'rug', x: 16, y: 26, w: 3, h: 2 });
+  m.decor.push({ kind: 'phone', x: 21, y: 21, w: 1, h: 1 });
+  addProp(m, { id: 'bed', kind: 'bed', x: 16 * TILE, y: 23.4 * TILE, label: 'Bed', r: 40 });
+  addProp(m, { id: 'workbench', kind: 'workbench', x: 24.6 * TILE, y: 27 * TILE, label: 'Workbench', r: 40 });
+  addProp(m, { id: 'phone', kind: 'phone', x: 21.5 * TILE, y: 21.5 * TILE, label: 'Telephone', r: 40 });
+  addProp(m, { id: 'stove', kind: 'stove', x: 24 * TILE, y: 22.5 * TILE, label: 'Stove', r: 40 });
+
+  // Car, mailbox, phone pole
+  m.fillSolid(22, 15, 2, 3, SO.CAR);
+  addProp(m, { id: 'car', kind: 'car', x: 23 * TILE, y: 16.5 * TILE, label: 'Your Car', r: 64 });
+  m.setSolid(19, 4, SO.FURN); m.decor.push({ kind: 'mailbox', x: 19, y: 4, w: 1, h: 1 });
+  addProp(m, { id: 'mailbox', kind: 'mailbox', x: 19.5 * TILE, y: 4.5 * TILE, label: 'Mailbox', r: 40 });
+  m.setSolid(17, 4, SO.WALL); m.decor.push({ kind: 'pole', x: 17, y: 4, w: 1, h: 1 });
+  addProp(m, { id: 'phonepole', kind: 'phonepole', x: 17.5 * TILE, y: 4.5 * TILE, label: 'Phone Line', r: 48 });
+
+  // Barn, silo, tractor, windmill, camper
+  building(m, { id: 'barn', name: 'Barn', x: 30, y: 15, w: 9, h: 10, roof: '#8f2f24' });
+  addDoor(m, 'barn_door', 34, 24, npcDoorRec(), 'Barn Door');
+  m.fillGround(31, 16, 7, 8, GR.DIRT);
+  m.fillSolid(31, 16, 2, 2, SO.LOGS); m.decor.push({ kind: 'hay', x: 31, y: 16, w: 2, h: 2 });
+  m.fillSolid(36, 20, 2, 2, SO.LOGS); m.decor.push({ kind: 'hay', x: 36, y: 20, w: 2, h: 2 });
+  m.fillSolid(37, 13, 2, 2, SO.ROCK); m.decor.push({ kind: 'silo', x: 37, y: 13, w: 2, h: 2 });
+  m.fillSolid(35, 26, 2, 2, SO.CAR); m.decor.push({ kind: 'tractor', x: 35, y: 26, w: 2, h: 2 });
+  m.setSolid(12, 17, SO.WALL); m.decor.push({ kind: 'windmill', x: 12, y: 17, w: 1, h: 1 });
+  m.fillSolid(8, 14, 3, 2, SO.CAR); m.decor.push({ kind: 'camper', x: 8, y: 14, w: 3, h: 2 });
+  m.fillSolid(9, 21, 1, 3, SO.LOGS); m.decor.push({ kind: 'logs', x: 9, y: 21, w: 1, h: 3 });
+
+  // Crop fields (pickable vegetables)
+  m.fillGround(7, 30, 6, 10, GR.GARDEN);
+  m.fillGround(28, 29, 11, 9, GR.GARDEN);
+
+  // Pond east of the fence
+  for (let cy = 29; cy <= 40; cy++) for (let cx = 42; cx <= 55; cx++) {
+    const dx = (cx - 48.5) / 6, dy = (cy - 34.5) / 4.6;
+    if (dx * dx + dy * dy < 1) { m.setGround(cx, cy, GR.WATER); m.setSolid(cx, cy, SO.WATER); }
+  }
+
+  // Ingrid Haugen's dairy
+  building(m, { id: 'ingrid_house', name: 'Haugen Dairy', x: 44, y: 17, w: 8, h: 8, roof: '#5a6b3d' });
+  addDoor(m, 'ingrid_door', 47, 24, npcDoorRec(), "Ingrid's Door");
+  addWindow(m, 'ingrid_w1', 45, 24, npcWinRec(), 'Window');
+  addWindow(m, 'ingrid_w2', 50, 24, npcWinRec(), 'Window');
+  for (let cx = 53; cx <= 57; cx++) { m.setSolid(cx, 17, SO.FENCE); m.setSolid(cx, 27, SO.FENCE); }
+  for (let cy = 17; cy <= 27; cy++) { m.setSolid(53, cy, SO.FENCE); m.setSolid(57, cy, SO.FENCE); }
+  m.decor.push({ kind: 'cows', x: 54, y: 18, w: 3, h: 9 });
+  for (const [cx, cy] of [[54, 19], [55, 22], [54, 25]]) m.setSolid(cx, cy, SO.FURN);
+
+  // Kettle Crossing: grain co-op
+  building(m, { id: 'coop', name: 'Grain Co-op', x: 47, y: 5, w: 8, h: 6, roof: '#8b6b2f' });
+  addDoor(m, 'coop_door', 50, 10, npcDoorRec(), 'Co-op Door');
+  m.fillGround(46, 11, 11, 5, GR.GRAVEL);
+  m.fillSolid(54, 12, 2, 2, SO.FURN); m.decor.push({ kind: 'crate', x: 54, y: 12, w: 2, h: 2 });
+  m.fillSolid(47, 14, 2, 1, SO.FURN); m.decor.push({ kind: 'crate', x: 47, y: 14, w: 2, h: 1 });
+  m.setSolid(52, 4, SO.FURN); m.decor.push({ kind: 'board', x: 52, y: 4, w: 1, h: 1 });
+  addProp(m, { id: 'jobboard', kind: 'jobboard', x: 52.5 * TILE, y: 3.7 * TILE, label: 'Job Board', r: 46 });
+  addProp(m, { id: 'logdrop', kind: 'logdrop', x: 53 * TILE, y: 12.6 * TILE, label: 'Co-op Drop-off', r: 54 });
+  addProp(m, { id: 'shed', kind: 'shed', x: 48 * TILE, y: 13.4 * TILE, label: 'Supply Crates', r: 46 });
+  // Lindqvist Feed & Supply
+  building(m, { id: 'feedstore', name: 'Lindqvist Feed', x: 62, y: 5, w: 10, h: 8, roof: '#2f5d7a', floor: GR.TILEFLOOR, shop: 'bo' });
+  addDoor(m, 'feed_door', 62, 8, npcDoorRec(), 'Store Door', true);
+  addWindow(m, 'feed_w1', 62, 6, npcWinRec(), 'Window', true);
+  addWindow(m, 'feed_w2', 62, 11, npcWinRec(), 'Window', true);
+  m.fillSolid(65, 6, 1, 5, SO.COUNTER); m.decor.push({ kind: 'counter', x: 65, y: 6, w: 1, h: 5 });
+  m.fillSolid(70, 6, 1, 6, SO.FURN); m.decor.push({ kind: 'shelf', x: 70, y: 6, w: 1, h: 6 });
+  addProp(m, { id: 'store_counter', kind: 'counter', x: 64.3 * TILE, y: 8.5 * TILE, label: 'Store Counter', r: 44 });
+  // Sheriff substation, cafe, houses
+  building(m, { id: 'sheriff', name: 'Sheriff Substation', x: 62, y: 15, w: 7, h: 6, roof: '#3b3b4a' });
+  addDoor(m, 'sheriff_door', 62, 17, npcDoorRec(), 'Substation Door', true);
+  building(m, { id: 'cafe', name: 'Crossroads Cafe', x: 63, y: 23, w: 9, h: 7, roof: '#8a3b3b', floor: GR.TILEFLOOR });
+  addDoor(m, 'cafe_door', 63, 26, npcDoorRec(), 'Cafe Door', true);
+  addWindow(m, 'cafe_w', 63, 24, npcWinRec(), 'Window', true);
+  building(m, { id: 'bo_house', name: 'Lindqvist House', x: 64, y: 33, w: 6, h: 6, roof: '#6a5a8a' });
+  addDoor(m, 'bo_door', 66, 33, npcDoorRec(), "Bo's Door");
+  building(m, { id: 'tess_house', name: 'Albright House', x: 70, y: 33, w: 6, h: 6, roof: '#a0663c' });
+  addDoor(m, 'tess_door', 72, 33, npcDoorRec(), "Tess's Door");
+
+  // Rocks
+  [[28, 8], [10, 8], [36, 45], [5, 44], [44, 12], [58, 40], [26, 35], [13, 42]].forEach(([cx, cy]) => m.setSolid(cx, cy, SO.ROCK));
+
+  // Trees
+  const clear = [
+    [0, 1, 75, 4], [6, 12, 40, 41], [19, 4, 22, 12], [41, 16, 58, 40], [44, 4, 75, 39], [29, 41, 33, 44],
+    [22, 50, 26, 53], [0, 49, 3, 53], [72, 49, 75, 53], [0, 28, 1, 32],
+  ];
+  const avoid = (cx, cy) => clear.some((r) => rectHas(r, cx, cy));
+  scatterTrees(m, rnd, 0, 42, W - 1, H - 1, 0.32, avoid);
+  scatterTrees(m, rnd, 0, 4, 5, 41, 0.3, avoid);
+  scatterTrees(m, rnd, 0, 0, W - 1, 1, 0.25, avoid);
+  scatterTrees(m, rnd, 22, 4, 43, 11, 0.12, avoid);
+  scatterTrees(m, rnd, 41, 40, 75, 48, 0.2, avoid);
+  [[8, 26], [27, 14], [38, 39], [13, 13]].forEach(([cx, cy]) => addTree(m, cx, cy, 'oak'));
+
+  m.spawns = {
+    west: { ...P(0.5, 2.5), label: 'the county road to the west' },
+    east: { ...P(75.5, 2.5), label: 'the county road to the east' },
+    south: { ...P(24.5, 53.5), label: 'the south woods' },
+    southwest: { ...P(1.5, 51), label: 'the south-west treeline' },
+    southeast: { ...P(74, 51), label: 'the east pasture' },
+    westfield: { ...P(0.5, 30), label: 'the west windbreak' },
+  };
+  m.points = {
+    start: P(21.4, 17.5), arrive: P(21.4, 17.5), car: P(21.4, 16.5),
+    cabin_in: P(20.5, 25), porch: P(20.5, 18.5), cabin_front: P(20.5, 18.6), gate: P(21, 12.5),
+    ingrid_yard: P(48.5, 27), ingrid_porch: P(47.5, 25.5), ingrid_in: P(47.5, 20.5),
+    bo_store: P(66.6, 8.5), bo_home: P(66.5, 35.5), bo_porch: P(66.5, 32.4),
+    tess_yard: P(51.5, 13.4), tess_home: P(72.5, 35.5), tess_porch: P(72.5, 32.4),
+    store_door: P(61.4, 8.5), stranger: P(61.5, 13.6), deputy: P(20.5, 17.6), recovery: P(47.5, 20.5),
+    footprints: P(13.3, 24.5), strange_car: P(30, 2.5), woodlot: P(24, 46),
+    ruth_c_day: P(9.5, 29.2), ruth_c_eve: P(18.5, 18.6), ruth_c_home: P(11.6, 15),
+    walk_a: P(58.4, 6), walk_b: P(58.4, 22), walk_c: P(61.6, 31), walk_d: P(44, 4.5),
+  };
+  m.deliveryTargets = {
+    cafe: { name: 'the Crossroads Cafe', ...P(62.3, 26.5) },
+    sheriff: { name: 'the sheriff substation', ...P(61.4, 17.5) },
+    ingrid: { name: 'the Haugen dairy', ...P(47.5, 25.5) },
+    bo_house: { name: 'the Lindqvist house', ...P(66.5, 32.3) },
+  };
+  m.repairTargets = {
+    tractor: { name: 'your old tractor', ...P(37.5, 27) },
+    windmill: { name: 'the windmill pump', ...P(12.5, 18.4) },
+    scale: { name: 'the co-op truck scale', ...P(56.4, 14.5) },
+    cafe_sign: { name: 'the cafe sign', ...P(62.3, 29.4) },
+  };
+  m.discover = [
+    { id: 'farm', name: 'The Farm', ...P(20, 25), r: 200 },
+    { id: 'barn', name: 'The Barn', ...P(34, 20), r: 120 },
+    { id: 'farmpond', name: 'Cattail Pond', ...P(48, 34), r: 150 },
+    { id: 'crossing', name: 'Kettle Crossing', ...P(60, 14), r: 180 },
+    { id: 'dairy', name: 'Haugen Dairy', ...P(48, 21), r: 130 },
+  ];
+  m.lights = [
+    { x: 19 * TILE, y: 13.5 * TILE, r: 140 }, { x: 33 * TILE, y: 26 * TILE, r: 120 }, { x: 11 * TILE, y: 28 * TILE, r: 110 },
+  ];
+  for (let cy = 5; cy < 31; cy += 7) { m.lights.push({ x: 58 * TILE, y: cy * TILE, r: 120, street: true }); m.lights.push({ x: 61.9 * TILE, y: (cy + 3) * TILE, r: 120, street: true }); }
+  for (const b of m.buildings) m.lights.push({ x: (b.x + b.w / 2) * TILE, y: (b.y + b.h / 2) * TILE, r: Math.max(b.w, b.h) * 16, building: b.id });
+  m.homeInfo = {
+    building: 'farmhouse', interior: { cx: 20, cy: 25 }, allyPost: P(16.5, 21.5), gate: { cx: 21, cy: 12 },
+    flood: { x: 20.5 * TILE, y: 18.4 * TILE, r: 300 }, porch: { x: 20.5 * TILE, y: 19.2 * TILE, r: 95 },
   };
   return m;
 }

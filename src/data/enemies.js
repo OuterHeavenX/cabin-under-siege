@@ -29,6 +29,20 @@ export const ENEMY_TYPES = {
     preferDist: [130, 240], breachDamage: 8, retreatAt: 0.45, bravery: 0.3,
     xp: 22, cash: [8, 18], ammoDrop: [2, 5],
   },
+  sniper: {
+    name: 'Sniper', hp: 70, speed: 70, radius: 10,
+    color: '#3d4a2f', trim: '#e8e85a',
+    weapon: 'srifle', damage: 30, fireCooldown: 3.6, telegraph: 1.25, spread: 0.02, range: 640,
+    preferDist: [360, 600], breachDamage: 6, retreatAt: 0.5, bravery: 0.35,
+    xp: 30, cash: [10, 20], ammoDrop: [4, 8],
+  },
+  truck: {
+    name: 'Ram Truck', hp: 320, speed: 135, radius: 22, vehicle: true,
+    color: '#2a2d33', trim: '#c0392b',
+    weapon: 'ram', damage: 0, fireCooldown: 99, telegraph: 0, spread: 0, range: 0,
+    preferDist: [0, 0], breachDamage: 170, retreatAt: 0, bravery: 1,
+    xp: 40, cash: [0, 0], ammoDrop: [0, 0],
+  },
   lieutenant: {
     name: 'Lieutenant', hp: 320, speed: 76, radius: 14, boss: true,
     color: '#1b1b22', trim: '#d4af37',

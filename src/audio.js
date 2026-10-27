@@ -396,6 +396,18 @@ export function sfx(name, opts = {}) {
       woodKnock(out, t + 0.5, 1.3, 0.4, 0.06); metalClick(out, t + 0.52, 1, 0.3, 0.03);
       break;
     }
+    case 'crash': // truck through a gate: splintering wood, bent steel, engine roar
+      for (let i = 0; i < 8; i++) woodKnock(out, t + i * 0.03, 0.6 + Math.random(), 0.9, 0.14);
+      modal(out, t + 0.02, [[310, 1], [737, 0.7], [1290, 0.5], [2210, 0.3]], { q: 18, peak: 0.7, dur: 0.6 });
+      nz(out, t, { type: 'brown', dur: 0.9, a: 0.005, peak: 1.2, lp: 900, lpTo: 150 });
+      carSound(out, t + 0.1, 0.9);
+      break;
+    case 'explode':
+      nz(out, t, { dur: 0.05, peak: 1.2, hp: 600 });
+      nz(out, t, { type: 'brown', dur: 2.2, a: 0.004, peak: 1.6, lp: 1400, lpTo: 90 });
+      osc(out, t, { f: 70, fTo: 28, sweep: 0.6, dur: 0.8, peak: 1, a: 0.002 });
+      for (let i = 0; i < 10; i++) nz(out, t + 0.2 + Math.random() * 1.2, { dur: 0.01, peak: 0.3, hp: 1800 });
+      break;
     case 'doorBreak':
       for (let i = 0; i < 5; i++) woodKnock(out, t + i * 0.035, 0.8 + Math.random() * 0.8, 0.8, 0.12);
       nz(out, t, { type: 'pink', dur: 0.4, peak: 0.9, lp: 2500, lpTo: 300 }); osc(out, t, { f: 80, fTo: 40, sweep: 0.2, dur: 0.25, peak: 0.6 });

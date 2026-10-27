@@ -303,15 +303,18 @@ function journalTab() {
   const ch = chapter();
   const roleBenefits = {
     neighbor: ['Lv1: takes you in if you fall', 'Lv2: warns you when an attack is coming', 'Lv3: shares medical supplies'],
+    companion: ['Lv3: fights beside you in attacks', 'Lv3: patches you up once per attack', 'Lv3: offers to come when you move'],
     shopkeeper: ['Lv1: tips about strangers in town', 'Lv2: 5% discount', 'Lv4: 10% discount'],
     jobContact: ['Lv1: reads the town\'s mood', 'Lv2: +10% job pay', 'Lv3: friendly advice'],
   };
   const people = [ch.neighbor, ch.shopkeeper, ch.jobContact];
+  if (ch.id > 1 && G.s.companion && G.s.companion.ruth.joined) people.unshift('ruth');
   const rel = people.map((id) => {
     const n = NPCS[id];
     const lv = relLevel(G.s.rel[id] || 0);
-    const role = id === ch.neighbor ? 'neighbor' : id === ch.shopkeeper ? 'shopkeeper' : 'jobContact';
-    return `<div class="rel-row"><div class="rel-main"><b>${escapeHtml(n.name)}</b> <span class="muted">${escapeHtml(n.title)}</span><div class="small muted">${escapeHtml(n.bio)}</div><div class="small">${roleBenefits[role].map((b) => `<span class="${lv >= Number(b[2]) ? 'hl' : 'muted'}">${b}</span>`).join(' · ')} · <span class="${lv >= 1 ? 'hl' : 'muted'}">Lv1: asks you for a favor</span></div></div><div class="hearts" aria-label="Friendship ${lv} of 5">${'♥'.repeat(lv)}${'♡'.repeat(5 - lv)}</div></div>`;
+    const role = id === 'ruth' && ch.id > 1 ? 'companion' : id === ch.neighbor ? 'neighbor' : id === ch.shopkeeper ? 'shopkeeper' : 'jobContact';
+    const extra = id === 'ruth' && ch.id === 1 ? roleBenefits.companion : [];
+    return `<div class="rel-row"><div class="rel-main"><b>${escapeHtml(n.name)}</b> <span class="muted">${escapeHtml(n.title)}</span><div class="small muted">${escapeHtml(n.bio)}</div><div class="small">${[...roleBenefits[role], ...extra].map((b) => `<span class="${lv >= Number(b[2]) ? 'hl' : 'muted'}">${b}</span>`).join(' · ')} · <span class="${lv >= 1 ? 'hl' : 'muted'}">Lv1: asks you for a favor</span></div></div><div class="hearts" aria-label="Friendship ${lv} of 5">${'♥'.repeat(lv)}${'♡'.repeat(5 - lv)}</div></div>`;
   }).join('');
   const favors = activeQuests().map((q) => `<div class="objective-box favor"><b>🙋 ${escapeHtml(q.title)}</b> <span class="muted">for ${escapeHtml(NPCS[q.npc].name)}</span><br>${escapeHtml(questHint(q))}</div>`).join('');
   const doneFavors = Object.entries(G.s.quests || {}).filter(([id, st]) => st.state === 'done' && QUESTS[id]).map(([id]) => QUESTS[id].title);
@@ -629,11 +632,17 @@ const CHAPTER_END = {
     hook: 'But Leo Vescari knows exactly where you are. The family is still searching — and next time, they won\'t send boys.',
     next: 'Chapter 2 is ready: keep playing here as long as you like, then use your car at the cabin to leave Pine Hollow for good.',
   },
+  3: {
+    title: 'THE WISCONSIN FARM',
+    body: 'Vinnie Vescari is gone, the farm still stands, and you hold the one thing Leo Vescari truly fears: his own books.',
+    hook: 'No more running. The next move is yours — straight to the Vescari estate on the Jersey shore.',
+    next: 'Chapter 4 (the estate) is planned for a future update. You can keep playing: farm, fish, work the co-op, help your neighbors and hold the farm against the raids that keep coming.',
+  },
   2: {
     title: 'LARCH STREET',
     body: 'Sal Benedetto is gone, Larch Street is still standing, and the man across the road turned out to be the best friend a hunted man could have.',
     hook: 'Leo knows about Marcus now. "Wisconsin next." The family is closing the distance — and they\'ll come with everything.',
-    next: 'Chapter 3 (a farm in Wisconsin) is planned for a future update. You can keep playing: work jobs, help neighbors, upgrade the house and survive the raids that keep coming.',
+    next: 'Chapter 3 is ready: keep playing here as long as you like, then use your car at the house to leave for the Wisconsin farm.',
   },
 };
 
@@ -647,7 +656,7 @@ export function showChapterEnd(n = 1) {
 }
 
 export function showChapterStart(n, onGo) {
-  const titles = { 2: ['LARCH STREET', 'Millbrook, Ohio — six hundred miles from Pine Hollow.'] };
+  const titles = { 2: ['LARCH STREET', 'Millbrook, Ohio — six hundred miles from Pine Hollow.'], 3: ['THE WISCONSIN FARM', 'Kettle Crossing, Wisconsin — two hundred acres and a broken gate.'] };
   const [t, sub] = titles[n] || ['', ''];
   const el = openModal('chapterStart', `<div class="chapter-card"><div class="ch-num">CHAPTER ${n}</div><h2>${t}</h2><p class="muted">${escapeHtml(sub)}</p>
     <p class="small">Your level, skills, money, weapons and gear come with you. Installed lights, alarms and cameras are packed back into your inventory; boards, braces and shutters stay behind.</p>
