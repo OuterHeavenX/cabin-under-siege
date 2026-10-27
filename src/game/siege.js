@@ -16,6 +16,7 @@ import { NPCS } from '../data/npcs.js';
 import { allyStartSiege, allyEndSiege } from './ally.js';
 import { diff } from './difficulty.js';
 import { playCutscene } from '../ui/cutscene.js';
+import { prequelDefeat } from './prequel.js';
 
 export const absNow = () => G.s.time.day * 1440 + G.s.time.minute;
 export const absOf = (s) => s.day * 1440 + s.minute;
@@ -130,7 +131,7 @@ export function siegeTonight() {
 
 /* ---------------- daily processing (at dawn) ---------------- */
 export function dailyProcess() {
-  if (G.endless) return;
+  if (G.endless || G.prequel) return;
   const w = G.s.world;
   const day = G.s.time.day;
   if (w.lastDayProcessed === day) return;
@@ -190,7 +191,7 @@ export function refreshSignProps() {
 
 /* ---------------- runtime ---------------- */
 export function updateThreatClock() {
-  if (G.endless) return;
+  if (G.endless || G.prequel) return;
   const w = G.s.world;
   const s = w.siege;
   // Sign props appear/disappear with the clock.
@@ -268,6 +269,12 @@ function missedSiege(s) {
 }
 
 export function startSiege(s, immediate = false) {
+  // New Game+: every wave brings company.
+  const ng = Math.min(3, G.s.ngPlus || 0);
+  if (ng && s.plan.kind !== 'endless') {
+    const extra = ['gunman', 'enforcer', 'scout'].slice(0, ng);
+    s = { ...s, plan: { ...s.plan, waves: s.plan.waves.map((w) => ({ ...w, types: [...w.types, ...extra] })) } };
+  }
   G.siegeActive = true;
   clearBanners('danger');
   allyStartSiege();
@@ -384,7 +391,7 @@ function endSiege() {
 
 /** Repeatable small ambush when arriving home at night with high Heat. */
 export function maybeAmbushOnArrival() {
-  if (G.endless) return;
+  if (G.endless || G.prequel) return;
   const w = G.s.world;
   if (!G.s.story.flags.firstSiegeDone || G.siegeActive || w.siege) return;
   if (!isNight() || w.threat < 30 || G.s.time.day < w.quietUntilDay) return;
@@ -397,6 +404,7 @@ export function maybeAmbushOnArrival() {
 export function handleDefeat() {
   if (G.transition && G.transition.kind === 'defeat') return;
   G.transition = { kind: 'defeat', phase: 'hold', fade: 0.65, t: 0 };
+  if (G.prequel) { sfx('defeat'); setTimeout(() => prequelDefeat(), 1400); return; }
   if (G.endless) {
     const res = endlessDefeat();
     allyEndSiege();

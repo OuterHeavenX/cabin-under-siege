@@ -7,6 +7,7 @@ import { addRel, addJP, relOf } from './progression.js';
 import { addItem, count, removeItem } from './inventory.js';
 import { heatLabel, siegeTonight } from './siege.js';
 import { storyDialogue } from './story.js';
+import { prequelTalk } from './prequel.js';
 import { playDialogue } from '../ui/dialogue.js';
 import { openNpcMenu } from '../ui/menus.js';
 import { toast } from '../ui/hud.js';
@@ -45,7 +46,7 @@ export function spawnNpcs() {
     const p = m.points[spot.pt];
     G.npcs.push({ id, def, named: true, x: p.x, y: p.y, radius: 10, angle: Math.PI / 2, spot: spot.pt, path: null, walkPhase: 0, idleT: 0 });
   }
-  if (m.id === workMapId()) {
+  if (m.id === workMapId() && !G.prequel) {
     for (const f of TOWNSFOLK[m.id] || []) {
       const p = m.points[f.route[0]];
       G.npcs.push({ id: f.id, def: f, folk: true, x: p.x, y: p.y, radius: 10, angle: 0, routeIdx: 0, path: null, walkPhase: 0, idleT: Math.random() * 3, spot: f.route[0] });
@@ -72,6 +73,7 @@ export function npcPresent(n) {
     const signActive = s && !s.done && s.day === G.s.time.day;
     return (storyWants || signActive) && minute >= 8 * 60 && minute < 19 * 60;
   }
+  if (n.def && n.def.prequel) return !!(G.prequel && G.prequel.cast.includes(n.id));
   if (n.reyes) return G.s.story.step === 'ch4_reyes' && minute >= 8 * 60 && minute < 19 * 60;
   if (n.deputy) return G.s.story.step === 'ch3_deputy' && minute >= 8 * 60 && minute < 19 * 60;
   return true;
@@ -133,6 +135,7 @@ export function interactNpc(n) {
   if (n.stranger) { G.events.emit('talkStranger', n); return; }
   if (n.deputy) { G.events.emit('talkDeputy', n); return; }
   if (n.reyes) { G.events.emit('talkReyes', n); return; }
+  if (G.prequel) { prequelTalk(n.id); return; }
   // Story conversations take priority over the menu.
   const story = storyDialogue(n.id);
   if (story) { playDialogue(story.lines, story.onEnd); firstTalkBonus(n.id); return; }

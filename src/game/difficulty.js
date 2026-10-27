@@ -1,5 +1,6 @@
 // Difficulty modes. Chosen at New Game and changeable any time in Settings.
 import { G } from './state.js';
+import { ngMods } from './ngplus.js';
 
 export const DIFFICULTY = {
   story: { name: 'Story', dmg: 0.6, hp: 0.8, raid: 0.6, loss: 0.1, desc: 'Attackers hit softer and fall faster, raids are rarer, defeat costs little. For the story.' },
@@ -8,7 +9,9 @@ export const DIFFICULTY = {
 };
 
 export function diff() {
-  return DIFFICULTY[(G.s && G.s.difficulty) || 'normal'] || DIFFICULTY.normal;
+  const d = DIFFICULTY[(G.s && G.s.difficulty) || 'normal'] || DIFFICULTY.normal;
+  const ng = !G.endless && ngMods(G.s);
+  return ng ? { ...d, dmg: d.dmg * ng.dmg, hp: d.hp * ng.hp, raid: d.raid * ng.raid } : d;
 }
 
 /** Low-detail rendering: chosen in Settings, or switched on automatically on slow devices. */

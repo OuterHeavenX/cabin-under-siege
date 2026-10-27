@@ -4,7 +4,7 @@ import { G, hasSkill } from '../game/state.js';
 import { ITEMS, SHOPS, RECIPES, COOK_RECIPES } from '../data/items.js';
 import { cook, canCook } from '../game/activities.js';
 import { DIFFICULTY } from '../game/difficulty.js';
-import { endlessData, ENDLESS_SITES } from '../game/endless.js';
+import { endlessData, ENDLESS_SITES, MODIFIERS, dailyChallenge } from '../game/endless.js';
 import { ERRANDS, errandState, errandDone, stageLabel, activeErrands } from '../game/errands.js';
 import { TOWNSFOLK } from '../data/npcs.js';
 const errandGiverName = (id) => (NPCS[id] ? NPCS[id].name : (Object.values(TOWNSFOLK).flat().find((f) => f.id === id) || {}).name || id);
@@ -30,6 +30,8 @@ import { drawMinimap } from '../world/render.js';
 import { equipWeapon, magSize } from '../game/player.js';
 import { WEAPONS } from '../data/weapons.js';
 import { GAME_VERSION } from '../config.js';
+import { ACHIEVEMENTS, isUnlocked, unlockedCount, achievementData } from '../game/achievements.js';
+import { cloudCode, cloudState, cloudAvailable, cloudEnable, cloudPeek, cloudLink, cloudUnlink, cloudPush, cloudCheck, cloudTake, deviceName, playerName, getDailyScores, postDailyScore } from '../game/cloud.js';
 
 const root = () => document.getElementById('modal-root');
 
@@ -119,7 +121,7 @@ export function confirmBox(text, yesLabel, onYes, noLabel = 'Cancel') {
 
 /* ---------------- main pause menu ---------------- */
 const TABS = [
-  ['inv', 'Items'], ['char', 'Character'], ['skills', 'Skills (JP)'], ['home', 'Home'], ['map', 'Map'], ['journal', 'Journal'], ['settings', 'Settings'],
+  ['inv', 'Items'], ['char', 'Character'], ['skills', 'Skills (JP)'], ['home', 'Home'], ['map', 'Map'], ['journal', 'Journal'], ['trophies', 'Trophies'], ['settings', 'Settings'],
 ];
 
 export function openMenu(tab) {
@@ -145,6 +147,7 @@ function renderMenu(entry) {
     case 'map': body = mapTab(); break;
     case 'journal': body = journalTab(); break;
     case 'settings': body = settingsTab(); break;
+    case 'trophies': body = trophiesHtml(); break;
     default: body = '';
   }
   rerender(entry, `<div class="menu-head"><div class="paused-tag">PAUSED</div><div class="tabs" role="tablist">${tabs}</div></div><div class="tab-body">${body}</div>`);
@@ -187,6 +190,7 @@ function handleMenuClick(e, entry) {
     case 'help': openHelp(); return;
     case 'quit': confirmBox('Return to the title screen? Unsaved progress since your last save will be lost.', 'Quit to title', () => { closeAllModals(); hooks.quitToTitle && hooks.quitToTitle(); }); return;
     case 'resume': closeAllModals(); return;
+    case 'cloud': openCloud(); return;
     case 'fullscreen': hooks.toggleFullscreen && hooks.toggleFullscreen(); return;
     case 'quitapp': confirmBox('Quit to the desktop? The game saves first if it\'s safe to.', 'Quit', () => { hooks.quitApp && hooks.quitApp(); }); return;
     default: return;
@@ -212,6 +216,7 @@ function handleSettingsInput(e, commit) {
     else setTouchMode(matchMedia('(pointer: coarse)').matches);
   }
   if (k === 'quality') G.events.emit('qualityChanged');
+  if (k === 'textSize') document.body.classList.toggle('large-text', t.value === 'large');
   saveSettings();
   if (commit && t.type === 'range') sfx('blip');
 }
@@ -366,9 +371,16 @@ function settingsTab() {
     <label>${chk('showDamageNumbers')} Show damage numbers</label>
     <label>Screen shake ${sel('screenShake', [['full', 'Full'], ['reduced', 'Reduced'], ['off', 'Off']])}</label>
     ${desktopApp ? '' : `<label>Touch controls ${sel('touchControls', [['auto', 'Automatic'], ['on', 'Always on'], ['off', 'Off']])}</label>`}
+    <label>Text size ${sel('textSize', [['normal', 'Normal'], ['large', 'Large']])}</label>
+    <label>Frame rate ${sel('fpsCap', [['auto', 'Smooth (60 fps)'], ['30', desktopApp ? 'Battery saver (30 fps)' : 'Battery saver (30 fps)']])}</label>
+    <label>${chk('rumble')} Controller rumble</label>
     <label>Graphics ${sel('quality', [['auto', `Automatic${G.autoLow ? ' (low)' : ''}`], ['high', 'High'], ['low', desktopApp ? 'Low (saves battery)' : 'Low (older phones)']])}</label>
     ${G.s ? `<label>Difficulty <select data-diff>${Object.entries(DIFFICULTY).map(([k, d]) => `<option value="${k}" ${(G.s.difficulty || 'normal') === k ? 'selected' : ''}>${d.name}</option>`).join('')}</select></label>` : ''}
   </div>
+  <h3>Cloud save</h3>
+  <p class="small">${cloudCode() ? `On — code <b class="code">${cloudCode()}</b>${cloudState().syncedAt ? ` · last synced ${new Date(cloudState().syncedAt).toLocaleString()}` : ''}${cloudState().conflict ? ' · <span class="hl">a newer save is waiting in the cloud</span>' : ''}` : 'Off. Turn it on to carry this save between your phone, browser and Steam Deck.'}</p>
+  <div class="row-btns"><button class="btn" data-act="cloud">☁ Cloud save…</button></div>
+  ${desktopApp ? `<label class="small">Cloud server <input type="text" data-set="cloudServer" placeholder="https://your-game.workers.dev" value="${escapeHtml(G.settings.cloudServer || '')}"></label>` : ''}
   <h3>Save</h3>
   <p class="small">The game autosaves when you sleep, travel, finish jobs, install defenses and survive attacks. Last save: <b>${saved}</b>.</p>
   <div class="row-btns"><button class="btn" data-act="save" ${why ? 'disabled' : ''}>Save now</button><button class="btn" data-act="export">Export save file</button><button class="btn" data-act="import">Import save file</button></div>
@@ -391,6 +403,113 @@ export function pickImport(onDone) {
   });
   inp.click();
 }
+
+/* ---------------- trophies ---------------- */
+function trophiesHtml() {
+  const n = unlockedCount();
+  return `<p class="small">${n} of ${ACHIEVEMENTS.length} unlocked. Trophies belong to you, not one save — they carry over to new games and, with cloud save, to your other devices.</p>
+    <div class="trophies">${ACHIEVEMENTS.map((a) => {
+      const on = isUnlocked(a.id);
+      const when = on ? new Date(achievementData().unlocked[a.id]).toLocaleDateString() : '';
+      return `<div class="trophy ${on ? 'on' : ''}"><span class="t-icon">${on || !a.hidden ? a.icon : '❔'}</span><span class="t-body"><b>${on || !a.hidden ? escapeHtml(a.name) : 'Hidden ending'}</b><span>${on || !a.hidden ? escapeHtml(a.desc) : 'Finish the story to find out.'}</span>${on ? `<em>${when}</em>` : ''}</span></div>`;
+    }).join('')}</div>`;
+}
+
+export function openTrophies() {
+  openModal('trophies', `<h2>Trophies</h2>${trophiesHtml()}<div class="row-btns"><button class="btn primary" data-close>Close</button></div>`, { cls: 'wide' });
+}
+
+/* ---------------- cloud save ---------------- */
+const CODE_KEYS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+function saveLine(sv) {
+  return sv && sv.time ? `Day ${sv.time.day} · Level ${sv.stats ? sv.stats.level : '?'} · Chapter ${sv.chapter || 1}${sv.ngPlus ? ' (New Game+)' : ''}` : 'no story save yet';
+}
+
+export function openCloud() {
+  const el = openModal('cloud', '', { cls: 'small' });
+  const entry = stack[stack.length - 1];
+  const body = () => el.querySelector('.modal-body');
+  let typed = '';
+  const after = () => { if (G.running) { hooks.reloadFromSave && hooks.reloadFromSave(); } else hooks.refreshTitle && hooks.refreshTitle(); };
+  const busy = (msg) => { body().innerHTML = `<h2>☁ Cloud save</h2><p>${escapeHtml(msg)}</p>`; };
+  const fail = (e) => { body().innerHTML = `<h2>☁ Cloud save</h2><p class="hl">${escapeHtml(e.message || String(e))}</p><div class="row-btns"><button class="btn primary" data-c="home">Back</button></div>`; };
+
+  const home = () => {
+    if (!cloudAvailable()) {
+      body().innerHTML = `<h2>☁ Cloud save</h2><p>The desktop app needs to know where the game's website is to use cloud saves. Enter it in Settings → Cloud server (for example <b>https://cabin-under-siege.yourname.workers.dev</b>).</p><div class="row-btns"><button class="btn primary" data-close>OK</button></div>`;
+      return;
+    }
+    const code = cloudCode();
+    if (!code) {
+      body().innerHTML = `<h2>☁ Cloud save</h2>
+        <p>Carry your story, trophies and Endless records between your phone, browser and Steam Deck. You'll get a code — type it on your other device. No account, no email.</p>
+        <p class="small muted">This device: ${escapeHtml(deviceName())} · ${escapeHtml(saveLine(readLocal()))}</p>
+        <div class="row-btns col"><button class="btn primary big" data-c="enable">Turn on cloud save</button><button class="btn big" data-c="enter">I already have a code</button><button class="btn" data-close>Not now</button></div>`;
+      return;
+    }
+    const st = cloudState();
+    body().innerHTML = `<h2>☁ Cloud save is on</h2>
+      <p>Your code:</p><div class="cloud-code">${code}</div>
+      <p class="small">Type it on your other devices (title screen → Cloud Save). Keep it to yourself — anyone with the code can load your save.</p>
+      <p class="small muted">${st.syncedAt ? `Last synced ${new Date(st.syncedAt).toLocaleString()}` : 'Not synced yet'}${st.conflict ? ` · <span class="hl">newer save from ${escapeHtml(st.conflict.device || 'another device')} waiting</span>` : ''}</p>
+      <div class="row-btns col"><button class="btn primary" data-c="check">Check for a newer save</button><button class="btn" data-c="push">Upload this device's save now</button><button class="btn danger" data-c="off">Turn off on this device</button><button class="btn" data-close>Close</button></div>`;
+  };
+
+  const keypad = () => {
+    const shown = (typed + '············').slice(0, 12);
+    body().innerHTML = `<h2>Enter your code</h2>
+      <div class="cloud-code typing">${shown.slice(0, 4)}-${shown.slice(4, 8)}-${shown.slice(8)}</div>
+      <input type="text" class="code-input" maxlength="14" placeholder="or type it here" value="" autocomplete="off" spellcheck="false">
+      <div class="keypad">${[...CODE_KEYS].map((k) => `<button class="key" data-k="${k}">${k}</button>`).join('')}<button class="key wide" data-k="del">⌫</button></div>
+      <div class="row-btns"><button class="btn" data-c="home">Back</button><button class="btn primary" data-c="link" ${typed.length === 12 ? '' : 'disabled'}>Link</button></div>`;
+    const inp = body().querySelector('.code-input');
+    inp.addEventListener('input', () => { typed = inp.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12); const keep = inp.value; keypad(); const i2 = body().querySelector('.code-input'); i2.value = keep; i2.focus(); });
+  };
+
+  const offer = (peek) => {
+    const remote = peek.data && peek.data.save;
+    const local = readLocal();
+    body().innerHTML = `<h2>Found it</h2>
+      <p><b>In the cloud</b> (${escapeHtml(peek.device || 'another device')}, ${new Date(peek.savedAt || peek.updated).toLocaleString()}):<br>${escapeHtml(saveLine(remote))}</p>
+      <p><b>On this device:</b><br>${escapeHtml(saveLine(local))}</p>
+      <p class="small">Trophies and Endless records from both are combined either way.</p>
+      <div class="row-btns col">${remote ? '<button class="btn primary" data-c="useRemote">Play the cloud save here</button>' : ''}${local ? '<button class="btn" data-c="useLocal">Keep this device\'s save (upload it)</button>' : ''}<button class="btn" data-c="home">Cancel</button></div>`;
+    entry.peek = peek;
+  };
+
+  el.addEventListener('click', async (e) => {
+    const k = e.target.closest('[data-k]');
+    if (k) { sfx('ui'); typed = k.dataset.k === 'del' ? typed.slice(0, -1) : (typed + k.dataset.k).slice(0, 12); keypad(); return; }
+    const b = e.target.closest('[data-c]');
+    if (!b) return;
+    sfx('ui');
+    try {
+      switch (b.dataset.c) {
+        case 'home': home(); break;
+        case 'enter': typed = ''; keypad(); break;
+        case 'enable': busy('Creating your cloud slot…'); await cloudEnable(); home(); break;
+        case 'link': busy('Looking up your code…'); offer(await cloudPeek(typed)); break;
+        case 'useRemote': cloudLink(entry.peek, true); toast('☁ Cloud save loaded.', 'info', 2.5); closeModal(); after(); break;
+        case 'useLocal': cloudLink(entry.peek, false); toast('☁ Linked. This device\'s save is now in the cloud.', 'info', 3); home(); break;
+        case 'push': busy('Uploading…'); { const ok = await cloudPush({ quiet: false }); if (!ok && cloudState().conflict) confirmBox('The cloud has a newer save from another device. Overwrite it with this device\'s save anyway?', 'Overwrite', () => cloudPush({ force: true, quiet: false }), 'Keep the cloud one'); } home(); break;
+        case 'check': {
+          busy('Checking…');
+          const c = await cloudCheck();
+          if (c && c.newer) {
+            home();
+            confirmBox(`The cloud has a newer save from ${c.device || 'another device'}: ${saveLine(c.save)}. Load it? This device's save will be replaced.`, 'Load it', () => { cloudTake(c); closeAllModals(); after(); }, 'Not now');
+          } else { toast('☁ You\'re up to date.', 'info', 2); home(); }
+          break;
+        }
+        case 'off': confirmBox('Stop syncing on this device? Your cloud save stays in the cloud; you can link again with the code.', 'Turn off', () => { cloudUnlink(); home(); }); break;
+        default: break;
+      }
+    } catch (err) { fail(err); }
+  });
+  home();
+}
+
+function readLocal() { try { return JSON.parse(localStorage.getItem('cabinUnderSiege.save')); } catch { return null; } }
 
 export function openHelp() {
   openModal('help', `<h2>Controls & Help</h2>
@@ -594,29 +713,63 @@ export function openCraft() {
 /* ---------------- endless siege ---------------- */
 export function openEndlessPicker(onPick) {
   const d = endlessData();
+  const today = dailyChallenge();
+  const tSite = ENDLESS_SITES.find((x) => x.id === today.site);
+  let mod = 'none';
   const rows = ENDLESS_SITES.map((s) => {
     const open = d.unlocked.includes(s.id);
     const b = d.best[s.id];
     return `<button class="btn big diff-btn ${open ? '' : 'locked'}" data-site="${s.id}" ${open ? '' : 'disabled'}><b>${open ? '' : '🔒 '}${escapeHtml(s.name)} <span class="muted">· ${escapeHtml(s.place)}</span></b><span>${open ? (b ? `Best: ${b.waves} wave${b.waves === 1 ? '' : 's'} survived · ${b.kills} attackers down` : 'No record yet.') : `Reach Chapter ${s.chapter} in the story to unlock.`}</span></button>`;
   }).join('');
-  const el = openModal('endless', `<h2>⚔ Endless Siege</h2><p class="small">Wave after wave, all night long. Supplies arrive between waves. Your story save is never touched.</p><div class="diff-list">${rows}</div>
+  const online = cloudAvailable();
+  const el = openModal('endless', `<h2>⚔ Endless Siege</h2>
+    <div class="daily-card">
+      <div class="daily-head"><b>📅 Daily Challenge</b><span class="muted small">${today.day} (UTC) · same waves for everyone</span></div>
+      <p class="small"><b>${escapeHtml(tSite.name)}</b> · ${escapeHtml(MODIFIERS[today.mod].name)} — ${escapeHtml(MODIFIERS[today.mod].desc)}</p>
+      ${online ? `<div class="board" data-board><span class="muted small">Loading today's leaderboard…</span></div>
+      <label class="small name-row">Your name on the board <input type="text" maxlength="16" data-name value="${escapeHtml(playerName())}"></label>` : '<p class="small muted">The leaderboard needs the cloud server (Settings → Cloud server).</p>'}
+      <button class="btn big primary" data-daily>Play today's challenge</button>
+    </div>
+    <h3>Free play</h3>
+    <label class="small">Twist <select data-mod>${Object.entries(MODIFIERS).map(([k, m]) => `<option value="${k}">${escapeHtml(m.name)}</option>`).join('')}</select></label>
+    <p class="small muted" data-moddesc>${escapeHtml(MODIFIERS.none.desc)}</p>
+    <div class="diff-list">${rows}</div>
     <button class="btn" data-close>Back</button>`, { cls: 'small' });
+  const sel = el.querySelector('[data-mod]');
+  sel.addEventListener('change', () => { mod = sel.value; el.querySelector('[data-moddesc]').textContent = MODIFIERS[mod].desc; });
+  const nameIn = el.querySelector('[data-name]');
+  if (nameIn) nameIn.addEventListener('input', () => { G.settings.playerName = nameIn.value.trim().slice(0, 16) || playerName(); saveSettings(); });
+  if (online) getDailyScores(today.day).then((r) => { const box = el.querySelector('[data-board]'); if (box) box.innerHTML = boardHtml(r, 5); }).catch(() => { const box = el.querySelector('[data-board]'); if (box) box.innerHTML = '<span class="muted small">Leaderboard unavailable offline.</span>'; });
   el.addEventListener('click', (e) => {
+    if (e.target.closest('[data-daily]')) { closeModal(); onPick(today.site, { mod: today.mod, daily: today }); return; }
     const b = e.target.closest('[data-site]');
     if (!b || b.disabled) return;
     closeModal();
-    onPick(b.dataset.site);
+    onPick(b.dataset.site, { mod });
   });
+}
+
+function boardHtml(r, n = 10, mine = null) {
+  if (!r || !r.top || !r.top.length) return '<span class="muted small">No scores yet today. Be the first.</span>';
+  return `<ol class="board-list">${r.top.slice(0, n).map((x) => `<li class="${mine && x.name === mine ? 'me' : ''}"><span>${escapeHtml(x.name)}</span><span class="muted">${escapeHtml(x.platform || '')}</span><b>${x.waves} waves · ${x.kills}</b></li>`).join('')}</ol><span class="muted small">${r.players} player${r.players === 1 ? '' : 's'} today</span>`;
 }
 
 export function showEndlessResult(res) {
   setTimeout(() => {
     const el = openModal('endless-result', `<h2 class="defeat-title">The night won — this time</h2>
       <div class="summary"><div><b>${res.survived}</b><span>waves survived</span></div><div><b>${res.kills}</b><span>attackers down</span></div></div>
+      ${res.mod && res.mod !== 'none' ? `<p class="small muted">Twist: ${escapeHtml(MODIFIERS[res.mod].name)}</p>` : ''}
       <p class="small">${res.record ? '<span class="hl">New personal best at ' + escapeHtml(res.site.name) + '!</span>' : `Best at ${escapeHtml(res.site.name)}: ${res.best.waves} waves · ${res.best.kills} down.`}</p>
+      ${res.daily ? '<div class="board" data-board><span class="muted small">Posting your score…</span></div>' : ''}
       <div class="row-btns"><button class="btn big primary" data-again>Try again</button><button class="btn big" data-title>Title screen</button></div>`, { closable: false, cls: 'small defeat' });
-    el.querySelector('[data-again]').addEventListener('click', () => { closeModal(); G.transition = null; hooks.restartEndless && hooks.restartEndless(res.site.id); });
+    el.querySelector('[data-again]').addEventListener('click', () => { closeModal(); G.transition = null; hooks.restartEndless && hooks.restartEndless(res.site.id, { mod: res.mod, daily: res.daily }); });
     el.querySelector('[data-title]').addEventListener('click', () => { closeModal(); G.transition = null; hooks.quitToTitle && hooks.quitToTitle(); });
+    if (res.daily) {
+      const box = el.querySelector('[data-board]');
+      postDailyScore(res.daily.day, res.survived, res.kills)
+        .then((p) => { G.events.emit('dailyPosted', p.rank); return getDailyScores(res.daily.day).then((r) => { box.innerHTML = `<p class="small"><b>You're #${p.rank} today</b> (your best: ${p.best.waves} waves · ${p.best.kills})</p>${boardHtml(r, 10, playerName())}`; }); })
+        .catch((e) => { box.innerHTML = `<span class="muted small">${escapeHtml(e.message)}</span>`; });
+    }
   }, 1200);
 }
 
@@ -863,7 +1016,8 @@ export function showEnding(kind = 'walk') {
     <ul class="small epilogue">${epilogue(kind).map((l) => `<li>${escapeHtml(l)}</li>`).join('')}</ul>
     <p class="small muted">Day ${G.s.time.day} · level ${st.level || 1} · ${(G.s.world && G.s.world.sieges) || 0} night${(G.s.world && G.s.world.sieges) === 1 ? '' : 's'} under siege survived · ending: ${e.title.toLowerCase()}</p>
     <p class="small muted">CABIN UNDER SIEGE — thank you for playing. Your save stays open: keep living in Short Hills, finish the town's errands, or try Endless Siege from the title screen. Start a new game to see the other endings.</p>
-    <button class="btn big primary" data-close>Continue playing</button></div>`, { cls: 'small chapter' });
+    <div class="row-btns col"><button class="btn big primary" data-close>Continue playing</button><button class="btn big" data-ngplus>Start New Game+ (keep your level, skills and gear)</button></div></div>`, { cls: 'small chapter' });
+  el.querySelector('[data-ngplus]').addEventListener('click', () => confirmBox('Start New Game+? Your finished story save becomes the new run: level, skills, money, weapons and gear carry over; the story starts again in Pine Hollow with a tougher family.', 'Start New Game+', () => { closeAllModals(); hooks.newGamePlus && hooks.newGamePlus(); }, 'Not yet'));
   sfx('victory');
   return el;
 }

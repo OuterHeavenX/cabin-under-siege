@@ -16,6 +16,8 @@ import { scheduleSpot } from './npcs.js';
 import { NPCS } from '../data/npcs.js';
 import { choresStatus, errandWaypoint, errandGiverWaypoint, startErrand, townErrandsDone } from './errands.js';
 import { startQuest } from './quests.js';
+import { input } from '../input.js';
+import { NG_TWISTS } from './ngplus.js';
 
 const ME = 'Frank';
 
@@ -877,6 +879,7 @@ function finishGame() {
   G.s.world.threat = 0;
   G.s.world.siege = null;
   G.s.world.quietUntilDay = G.s.time.day + 9999;
+  G.s.finaleQuiet = !!G.assault && !G.assault.alarm;
   G.assault = null;
   if (G.s.ending !== 'walk') G.npcs = G.npcs.filter((n) => n.id !== 'leo');
   for (const e of G.enemies) if (!e.dead) { e.retreating = true; e.alerted = false; }
@@ -1136,12 +1139,25 @@ export function answerPhone() {
 }
 
 export function newGameIntro() {
+  const tip = input.padMode
+    ? { who: 'Tip', text: 'Left stick moves, right stick aims, RT fires, A talks and opens doors. Press Menu for the pause menu and help.' }
+    : { who: 'Tip', text: 'Move with WASD / the left side of the screen. Aim with the mouse / right stick. Interact with E / the ACT button. Open the Menu (☰) for help.' };
+  const tw = G.s.ngPlus && NG_TWISTS[G.s.ngEnding];
+  if (tw) {
+    playDialogue([
+      { who: '', text: `NEW GAME+${G.s.ngPlus > 1 ? ` ×${G.s.ngPlus}` : ''} — ${tw.title.toUpperCase()}` },
+      ...tw.intro,
+      { who: 'You', text: 'Same cabin. Same road. But I\'m not the same man who came here the first time.' },
+      { who: 'Tip', text: `You kept your level, skills, money, weapons and gear${G.s.companion.dog ? ' — and Duke' : ''}. People don\'t know you yet, and every attack brings more of them. ${tw.perk}` },
+    ]);
+    return;
+  }
   playDialogue([
     { who: '', text: 'Pine Hollow. Population 212. Six hundred miles from Newark.' },
     { who: ME, text: 'Twenty years I did what the Vescari family told me. Collections. Driving. Things I don\'t talk about.' },
     { who: ME, text: 'Then I walked away. New name, new plates, a cabin nobody wanted at the end of a dirt road.' },
     { who: ME, text: 'Here, I\'m just Frank Lowe. I chop wood. I pay my bills. I wave at neighbors.' },
     { who: ME, text: 'Let\'s go see the place.' },
-    { who: 'Tip', text: 'Move with WASD / the left side of the screen. Aim with the mouse / right stick. Interact with E / the ACT button. Open the Menu (☰) for help.' },
+    tip,
   ]);
 }

@@ -31,7 +31,7 @@ jobs:
       - name: Build Linux (Steam Deck) and Windows
         run: node tools/build-desktop.mjs --win
       - id: ver
-        run: echo "version=$(node -p "require('./desktop/package.json').version")" >> "$GITHUB_OUTPUT"
+        run: echo "version=$(node -e "console.log(require('fs').readFileSync('src/config.js','utf8').match(/GAME_VERSION = '([^']+)'/)[1])")" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v4
         with:
           name: cabin-under-siege-linux-x64-v${{ steps.ver.outputs.version }}

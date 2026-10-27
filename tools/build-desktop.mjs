@@ -27,8 +27,9 @@ if (args.includes('--stage')) process.exit(0);
 // 2. Package with Electron.
 const require = createRequire(desk + 'package.json');
 const { packager } = require('@electron/packager');
-const pkgVersion = JSON.parse(readFileSync(desk + 'package.json', 'utf8')).version;
-if (pkgVersion !== version) console.warn(`! desktop/package.json version ${pkgVersion} differs from GAME_VERSION ${version}`);
+// One version number for everything: GAME_VERSION in src/config.js.
+const pkg = JSON.parse(readFileSync(desk + 'package.json', 'utf8'));
+if (pkg.version !== version) { pkg.version = version; writeFileSync(desk + 'package.json', JSON.stringify(pkg, null, 2) + '\n'); console.log(`desktop/package.json version -> ${version}`); }
 
 const targets = [{ platform: 'linux', arch: 'x64' }];
 if (args.includes('--win')) targets.push({ platform: 'win32', arch: 'x64' });

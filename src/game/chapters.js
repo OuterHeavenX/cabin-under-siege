@@ -29,6 +29,11 @@ export const CHAPTERS = {
     neighbor: 'dom', shopkeeper: 'angie', jobContact: 'mickey', jobPlace: "Doyle's Towing", storeName: "Marchetti's",
     hardwareName: "Marchetti's", firstStep: 'ch5_arrive', choresNeeded: 3,
   },
+  // The prequel episode (never a story chapter; only used while G.prequel is set).
+  6: {
+    id: 6, name: 'Newark, 1999', place: 'Newark', homeMap: 'newark', workMap: 'newark', maps: ['newark'],
+    neighbor: 'joey', shopkeeper: 'sal99', jobContact: 'carmine99', jobPlace: '', storeName: '', hardwareName: '', firstStep: 'prequel', prequel: true,
+  },
 };
 
 export const LAST_CHAPTER = 5;

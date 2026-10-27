@@ -1223,6 +1223,107 @@ if (want('pad')) {
   await ctx.close();
 }
 
+/* ================================================================== */
+/* v0.8: cloud save, trophies, New Game+, Newark 1999, daily challenge  */
+/* ================================================================== */
+if (want('v7')) {
+  const mk = async (label) => { const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } }); const p = await ctx.newPage(); watch(p, label); await p.goto(URL); await p.waitForSelector('#t-new'); return p; };
+  const skipAll = async (p, pick = 0) => { for (let i = 0; i < 50; i++) { const st = await p.evaluate(() => { const d = document.getElementById('dialogue'); if (window.__cus.G.cutscene && d.classList.contains('hidden')) return 'cine'; if (d.classList.contains('hidden')) return 'none'; return document.querySelectorAll('#dlg-choices .choice').length && !document.getElementById('dlg-choices').classList.contains('hidden') ? 'choice' : 'text'; }); if (st === 'none') return; if (st === 'cine') await p.evaluate(() => window.__cus.dbg.skipCutscene()); else if (st === 'choice') await p.locator('#dlg-choices .choice').nth(pick).click(); else await p.click('#dlg-skip').catch(() => {}); await sleep(90); } };
+  // --- Cloud save across two devices ---
+  const A = await mk('v7-A');
+  await A.click('#t-new'); await sleep(500); await A.click('.modal [data-diff-pick="normal"]'); await sleep(700);
+  await A.evaluate(() => { const c = window.__cus; c.dbg.closeAll(); for (let i = 0; i < 30; i++) document.getElementById('dlg-skip').click(); c.G.s.time.day = 7; c.G.s.money = 1600; c.saveGame('test', { force: true }); });
+  await sleep(2600);
+  check('v7 Trophy unlocks with a pop-up (Rainy Day Fund)', await A.evaluate(() => !!JSON.parse(localStorage.getItem('cabinUnderSiege.achievements')).unlocked.rich && !!document.querySelector('.trophy-card')));
+  await A.evaluate(() => window.__cus.dbg.openMenu('settings')); await sleep(200);
+  await A.click('[data-act="cloud"]'); await sleep(300); await A.click('[data-c="enable"]'); await sleep(900);
+  const code = (await A.textContent('.cloud-code')).trim();
+  check('v7 Cloud save gives a code', /^[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}$/.test(code), code);
+  const B = await mk('v7-B');
+  await B.click('#t-cloud'); await sleep(300); await B.click('[data-c="enter"]'); await sleep(200);
+  for (const ch of code.replace(/-/g, '')) { await B.click(`[data-k="${ch}"]`); await sleep(25); }
+  await B.click('[data-c="link"]'); await sleep(900); await B.click('[data-c="useRemote"]'); await sleep(700);
+  check('v7 Another device loads the cloud save with the on-screen code pad (and its trophies)', (await B.textContent('#t-continue')).includes('Day 7') && (await B.textContent('#t-trophies')).includes('(1/'), await B.textContent('#t-continue'));
+  await B.click('#t-continue'); await sleep(900);
+  await B.evaluate(() => { const c = window.__cus; c.dbg.closeAll(); c.G.s.time.day = 9; c.saveGame('test', { force: true }); });
+  await B.evaluate(() => import('./src/game/cloud.js').then((m) => m.cloudPush({ quiet: false })));
+  await A.evaluate(() => { window.__cus.dbg.closeAll(); window.__cus.quitToTitle(); }); await sleep(1300);
+  check('v7 The first device is offered the newer save on its title screen', (await A.textContent('#t-cloudnote')).includes('Day 9'));
+  check('v7 An older device never overwrites newer cloud progress', (await A.evaluate(() => import('./src/game/cloud.js').then((m) => m.cloudPush({ quiet: true })))) === false);
+  await A.click('#t-cloudnote button'); await sleep(400);
+  check('v7 Load the newer save from the title', (await A.textContent('#t-continue')).includes('Day 9'));
+  await A.click('#t-trophies'); await sleep(300);
+  check('v7 Trophies screen lists every achievement', await A.evaluate(() => document.querySelectorAll('.trophy').length >= 30 && document.querySelectorAll('.trophy.on').length >= 1));
+  await A.screenshot({ path: OUT + 'v7-trophies.png' });
+  await A.evaluate(() => window.__cus.dbg.closeAll());
+  // --- New Game+ ---
+  await A.evaluate(() => { const raw = JSON.parse(localStorage.getItem('cabinUnderSiege.save')); raw.story.done = { 1: true, 2: true, 3: true, 4: true, 5: true }; raw.ending = 'crown'; raw.stats.level = 9; raw.skills = ['tough']; raw.inv.ledger = 1; localStorage.setItem('cabinUnderSiege.save', JSON.stringify(raw)); });
+  await A.reload(); await A.waitForSelector('#t-new'); await sleep(400);
+  check('v7 New Game+ appears once the story is finished', await A.isVisible('#t-ngplus'));
+  await A.click('#t-ngplus'); await sleep(250); await A.click('[data-yes]'); await sleep(900);
+  const ng = await A.evaluate(() => { const c = window.__cus; return { ng: c.G.s.ngPlus, ending: c.G.s.ngEnding, level: c.G.s.stats.level, step: c.G.s.story.step, money: c.G.s.money, shotgun: c.G.s.inv.shotgun, ledger: c.G.s.inv.ledger || 0, intro: document.getElementById('dlg-text').textContent + document.getElementById('dlg-who').textContent }; });
+  check('v7 New Game+: level and gear carry over, story items don\'t, crown twist gives cash and a shotgun', ng.ng === 1 && ng.ending === 'crown' && ng.level === 9 && ng.step === 'arrive' && ng.money >= 1500 && ng.shotgun === 1 && ng.ledger === 0, JSON.stringify(ng));
+  await skipAll(A);
+  const ngFight = await A.evaluate(() => { const c = window.__cus; const n = c.dbg.storyPlan().waves.reduce((a, w) => a + w.types.length, 0); c.G.player.invuln = 9999; c.dbg.startSiege({ plan: c.dbg.storyPlan() }, true); const m = c.G.siege.total; c.G.siegeActive = false; c.G.siege = null; return { n, m, hp: c.dbg.derived && true }; });
+  check('v7 New Game+: tougher family (extra attackers every wave)', ngFight.m > ngFight.n, JSON.stringify(ngFight));
+  check('v7 Trophy: Once More, With Feeling', await A.evaluate(() => new Promise((r) => setTimeout(() => r(!!JSON.parse(localStorage.getItem('cabinUnderSiege.achievements')).unlocked.ngplus), 2400))));
+  await A.evaluate(() => { window.__cus.dbg.closeAll(); window.__cus.quitToTitle(); }); await sleep(300);
+  // --- Newark, 1999 ---
+  await A.evaluate(() => { const d = JSON.parse(localStorage.getItem('cabinUnderSiege.achievements')); d.unlocked.ch5 = 1; localStorage.setItem('cabinUnderSiege.achievements', JSON.stringify(d)); });
+  await A.reload(); await A.waitForSelector('#t-new'); await sleep(300);
+  check('v7 Newark, 1999 unlocks after the story', await A.isVisible('#t-prequel'));
+  const saveBefore = await A.evaluate(() => localStorage.getItem('cabinUnderSiege.save'));
+  await A.click('#t-prequel'); await sleep(200); await A.click('[data-yes]'); await sleep(900); await skipAll(A);
+  const pstep = () => A.evaluate(() => window.__cus.G.prequel && window.__cus.G.prequel.step);
+  const talk = async (id) => { await A.evaluate((id) => { const c = window.__cus; const n = c.G.npcs.find((x) => x.id === id); c.G.player.x = n.x; c.G.player.y = n.y + 22; c.dbg.input.mouse.inside = false; c.G.player.angle = -Math.PI / 2; }, id); await sleep(300); await A.keyboard.press('KeyE'); await sleep(300); await skipAll(A); };
+  check('v7 Newark: the Ninth Ward Social Club, 1999', (await A.evaluate(() => window.__cus.G.map.id)) === 'newark' && (await pstep()) === 'pq_club');
+  await talk('leo99'); await talk('sal99'); await talk('joey');
+  check('v7 Newark: Leo, Sal and Joey — the shotgun from the trunk', (await pstep()) === 'pq_drive' && await A.evaluate(() => window.__cus.G.s.inv.shotgun === 1));
+  await A.evaluate(() => { const c = window.__cus; const car = c.G.map.props.find((p) => p.id === 'car'); c.G.player.x = car.x; c.G.player.y = car.y + 34; c.G.player.angle = -Math.PI / 2; }); await sleep(300);
+  await A.keyboard.press('KeyE'); await sleep(2600); await skipAll(A);
+  await A.evaluate(() => { const c = window.__cus; const pr = c.G.map.props.find((p) => p.id === 'pq_crate'); c.G.player.x = pr.x - 30; c.G.player.y = pr.y; c.G.player.angle = 0; }); await sleep(300);
+  await A.keyboard.press('KeyE'); await sleep(400); await skipAll(A);
+  check('v7 Newark: the crate is a setup — the fight starts', (await pstep()) === 'pq_fight');
+  // Falling restarts the fight instead of ending the episode
+  await sleep(2200);
+  await A.evaluate(() => { const c = window.__cus; c.G.player.invuln = 0; c.G.player.hp = 1; c.dbg.damagePlayer(50, c.G.player.x + 40, c.G.player.y, 'bullet'); });
+  await sleep(2200);
+  check('v7 Newark: falling restarts the fight', (await pstep()) === 'pq_fight' && await A.evaluate(() => !window.__cus.G.player.dead && window.__cus.G.player.hp > 50));
+  await A.evaluate(() => { window.__cus.G.player.invuln = 99999; });
+  for (let i = 0; i < 120 && (await pstep()) === 'pq_fight'; i++) { await sleep(250); await A.evaluate(() => { const c = window.__cus; if (c.G.cutscene && c.G.cutscene.phase !== 'talk') c.dbg.skipCutscene(); for (const e of c.G.enemies) if (!e.dead) c.dbg.damageEnemy(e, 9999, 0, 'bullet'); }); }
+  await skipAll(A, 1);
+  for (let i = 0; i < 60 && (await pstep()) === 'pq_last'; i++) { await sleep(250); await A.evaluate(() => { const c = window.__cus; for (const e of c.G.enemies) if (!e.dead) c.dbg.damageEnemy(e, 9999, 0, 'bullet'); }); }
+  check('v7 Newark: Dante, the last stand, then the car', (await pstep()) === 'pq_car');
+  await A.evaluate(() => { const c = window.__cus; const car = c.G.map.props.find((p) => p.id === 'car'); c.G.player.x = car.x; c.G.player.y = car.y + 34; c.G.player.angle = -Math.PI / 2; }); await sleep(300);
+  await A.keyboard.press('KeyE'); await sleep(400); await skipAll(A); await sleep(2500); await skipAll(A); await sleep(800);
+  check('v7 Newark: St. Rose, the ending card and the trophy', (await A.evaluate(() => window.__cus.G.modal)) === 'prequelEnd' && await A.evaluate(() => !!JSON.parse(localStorage.getItem('cabinUnderSiege.achievements')).unlocked.newark));
+  check('v7 Newark never touches the story save', (await A.evaluate(() => localStorage.getItem('cabinUnderSiege.save'))) === saveBefore);
+  await A.click('[data-go]'); await sleep(400);
+  // --- Daily challenge + leaderboard ---
+  await A.click('#t-endless'); await sleep(900);
+  check('v7 Endless: daily challenge card with today\'s leaderboard and twists for free play', await A.isVisible('[data-daily]') && await A.evaluate(() => document.querySelectorAll('[data-mod] option').length === 5 && !!document.querySelector('[data-board] .muted')));
+  await A.screenshot({ path: OUT + 'v7-daily.png' });
+  await A.fill('[data-name]', 'Frankie'); await sleep(100);
+  await A.click('[data-daily]'); await sleep(900);
+  const run = await A.evaluate(() => { const E = window.__cus.G.endless; return { daily: !!E.daily, mod: E.mod, site: E.site.id }; });
+  check('v7 Daily challenge runs with the day\'s site and twist', run.daily && run.mod !== 'none', JSON.stringify(run));
+  await A.evaluate(() => { const c = window.__cus; c.G.endless.wave = 4; c.G.endless.kills = 21; c.G.player.invuln = 0; c.G.player.hp = 1; c.dbg.damagePlayer(80, c.G.player.x + 40, c.G.player.y, 'bullet'); });
+  await sleep(3500);
+  const res = await A.evaluate(() => document.querySelector('[data-board]') && document.querySelector('[data-board]').textContent);
+  check('v7 Daily score posts to the online leaderboard', /#1 today/.test(res || '') && /Frankie/.test(res || ''), res);
+  check('v7 Trophy: Daily Grind', await A.evaluate(() => !!JSON.parse(localStorage.getItem('cabinUnderSiege.achievements')).unlocked.daily));
+  // --- Deck polish settings ---
+  await A.evaluate(() => { window.__cus.dbg.closeAll(); window.__cus.quitToTitle(); window.__cus.continueGame(); }); await sleep(800);
+  await A.evaluate(() => { window.__cus.dbg.closeAll(); window.__cus.dbg.openMenu('settings'); }); await sleep(200);
+  await A.selectOption('[data-set="textSize"]', 'large'); await A.selectOption('[data-set="fpsCap"]', '30'); await sleep(200);
+  check('v7 Settings: large text and a 30 fps battery saver', await A.evaluate(() => document.body.classList.contains('large-text') && window.__cus.G.settings.fpsCap === '30'));
+  await A.evaluate(() => window.__cus.dbg.closeAll());
+  const f0 = await A.evaluate(() => window.__cus.G.time); await sleep(1000); const f1 = await A.evaluate(() => window.__cus.G.time);
+  check('v7 Battery saver keeps the game running', f1 - f0 > 0.5, `${(f1 - f0).toFixed(2)}s`);
+  await A.evaluate(() => { window.__cus.G.settings.fpsCap = 'auto'; window.__cus.G.settings.textSize = 'normal'; });
+  await A.context().close(); await B.context().close();
+}
+
 /* Packaged Electron app (only when `node tools/build-desktop.mjs` has been run). */
 if (want('electron')) {
   const exe = decodeURIComponent(new globalThis.URL('../desktop/out/Cabin Under Siege-linux-x64/cabin-under-siege', import.meta.url).pathname);

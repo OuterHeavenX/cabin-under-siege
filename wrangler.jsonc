@@ -1,10 +1,17 @@
-// Cloudflare Workers (static assets only — no Worker script).
+// Cloudflare Workers: the static game in ./dist plus a small API Worker for
+// cloud saves and the daily leaderboard (worker/index.js, /api/* only).
 // Build with `npm run build`, deploy with `npx wrangler deploy`.
 {
   "name": "cabin-under-siege",
+  "main": "worker/index.js",
   "compatibility_date": "2026-10-13",
   "assets": {
     "directory": "./dist",
-    "not_found_handling": "404-page"
-  }
+    "binding": "ASSETS",
+    "not_found_handling": "404-page",
+    "run_worker_first": ["/api/*"]
+  },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "cabin-under-siege-db", "database_id": "af3e2091-e59b-433b-ab02-ea2fa63f5a25" }
+  ]
 }

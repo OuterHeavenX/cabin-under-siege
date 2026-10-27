@@ -1109,3 +1109,73 @@ export function buildMansionMap() {
   m.props.push({ id: 'car', kind: 'car', x: 2.5 * TILE, y: 37.5 * TILE, label: 'Your Car', r: 64 });
   return m;
 }
+
+/* ------------------------------------------------------------------ */
+/* Prequel: Newark, 1999 — Ferry Street, the social club, the docks     */
+/* ------------------------------------------------------------------ */
+export function buildNewarkMap() {
+  const W = 64, H = 42;
+  const m = new GameMap('newark', W, H, 'Newark, 1999');
+  m.stone = new Set();
+  m.fillGround(0, 0, W, H, GR.SIDEWALK);
+  // Ferry Street, east-west; a side street north past the club; the river to the south-east.
+  m.fillGround(0, 18, W, 3, GR.ROAD);
+  m.fillGround(31, 0, 2, 18, GR.ROAD);
+  for (let cy = 37; cy < H; cy++) for (let cx = 34; cx < W; cx++) { m.setGround(cx, cy, GR.WATER); m.setSolid(cx, cy, SO.WATER); }
+  m.fillGround(47, 36, 10, 4, GR.PORCH); // the pier
+  for (let cy = 36; cy < 40; cy++) for (let cx = 47; cx < 57; cx++) m.setSolid(cx, cy, SO.NONE);
+
+  // The Ninth Ward Social Club (Leo's)
+  building(m, { id: 'club', name: 'Ninth Ward Social Club', x: 4, y: 5, w: 14, h: 11, roof: '#2a1414', floor: GR.TILEFLOOR });
+  addDoor(m, 'club_door', 10, 15, { ...npcDoorRec(), open: true }, 'Club Door');
+  addWindow(m, 'club_w1', 6, 15, npcWinRec(), 'Window'); addWindow(m, 'club_w2', 14, 15, npcWinRec(), 'Window');
+  for (let cx = 5; cx < 17; cx++) if (cx !== 11) m.setSolid(cx, 10, SO.WALL); // Leo's back room
+  m.fillSolid(12, 12, 5, 1, SO.COUNTER); m.decor.push({ kind: 'counter', x: 12, y: 12, w: 5, h: 1 });
+  m.fillSolid(5, 12, 2, 2, SO.FURN); m.decor.push({ kind: 'table', x: 5, y: 12, w: 2, h: 2 });
+  m.fillSolid(7, 7, 3, 2, SO.FURN); m.decor.push({ kind: 'table', x: 7, y: 7, w: 3, h: 2 });
+  m.decor.push({ kind: 'rug', x: 11, y: 6, w: 4, h: 3 });
+  // Neighbors: a tenement and Vinnie's diner
+  building(m, { id: 'tenement', name: 'Tenement', x: 19, y: 4, w: 10, h: 11, roof: '#3a2a26' });
+  building(m, { id: 'diner99', name: 'Ironbound Diner', x: 35, y: 6, w: 10, h: 9, roof: '#4a2a2a' });
+  addDoor(m, 'diner_door', 40, 14, npcDoorRec(), 'Diner Door');
+  building(m, { id: 'garage99', name: 'Body Shop', x: 48, y: 5, w: 12, h: 10, roof: '#2e3236' });
+  // South of Ferry Street: the alley, a row of shops, the Delgado warehouse
+  building(m, { id: 'shops99', name: 'Storefronts', x: 3, y: 24, w: 22, h: 8, roof: '#3a2c28' });
+  m.fillGround(26, 22, 4, 18, GR.DIRT); // the alley
+  m.fillSolid(27, 26, 1, 2, SO.FURN); m.decor.push({ kind: 'crate', x: 27, y: 26, w: 1, h: 2 });
+  m.fillSolid(28, 32, 1, 1, SO.FURN); m.decor.push({ kind: 'crate', x: 28, y: 32, w: 1, h: 1 });
+  building(m, { id: 'warehouse', name: 'Delgado Import & Export', x: 40, y: 23, w: 20, h: 13, roof: '#3a3a3e', floor: GR.GRAVEL });
+  addDoor(m, 'wh_door_l', 49, 23, { ...npcDoorRec(), open: true }, 'Loading Door');
+  addDoor(m, 'wh_door_r', 50, 23, { ...npcDoorRec(), open: true }, 'Loading Door');
+  addDoor(m, 'wh_side', 40, 30, { ...npcDoorRec(), open: true }, 'Side Door', true);
+  addDoor(m, 'wh_dock', 52, 35, { ...npcDoorRec(), open: true }, 'Dock Door');
+  for (const [cx, cy, w, h] of [[43, 26, 2, 2], [47, 27, 1, 3], [53, 26, 2, 1], [56, 28, 2, 2], [44, 31, 3, 1], [50, 31, 2, 2], [55, 32, 1, 2], [42, 33, 1, 1]]) {
+    m.fillSolid(cx, cy, w, h, SO.FURN); m.decor.push({ kind: 'crate', x: cx, y: cy, w, h });
+  }
+  addProp(m, { id: 'pq_crate', kind: 'prequel', x: 57 * TILE, y: 33.2 * TILE, label: 'Delgado\'s crate', r: 46 });
+
+  // Joey's car on Ferry Street; a newsstand; dumpsters
+  m.fillSolid(21, 17, 3, 2, SO.CAR);
+  addProp(m, { id: 'car', kind: 'car', x: 22.5 * TILE, y: 16.6 * TILE, label: 'Joey\'s Buick', r: 64 });
+  m.fillSolid(34, 16, 2, 1, SO.FURN); m.decor.push({ kind: 'crate', x: 34, y: 16, w: 2, h: 1 });
+
+  m.spawns = {
+    street_e: { ...P(63.5, 19.5), label: 'Ferry Street' },
+    street_w: { ...P(0.5, 19.5), label: 'Ferry Street' },
+    alley: { ...P(28, 41), label: 'the alley' },
+    north: { ...P(32, 0.5), label: 'Jefferson Street' },
+    pier: { ...P(52, 39.5), label: 'the pier' },
+  };
+  m.points = {
+    start: P(10.5, 17.2), arrive: P(10.5, 17.2), car: P(22.5, 16.4), recovery: P(10.5, 17.2),
+    leo99: P(13, 7.6), sal99: P(14.5, 11.2), carmine99: P(9, 16.6), joey_car: P(25, 16.6), joey_wh: P(51.5, 34.2),
+    wh_front: P(49.5, 21.8), wh_in: P(49.5, 25), dante99: P(30, 19.5), dante_wh: P(49.5, 21.4),
+    walk_a: P(20, 16.6), walk_b: P(40, 16.6), walk_c: P(12, 22), walk_d: P(30, 22),
+  };
+  m.discover = [];
+  m.lights = [];
+  for (let cx = 3; cx < W; cx += 7) { m.lights.push({ x: cx * TILE, y: 17.2 * TILE, r: 130, street: true }); m.lights.push({ x: (cx + 3) * TILE, y: 21.8 * TILE, r: 120, street: true }); }
+  for (const b of m.buildings) if (b.id !== 'tenement' && b.id !== 'shops99') m.lights.push({ x: (b.x + b.w / 2) * TILE, y: (b.y + b.h / 2) * TILE, r: Math.max(b.w, b.h) * 16, building: b.id });
+  m.lights.push({ x: 52 * TILE, y: 38 * TILE, r: 110 });
+  return m;
+}

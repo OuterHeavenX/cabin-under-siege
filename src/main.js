@@ -2,20 +2,23 @@
 import { G, newSave, isNight } from './game/state.js';
 import { TILE } from './config.js';
 import { clamp, dist, fmtClock, escapeHtml } from './util.js';
-import { buildCabinMap, buildTownMap, buildMillbrookMap, buildFarmMap, buildEstateMap, buildShortHillsMap, buildMansionMap } from './world/mapgen.js';
+import { buildCabinMap, buildTownMap, buildMillbrookMap, buildFarmMap, buildEstateMap, buildShortHillsMap, buildMansionMap, buildNewarkMap } from './world/mapgen.js';
+import { startPrequel, updatePrequel, prequelObjective } from './game/prequel.js';
 import { startAssault, updateAssault, endAssault } from './game/assault.js';
 import { callAllies } from './game/story.js';
 import { chapter, homeMapId, workMapId, atHome, LAST_CHAPTER } from './game/chapters.js';
 import { QUESTS, questWaypoint } from './game/quests.js';
 import { newHome } from './game/state.js';
-import { showChapterStart, openDifficultyPicker, openEndlessPicker } from './ui/menus.js';
+import { showChapterStart, openDifficultyPicker, openEndlessPicker, openCloud, openTrophies } from './ui/menus.js';
+import { initCloudSync, cloudCode, cloudCheck, cloudTake } from './game/cloud.js';
+import { canNewGamePlus, makeNewGamePlus } from './game/ngplus.js';
 import { buildGroundCanvas, buildRoofCanvas, render } from './world/render.js';
 import { initInput, consume, endFrame, resetInput, setTouchMode, input, suppressGhostClick, desktopApp } from './input.js';
-import { updateGamepad } from './gamepad.js';
+import { updateGamepad, rumble } from './gamepad.js';
 import { initAudio, setVolumes, updateAudio, setMusic, setAmbient, suspendAudio, resumeAudio, sfx, setListener, setFireLevel, audioDebug, renderOffline, musicBar, birdCall } from './audio.js';
 import { initHud, updateHud, toast, banner } from './ui/hud.js';
 import { initDialogue, updateDialogue, playDialogue } from './ui/dialogue.js';
-import { initReliableTaps, openMenu, closeModal, topModal, setMenuHooks, openHelp, confirmBox, pickImport, modalOpen, closeAllModals } from './ui/menus.js';
+import { initReliableTaps, openMenu, closeModal, topModal, setMenuHooks, openHelp, confirmBox, pickImport, modalOpen, closeAllModals, openModal } from './ui/menus.js';
 import { createPlayer, updatePlayer, inCombat } from './game/player.js';
 import { updateBullets, updateEffects } from './game/combat.js';
 import { updateEnemies, initEnemyEvents } from './game/enemies.js';
@@ -41,6 +44,7 @@ import { initActivityEvents } from './game/activities.js';
 import { initErrandEvents, ERRANDS } from './game/errands.js';
 import { spawnDog, updateDog, dogMorning } from './game/dog.js';
 import { setWeather } from './game/weather.js';
+import { initAchievementEvents, updateAchievements, unlockedCount, ACHIEVEMENTS, isUnlocked } from './game/achievements.js';
 import { initAtmosphere, updateAtmosphere } from './world/atmosphere.js';
 import { updateCutscene, skipCutscene, endCutscene, playCutscene } from './ui/cutscene.js';
 import { lowQuality } from './game/difficulty.js';
@@ -89,6 +93,7 @@ const MAP_BUILDERS = {
   estate: () => buildEstateMap(G.s.home),
   shorthills: () => buildShortHillsMap(G.s.home),
   mansion: () => buildMansionMap(),
+  newark: () => buildNewarkMap(),
 };
 
 function buildMaps() {
@@ -124,7 +129,7 @@ export function loadMap(id, pos) {
   G.floaters = [];
   G.fires = []; G.lobs = []; G.casings = []; G.smoke = []; G.boats = [];
   applyChopped(G.map);
-  if (id === homeMapId()) refreshSignProps();
+  if (id === homeMapId() && !G.prequel) refreshSignProps();
   const p = G.player;
   if (pos) { p.x = pos.x; p.y = pos.y; }
   G.map.pushOut(p, p.radius, 'player');
@@ -186,6 +191,7 @@ function updateMood(force) {
 /* ---------------- game update ---------------- */
 function update(dt) {
   if (G.endless) updateEndless(dt);
+  else if (G.prequel) updatePrequel(dt);
   else updateTime(dt);
   updateThreatClock();
   if (G.sleeping) { G.clockText = `Day ${G.s.time.day} · ${fmtClock(G.s.time.minute)}`; return; }
@@ -203,8 +209,9 @@ function update(dt) {
   updateNpcs(dt);
   updateDog(dt);
   updateAssault(dt);
+  updateAchievements(dt);
   updateJobs(dt);
-  if (!G.endless) { updateStory(dt); checkDiscovery(); }
+  if (!G.endless && !G.prequel) { updateStory(dt); checkDiscovery(); }
 
   G.hitFlash = Math.max(0, G.hitFlash - dt);
   if (G.hurtDir) G.hurtDir.t -= dt;
@@ -286,7 +293,7 @@ function computeHudInfo(dt) {
   }
   G.waypoint = wp && !G.siegeActive ? wp : null;
   hudInfo = {
-    maxHp: d.maxHp, maxStamina: d.maxStamina, reloadTime: reloadTime(G.player.weapon), weapon: WEAPONS[G.player.weapon], weaponCount: WEAPON_ORDER.filter(ownsWeapon).length, objective: objectiveText(), jobLine, danger,
+    maxHp: d.maxHp, maxStamina: d.maxStamina, reloadTime: reloadTime(G.player.weapon), weapon: WEAPONS[G.player.weapon], weaponCount: WEAPON_ORDER.filter(ownsWeapon).length, objective: G.prequel ? prequelObjective() : objectiveText(), jobLine, danger,
     quickLabel: q ? `${ITEMS[q].icon}×${count(q)}` : 'USE', night: isNight(), combat: inCombat(), target: null,
   };
 }
@@ -308,12 +315,16 @@ function watchPerf(raw) {
   }
 }
 
+let lastDrawn = 0;
 function frame(ts) {
+  // Battery saver: run at 30 fps.
+  if (G.settings.fpsCap === '30' && ts - lastDrawn < 1000 / 30 - 2) { requestAnimationFrame(frame); return; }
+  lastDrawn = ts;
   const raw = Math.max(0, (ts - last) / 1000);
   const dt = Math.min(0.05, raw);
   last = ts;
   G.frameDt = G.paused || (G.modal && G.modal !== 'dialogue') ? 0 : dt;
-  if (raw < 0.5) watchPerf(raw);
+  if (raw < 0.5 && G.settings.fpsCap !== '30') watchPerf(raw);
   G.time += dt;
   try {
     updateGamepad(dt);
@@ -391,6 +402,22 @@ function initEvents() {
   initSiegeEvents();
   initActivityEvents();
   initErrandEvents();
+  initAchievementEvents();
+  initCloudSync();
+  G.events.on('prequelDone', () => {
+    const el = openModal('prequelEnd', `<div class="chapter-card"><div class="ch-num">PREQUEL</div><h2>NEWARK, 1999</h2><div class="ch-done">— COMPLETE —</div>
+      <p>Joey Marchetti was twenty-four. His sister Angie still keeps his photograph behind the register at Marchetti's.</p>
+      <p class="hl">Twenty years later, a man calling himself Frank Lowe buys a cabin at the end of a dirt road in Pine Hollow.</p>
+      <button class="btn big primary" data-go>Back to the title</button></div>`, { closable: false, cls: 'small chapter' });
+    el.querySelector('[data-go]').addEventListener('click', () => { closeModal(); quitToTitle(); });
+  });
+  // Rumble: your own shots, getting hit, explosions, doors giving way, trophies.
+  G.events.on('shot', () => rumble(0.05, 0.35, 70));
+  G.events.on('playerHurt', (x, y, amount) => rumble(Math.min(1, 0.3 + amount / 40), 0.5, 180));
+  G.events.on('truckRammed', () => rumble(0.9, 0.6, 350));
+  G.events.on('enemyKilled', (e) => { if (e.def && e.def.vehicle) rumble(1, 0.8, 400); });
+  G.events.on('breachHit', () => { if (G.player && G.player.lastHurt < 30) rumble(0.15, 0.1, 60); });
+  G.events.on('achievement', () => rumble(0.2, 0.6, 250));
   initAtmosphere();
   G.events.on('qualityChanged', () => { G.autoLow = false; perf.slow = 0; resize(); });
   initTimeEvents();
@@ -518,7 +545,7 @@ function startGame(isNew) {
   G.player = createPlayer();
   const d = derived();
   G.player.hp = Math.min(G.player.hp, d.maxHp);
-  loadMap(G.s.player.map, G.endless ? G.maps[G.s.player.map].points.start : { x: G.s.player.x, y: G.s.player.y });
+  loadMap(G.s.player.map, G.endless || G.prequel ? G.maps[G.s.player.map].points.start : { x: G.s.player.x, y: G.s.player.y });
   document.getElementById('title').classList.add('hidden');
   document.getElementById('hud').classList.remove('hidden');
   G.running = true;
@@ -527,7 +554,7 @@ function startGame(isNew) {
   if (isNew) {
     saveGame('new', { force: true });
     newGameIntro();
-  } else if (!G.endless) {
+  } else if (!G.endless && !G.prequel) {
     banner(`Welcome back. Day ${G.s.time.day}, ${fmtClock(G.s.time.minute)}.`, 'info', 3);
   }
   // If a siege time already passed while saved, give a moment before it triggers.
@@ -537,9 +564,17 @@ function startGame(isNew) {
 
 function newGame(difficulty) {
   if (!difficulty) { openDifficultyPicker((d) => newGame(d)); return; }
-  G.endless = null;
+  G.endless = null; G.prequel = null;
   G.s = newSave();
   G.s.difficulty = difficulty;
+  startGame(true);
+}
+
+function newGamePlus() {
+  const raw = readSaveRaw();
+  if (!canNewGamePlus(raw)) return;
+  G.endless = null; G.prequel = null;
+  G.s = makeNewGamePlus(migrate(raw));
   startGame(true);
 }
 
@@ -547,7 +582,7 @@ function continueGame() {
   const raw = readSaveRaw();
   const err = validateSave(raw);
   if (err) { toast(`Save could not be loaded: ${err}`, 'warn', 4); return; }
-  G.endless = null;
+  G.endless = null; G.prequel = null;
   G.s = migrate(raw);
   unlockEndlessFor(G.s.chapter);
   startGame(false);
@@ -556,7 +591,7 @@ function continueGame() {
 function quitToTitle() {
   if (G.cutscene) { G.cutscene.onEnd = null; endCutscene(); }
   G.running = false;
-  G.endless = null;
+  G.endless = null; G.prequel = null;
   G.siegeActive = false; G.siege = null; G.enemies = [];
   G.player = null;
   closeAllModals();
@@ -573,7 +608,28 @@ function showTitle() {
   const ok = raw && !validateSave(raw);
   const cont = document.getElementById('t-continue');
   cont.classList.toggle('hidden', !ok);
+  document.getElementById('t-ngplus').classList.toggle('hidden', !(ok && canNewGamePlus(raw)));
   if (ok) cont.innerHTML = `Continue <span class="sub">Day ${raw.time.day} · Level ${raw.stats.level} · Chapter ${raw.chapter || 1}</span>`;
+  document.getElementById('t-prequel').classList.toggle('hidden', !isUnlocked('ch5'));
+  document.getElementById('t-trophies').textContent = `Trophies (${unlockedCount()}/${ACHIEVEMENTS.length})`;
+  checkCloudOnTitle();
+}
+
+/** On the title screen: offer a newer save from another device. */
+async function checkCloudOnTitle() {
+  const note = document.getElementById('t-cloudnote');
+  note.classList.add('hidden');
+  if (!cloudCode()) return;
+  let c = null;
+  try { c = await cloudCheck(); } catch { return; }
+  if (!c || !c.newer || G.running) return;
+  note.innerHTML = '';
+  const b = document.createElement('button');
+  b.className = 'btn big';
+  b.textContent = `☁ Newer save from ${c.device || 'another device'}: Day ${c.save.time.day} · Level ${c.save.stats.level} — load it`;
+  b.addEventListener('click', () => { cloudTake(c); toast('☁ Cloud save loaded.', 'info', 2.5); showTitle(); });
+  note.appendChild(b);
+  note.classList.remove('hidden');
 }
 
 function initTitle() {
@@ -595,7 +651,11 @@ function initTitle() {
       confirmBox(`Starting a new game will overwrite your existing save${desc}. This can't be undone. (Tip: export your save from Settings first.)`, 'Start over', () => { deleteSave(); newGame(); }, 'Keep my save');
     } else newGame();
   }));
-  document.getElementById('t-endless').addEventListener('click', go(() => openEndlessPicker((site) => startEndless(site, startGame))));
+  document.getElementById('t-endless').addEventListener('click', go(() => openEndlessPicker((site, opts) => startEndless(site, startGame, opts))));
+  document.getElementById('t-ngplus').addEventListener('click', go(() => confirmBox('Start New Game+? Your finished story save becomes the new run: level, skills, money, weapons and gear carry over; the story starts again in Pine Hollow with a tougher family.', 'Start New Game+', () => newGamePlus(), 'Not yet')));
+  document.getElementById('t-prequel').addEventListener('click', go(() => confirmBox('Newark, 1999: the night Frankie Corsetti left the family. A prequel episode of about 15 minutes. Your story save isn\'t touched.', 'Play', () => startPrequel(startGame), 'Not now')));
+  document.getElementById('t-cloud').addEventListener('click', go(() => openCloud()));
+  document.getElementById('t-trophies').addEventListener('click', go(() => openTrophies()));
   document.getElementById('t-import').addEventListener('click', go(() => pickImport(() => showTitle())));
   document.getElementById('t-help').addEventListener('click', go(() => openHelp()));
   // Open on pointerdown: an iOS "click" can be dropped if the finger drifts or another finger is down.
@@ -607,7 +667,7 @@ function initTitle() {
 
 /* ---------------- desktop app ---------------- */
 function quitApp() {
-  if (G.running && !G.endless) saveGame('quit');
+  if (G.running && !G.endless && !G.prequel) saveGame('quit');
   if (window.cusDesktop && window.cusDesktop.quit) window.cusDesktop.quit();
   else window.close();
 }
@@ -620,6 +680,9 @@ function toggleFullscreen() {
 /* ---------------- boot ---------------- */
 function boot() {
   loadSettings();
+  document.body.classList.toggle('large-text', G.settings.textSize === 'large');
+  // Desktop app: the Deck going to sleep pauses the game.
+  window.addEventListener('cus-suspend', () => pauseForInterruption());
   setVolumes(G.settings.sfxVolume, G.settings.musicVolume);
   resize();
   window.addEventListener('resize', resize);
@@ -630,7 +693,7 @@ function boot() {
   initDialogue();
   initReliableTaps();
   initEvents();
-  setMenuHooks({ quitApp: desktopApp ? quitApp : null, toggleFullscreen: desktopApp ? toggleFullscreen : null, quitToTitle, reloadFromSave: () => continueGame(), restartEndless: (site) => startEndless(site, startGame) });
+  setMenuHooks({ newGamePlus: () => newGamePlus(), refreshTitle: () => showTitle(), quitApp: desktopApp ? quitApp : null, toggleFullscreen: desktopApp ? toggleFullscreen : null, quitToTitle, reloadFromSave: () => continueGame(), restartEndless: (site, opts) => startEndless(site, startGame, opts) });
   initTitle();
   showTitle();
   if (G.settings.touchControls === 'on' || (G.settings.touchControls === 'auto' && matchMedia('(pointer: coarse)').matches)) setTouchMode(true);

@@ -7,7 +7,7 @@ You are Frank Lowe — formerly Frankie Corsetti of the Vescari crime family —
 to build an honest life in a cabin outside the small town of Pine Hollow. By day you
 work, meet people and fix up the place. Some nights, the family comes for you.
 
-This build (v0.6) contains **the complete story — five playable chapters with four endings** — plus an arcade mode:
+This build (v0.8) contains **the complete story — five playable chapters with four endings** — plus a prequel episode, New Game+ and an arcade mode. It runs in the browser and as an installable Steam Deck / PC game:
 
 1. **The Cabin** — Pine Hollow, a remote cabin and a small town.
 2. **Larch Street** — Millbrook, Ohio: a house on a quiet street, a neighbor with secrets, and Sal Benedetto.
@@ -15,7 +15,7 @@ This build (v0.6) contains **the complete story — five playable chapters with 
 4. **The Estate** — Port Whitcombe, Lake Champlain: a walled manor, an FBI agent who wants the ledger, and Nico Vescari coming over the water.
 5. **The Mansion** — Short Hills, New Jersey: home again, a mile from Leo Vescari's walled house. The finale.
 
-Plus **Endless Siege** — wave after wave at any home you've reached in the story.
+Plus **Newark, 1999** (the prequel), **New Game+**, and **Endless Siege** — wave after wave at any home you've reached, with a daily challenge and online leaderboard.
 
 ### Audio
 
@@ -39,6 +39,32 @@ than using simple beeps:
 `audio/manifest.json` — each listed sound replaces the generated one (music files
 loop per mood). See [`audio/README.md`](audio/README.md) for the sound names and
 recommended free sources.
+
+### What's new in v0.8 — play anywhere, play again
+
+- **Cloud save**: turn it on (title screen or Settings) and you get a code like `K7F2-9QXD-M3PA`.
+  Type it on your phone, browser or Steam Deck (an on-screen code pad works with a controller) and
+  they share one save. It syncs after saves and when you put the game away, never overwrites
+  newer progress from another device, and the title screen offers a newer save when one is
+  waiting. No accounts, no email: the code is the key. Trophies and Endless records travel too.
+- **36 trophies**: story, all four endings, a no-alarm mansion run, no blackouts, Hard, people,
+  fighting, honest work, Endless and more. A pop-up when you earn one, a Trophies screen on the
+  title and in the pause menu. They belong to you, not one save.
+- **New Game+** after the finale: keep your level, skills, money, weapons, gear and Duke. The
+  family hits harder every cycle (tougher attackers, extra people in every wave), and your last
+  ending sets the twist: *Witness Protection*, *Unfinished Business*, *Blood for Blood* or
+  *Heavy Is the Head*, each with its own opening and perks.
+- **Newark, 1999**: a 15-minute prequel unlocked by finishing the story. Frankie's last night in
+  the Vescari family: a younger Leo at the Ninth Ward Social Club, Sal behind the bar, Big Carmine
+  on the door, Joey Marchetti's Buick, a crate at the Delgado warehouse that turns out to be a
+  setup, Dante Ruggiero, and St. Rose at 1:20 in the morning. It never touches your story save.
+- **Endless Siege daily challenge**: one home, one twist and one set of waves for everyone each
+  day, with an online leaderboard (same board for browser, phone and Deck). Free play gets twists
+  too: *Pea Soup* fog, *Sidearm Only*, *Firestarters* and *The Horde*.
+- **Steam Deck polish**: controller rumble, a 30 fps battery saver, a large-text option, and the
+  game pauses when the Deck goes to sleep.
+- One version number (`GAME_VERSION` in `src/config.js`) drives the web build, the desktop build
+  and itch.io.
 
 ### What's new in v0.7 — Steam Deck & desktop (itch.io)
 
@@ -326,7 +352,7 @@ validation/migration, simultaneous two-finger touch (joystick + aim) in an iPhon
 landscape viewport, rotation to portrait and back, and pausing when backgrounded. It fails
 on any console error. Screenshots go to `test-output/`.
 
-Current result: **all checks pass** (see the count printed at the end of `npm test`). Run one part with `ONLY=desktop|v2|audio|v3|v4|v5|pad|electron|mobile npm test` (comma-separate several). The pad block drives the desktop build with a simulated controller (title, difficulty, dialogue, move, aim, fire, pause menu, tabs, settings, back); the electron block launches the packaged app (after `node tools/build-desktop.mjs`, under a display such as `xvfb-run`). The v5 block plays Chapter 5 end to end: the move to Short Hills, chores, Mickey's jobs, recon, the ally phone calls, Carlo's siege, the floor plans, the night-only drive, guards holding posts, the locked study, Ruth's rescue, Dante's key and the justice ending. The v0.4 block covers portraits, rain, cutscenes and skipping, lasting damage, Duke, the safe room, dog handlers, loot drops and the full Chapter 4 story; the v0.3 block covers Ruth's move, Chapter 3, farm life, difficulty and Endless Siege. The v0.2 block covers buying/switching/firing the shotgun and rifle, rifle pierce, favors, shutters, traps, cameras, arsonist fire, the lieutenant's rally, weakest-point targeting, the move to Chapter 2, the full Chapter 2 story and siege, saving in Chapter 2 and migrating a version-1 save.
+Current result: **all checks pass** (see the count printed at the end of `npm test`). Run one part with `ONLY=desktop|v2|audio|v3|v4|v5|v7|pad|electron|mobile npm test` (comma-separate several). The v7 block covers cloud save between two browsers (code pad, newer-save offer, conflict refusal), trophies, New Game+, the whole Newark episode (including a restart after falling) and the daily challenge posting to the leaderboard; the local server runs the real API Worker against SQLite. The pad block drives the desktop build with a simulated controller (title, difficulty, dialogue, move, aim, fire, pause menu, tabs, settings, back); the electron block launches the packaged app (after `node tools/build-desktop.mjs`, under a display such as `xvfb-run`). The v5 block plays Chapter 5 end to end: the move to Short Hills, chores, Mickey's jobs, recon, the ally phone calls, Carlo's siege, the floor plans, the night-only drive, guards holding posts, the locked study, Ruth's rescue, Dante's key and the justice ending. The v0.4 block covers portraits, rain, cutscenes and skipping, lasting damage, Duke, the safe room, dog handlers, loot drops and the full Chapter 4 story; the v0.3 block covers Ruth's move, Chapter 3, farm life, difficulty and Endless Siege. The v0.2 block covers buying/switching/firing the shotgun and rifle, rifle pierce, favors, shutters, traps, cameras, arsonist fire, the lieutenant's rally, weakest-point targeting, the move to Chapter 2, the full Chapter 2 story and siege, saving in Chapter 2 and migrating a version-1 save.
 
 ### iPhone / iPad checklist (real device testing still needed)
 
@@ -350,6 +376,15 @@ Safari**. Please verify on a real device:
 ---
 
 ## Deployment
+
+### Cloud saves and the leaderboard (Cloudflare D1)
+
+`worker/index.js` is a small Worker in front of the static files that answers `/api/cloud/*`
+(save slots by code) and `/api/scores` (daily leaderboard), storing both in the D1 database
+`cabin-under-siege-db` (bound as `DB` in `wrangler.jsonc`; tables are created automatically).
+`npm start` runs the same Worker locally against SQLite, so everything works offline in
+development. The desktop app needs to know the website's address: set `CLOUD_SERVER` in
+`src/config.js` (or players can enter it under Settings → Cloud server).
 
 ### Steam Deck / desktop (itch.io)
 

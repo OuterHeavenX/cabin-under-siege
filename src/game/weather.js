@@ -26,10 +26,12 @@ export function weather() {
     const siegeTonight = !!(w.siege && night);
     const r = Math.random();
     let kind = 'clear';
-    if (G.endless) kind = r < 0.35 ? 'rain' : r < 0.5 ? 'fog' : 'clear';
+    if (G.prequel) kind = 'rain';
+    else if (G.endless && G.endless.mod === 'fog') kind = 'fog';
+    else if (G.endless) kind = r < 0.35 ? 'rain' : r < 0.5 ? 'fog' : 'clear';
     else if (siegeTonight) kind = r < 0.45 ? 'rain' : r < 0.6 ? 'fog' : 'clear';
     else kind = r < (night ? 0.2 : 0.15) ? 'rain' : r < (night ? 0.33 : 0.24) ? 'fog' : 'clear';
-    if (G.s.time.day <= 1) kind = 'clear'; // the first day is always fair
+    if (G.s.time.day <= 1 && !G.endless && !G.prequel) kind = 'clear'; // the first day is always fair
     w.weather = { kind, key };
   }
   return w.weather;

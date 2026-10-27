@@ -6,6 +6,8 @@ const SIZE = 192;
 const cache = new Map();
 
 /* skin, hair colour + style, clothes, age 0..1, extras */
+import { G } from '../game/state.js';
+
 const PEOPLE = {
   frank: { skin: '#d9a982', hair: '#2a2220', style: 'slick', grey: 0.35, clothes: 'coat', cloth: '#26262c', shirt: '#d8d2c4', stubble: true, brow: 'stern', age: 0.45, jaw: 1.08 },
   ruth: { skin: '#e2b89a', hair: '#d9d9d9', style: 'bun', clothes: 'cardigan', cloth: '#6d8fb3', glasses: true, brow: 'kind', age: 0.9, earrings: true, female: true },
@@ -31,6 +33,12 @@ const PEOPLE = {
   angie: { skin: '#d8a882', hair: '#2b1a12', style: 'curly', clothes: 'apron', cloth: '#8a2a2a', brow: 'stern', age: 0.45, earrings: true, lips: '#9a2a33', female: true },
   mickey: { skin: '#e8b898', hair: '#9a6a4a', style: 'short', grey: 0.3, clothes: 'work', cloth: '#2f4a3a', mustache: true, brow: 'stern', age: 0.6, jaw: 1.15 },
   dante: { skin: '#cf9a74', hair: '#202020', style: 'slick', grey: 0.4, clothes: 'suit', cloth: '#1a1a1e', shirt: '#d8d2c4', tie: '#2a2a2a', glasses: true, brow: 'stern', age: 0.6 },
+  joey: { skin: '#d4a07a', hair: '#2a1a12', style: 'curly', clothes: 'coat', cloth: '#5a3a22', shirt: '#e8e2d4', brow: 'kind', age: 0.15, jaw: 0.95 },
+  // Newark, 1999: twenty years younger
+  frank99: { skin: '#dcae88', hair: '#1e1814', style: 'slick', clothes: 'coat', cloth: '#2a2a32', shirt: '#d8d2c4', brow: 'stern', age: 0.2, jaw: 1.05 },
+  leo99: { skin: '#d9ad8c', hair: '#2a2420', style: 'slick', grey: 0.5, clothes: 'suit', cloth: '#111114', shirt: '#f0ece2', tie: '#8b0000', brow: 'stern', age: 0.5, jaw: 1.08, rose: true },
+  dante99: { skin: '#cf9a74', hair: '#151515', style: 'slick', clothes: 'suit', cloth: '#1a1a1e', shirt: '#d8d2c4', tie: '#2a2a2a', brow: 'stern', age: 0.25 },
+  dom99: { skin: '#e0b896', hair: '#6a6a6a', style: 'short', clothes: 'suit', cloth: '#141414', shirt: '#141414', tie: null, collar: true, brow: 'kind', age: 0.55 },
   carlo: { skin: '#c88f6a', hair: '#151515', style: 'buzz', clothes: 'coat', cloth: '#2a2420', shirt: '#cfc8b8', beard: 'short', brow: 'stern', age: 0.45, jaw: 1.3 },
   nico: { skin: '#dcae88', hair: '#141010', style: 'slick', clothes: 'suit', cloth: '#18181c', shirt: '#2a0c0c', tie: null, stubble: true, brow: 'sly', age: 0.25, scar: false },
 };
@@ -42,7 +50,7 @@ const ALIASES = {
   'Man in a Grey Coat': 'stranger', 'Deputy Carl Mott': 'deputy', 'Leo Vescari': 'leo', 'Big Carmine': 'carmine', 'Sal Benedetto': 'sal',
   'Vinnie Vescari': 'vinnie', 'Nico Vescari': 'nico', 'Eleanor Whitcombe': 'eleanor', 'Theo Park': 'theo', 'Walt Bishop': 'walt',
   'Agent Dana Reyes': 'reyes', 'Father Dominic Russo': 'dom', 'Father Dom': 'dom', 'Angela "Angie" Marchetti': 'angie', 'Angie Marchetti': 'angie', 'Angie': 'angie',
-  'Mickey Doyle': 'mickey', 'Dante Ruggiero': 'dante', 'Carlo Bruno': 'carlo', 'Special Agent Dana Reyes': 'reyes', 'Voice': 'stranger',
+  'Mickey Doyle': 'mickey', 'Joey Marchetti': 'joey', 'Joey': 'joey', 'Dante Ruggiero': 'dante', 'Carlo Bruno': 'carlo', 'Special Agent Dana Reyes': 'reyes', 'Voice': 'stranger',
 };
 
 export function portraitId(who) {
@@ -53,7 +61,8 @@ export function portraitId(who) {
 
 /** A data URL for this speaker's portrait, or null for notes/signs/unknown voices. */
 export function portraitFor(who) {
-  const id = portraitId(who);
+  let id = portraitId(who);
+  if (G.prequel && id && PEOPLE[id + '99']) id += '99'; // Newark, 1999: the younger faces
   if (!id || !PEOPLE[id]) return null;
   if (!cache.has(id)) cache.set(id, paint(PEOPLE[id], id).toDataURL('image/png'));
   return cache.get(id);

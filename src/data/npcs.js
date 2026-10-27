@@ -402,6 +402,16 @@ Object.assign(NPCS, {
   },
 });
 
+// Newark, 1999 (the prequel). Only present while that episode is being played.
+const p99 = (name, title, bio, look, pt) => ({ name, title, bio, ...look, map: 'newark', home: ['newark', pt], schedule: [[0, 24 * 60, 'newark', pt]], homeLine: '', idle: ['...'], friendly: ['...'], prequel: true });
+Object.assign(NPCS, {
+  leo99: p99('Leo Vescari', 'Head of the Vescari family', 'Fifty-three, at the height of it. The back room of the Ninth Ward Social Club is where Newark gets decided.', { body: '#111114', hair: '#3a3430', skin: '#d9ad8c' }, 'leo99'),
+  sal99: p99('Sal Benedetto', 'Keeps Leo\'s books', 'Counts everything twice. Behind the bar, because nobody robs a bartender in Leo\'s club.', { body: '#2a2a30', hair: '#2a2420', skin: '#e0b896' }, 'sal99'),
+  carmine99: p99('Big Carmine', 'On the door', 'Six-foot-four of loyalty. Twenty years from now he\'ll be the one they send to Pine Hollow.', { body: '#1b1b20', hair: '#151515', skin: '#cf9a74' }, 'carmine99'),
+  joey: p99('Joey Marchetti', 'Drives for the family', 'Twenty-four. Angie\'s little brother. Talks too much, laughs too loud, and has been very quiet lately.', { body: '#5a3a22', hair: '#2a1a12', skin: '#d4a07a' }, 'joey_car'),
+  dante99: p99('Dante Ruggiero', 'Leo\'s new right hand', 'Thirty-one and climbing. Never raises his voice. Never needs to.', { body: '#1a1a1e', hair: '#151515', skin: '#cf9a74' }, 'dante99'),
+});
+
 // Unnamed townsfolk who walk around during the day, per map.
 export const TOWNSFOLK = {
   shorthills: [

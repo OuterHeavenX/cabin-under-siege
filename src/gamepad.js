@@ -12,6 +12,7 @@ export const BTN = { A: 0, B: 1, X: 2, Y: 3, LB: 4, RB: 5, LT: 6, RT: 7, VIEW: 8
 const DEAD = 0.22;
 
 let prev = [];
+let lastPad = null;
 let own = { fire: false, sprint: false, aim: false, move: false };
 let sprintLatch = false;
 let nav = { dir: null, t: 0 };
@@ -47,7 +48,8 @@ function uiLayer() {
 
 export function updateGamepad(dt) {
   const gp = readPad();
-  if (!gp) { releaseGame(); prev = []; return; }
+  if (!gp) { releaseGame(); prev = []; lastPad = null; return; }
+  lastPad = gp;
   const now = gp.buttons.map((b) => !!b && (b.pressed || b.value > 0.5));
   const down = (i) => now[i] && !prev[i];
   const val = (i) => (gp.buttons[i] ? gp.buttons[i].value : 0);
@@ -261,6 +263,15 @@ function navigateUi(ui, { now, down, L, R, dt }) {
     const close = ui.kind === 'modal' && ui.el.querySelector('[data-close]');
     if (close) { close.click(); clearFocus(); }
   }
+}
+
+/** Controller vibration (Steam Deck, Xbox, DualSense...). Strengths 0..1. */
+export function rumble(strong, weak = strong, ms = 120) {
+  if (!G.settings.rumble || !input.padMode) return;
+  const a = lastPad && lastPad.vibrationActuator;
+  if (window.__fakePad) window.__fakePad.lastRumble = { strong, weak, ms };
+  if (!a || !a.playEffect) return;
+  a.playEffect('dual-rumble', { duration: ms, strongMagnitude: Math.min(1, strong), weakMagnitude: Math.min(1, weak) }).catch(() => {});
 }
 
 /** Unit-testable entry for the smoke test. */

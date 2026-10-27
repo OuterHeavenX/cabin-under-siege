@@ -4,6 +4,11 @@ import http from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize, resolve } from 'node:path';
 import { networkInterfaces } from 'node:os';
+import worker from '../worker/index.js';
+import { localD1 } from './d1-local.mjs';
+
+// The /api/* routes run the real Worker against an in-memory database.
+const env = { DB: localD1() };
 
 const root = resolve(new URL('..', import.meta.url).pathname);
 const port = Number(process.argv[2] || process.env.PORT || 8080);
@@ -16,6 +21,14 @@ const types = {
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://localhost');
+    if (url.pathname.startsWith('/api/')) {
+      const chunks = [];
+      for await (const c of req) chunks.push(c);
+      const r = await worker.fetch(new Request(`http://localhost${req.url}`, { method: req.method, headers: req.headers, body: ['GET', 'HEAD'].includes(req.method) ? undefined : Buffer.concat(chunks) }), env);
+      res.writeHead(r.status, Object.fromEntries(r.headers));
+      res.end(Buffer.from(await r.arrayBuffer()));
+      return;
+    }
     let path = normalize(decodeURIComponent(url.pathname)).replace(/^(\.\.[/\\])+/, '');
     let file = join(root, path);
     if (!file.startsWith(root)) { res.writeHead(403); res.end('Forbidden'); return; }

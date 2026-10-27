@@ -2,7 +2,7 @@
 // Serves the game from app://game/ so ES modules, localStorage and fetch work
 // exactly as they do on the web, opens fullscreen, and gives the page a tiny
 // bridge for quitting and toggling fullscreen.
-const { app, BrowserWindow, protocol, net, ipcMain, Menu, shell } = require('electron');
+const { app, BrowserWindow, protocol, net, ipcMain, Menu, shell, powerMonitor } = require('electron');
 const path = require('node:path');
 const { pathToFileURL } = require('node:url');
 
@@ -61,6 +61,10 @@ app.whenReady().then(() => {
   ipcMain.on('quit', () => app.quit());
   ipcMain.on('toggle-fullscreen', () => { if (win) win.setFullScreen(!win.isFullScreen()); });
   createWindow();
+  // Steam Deck sleep (power button) or a laptop lid: pause the game first.
+  const suspend = () => { if (win) win.webContents.send('suspend'); };
+  powerMonitor.on('suspend', suspend);
+  powerMonitor.on('lock-screen', suspend);
 });
 
 app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });

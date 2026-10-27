@@ -19,6 +19,7 @@ import { addThreat } from './siege.js';
 import { sfx } from '../audio.js';
 import { inCombat } from './player.js';
 import { tryStudyDoor, endAssault } from './assault.js';
+import { prequelProp } from './prequel.js';
 
 let travelFn = null;
 export function setTravel(fn) { travelFn = fn; }
@@ -79,6 +80,7 @@ function candidates() {
 function propAction(pr) {
   const s = G.s;
   if (pr.errand) return { label: pr.label, short: pr.kind === 'quest_chop' ? 'CHOP' : pr.kind === 'quest_repair' ? 'FIX' : pr.kind === 'quest_find' ? 'LOOK' : 'ACT', action: () => errandPropAction(pr), prio: 3 };
+  if (G.prequel && (pr.kind === 'car' || pr.kind === 'prequel')) return prequelProp(pr);
   if (G.endless && ['bed', 'car', 'exit', 'jobboard', 'phone', 'mailbox', 'phonepole'].includes(pr.kind)) return null;
   switch (pr.kind) {
     case 'bed': return { label: 'Use bed (sleep / save)', short: 'REST', action: () => openBedMenu() };
