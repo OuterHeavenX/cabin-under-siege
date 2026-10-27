@@ -924,6 +924,94 @@ if (want('v3')) {
 }
 
 /* ================================================================== */
+/* v0.4: noir pass, guard dog, safe room, Chapter 4                    */
+/* ================================================================== */
+if (want('v4')) {
+  const ctx = await browser.newContext({ viewport: { width: 932, height: 430 } });
+  const page = await ctx.newPage();
+  watch(page, 'v4');
+  await page.goto(URL);
+  await page.waitForSelector('#t-new');
+  await page.click('#t-new'); await sleep(250);
+  await page.click('[data-diff-pick="normal"]'); await sleep(600);
+  const C = (fn, a) => ev(page, fn, a);
+  const portrait = await C(() => !document.getElementById('dlg-portrait').classList.contains('hidden') || document.getElementById('dlg-who').textContent === '');
+  await skipDialogues(page);
+  await C(() => import('./src/ui/dialogue.js').then((m) => m.playDialogue([{ who: 'Ruth Calloway', text: 'Test.' }]))); await sleep(300);
+  const pic = await C(() => { const i = document.getElementById('dlg-portrait'); return !i.classList.contains('hidden') && i.naturalWidth > 0; });
+  check('v4 Conversations show a painted portrait of the speaker', pic && portrait);
+  await skipDialogues(page);
+  // Weather + grading
+  await C(() => { const c = window.__cus; c.G.s.time.day = 3; c.G.s.time.minute = 22 * 60; c.dbg.setWeather('rain'); c.G.s.story.step = 'free'; c.G.s.story.flags.firstSiegeDone = true; });
+  await sleep(2500);
+  check('v4 Rain nights: rain falls and gets louder on the roof', await C(() => window.__cus.G.rainLevel > 0.3));
+  await page.screenshot({ path: OUT + 'v4-rain.png' });
+  // Story siege opens with a cutscene; boss gets a title card; damage leaves marks.
+  await C(() => { const c = window.__cus; c.G.player.invuln = 99999; c.dbg.startSiege({ plan: c.dbg.storyPlan() }, true); }); await sleep(600);
+  check('v4 Story attacks open with a letterboxed cutscene', await C(() => document.body.classList.contains('cine') && !!window.__cus.G.cutscene));
+  await page.screenshot({ path: OUT + 'v4-cutscene.png' });
+  await C(() => window.__cus.dbg.skipCutscene()); await sleep(300);
+  check('v4 Cutscenes can be skipped', await C(() => !window.__cus.G.cutscene));
+  await C(() => { window.__cus.G.siege.t = 60; }); await sleep(900);
+  const bossCard = await C(() => window.__cus.G.cutscene && window.__cus.G.cutscene.title);
+  check('v4 The boss gets a title-card entrance', typeof bossCard === 'string' && bossCard.length > 3, String(bossCard));
+  await C(() => window.__cus.dbg.skipCutscene());
+  for (let i = 0; i < 150; i++) { await sleep(150); await C(() => { const c = window.__cus; if (c.G.cutscene) c.dbg.skipCutscene(); for (const e of c.G.enemies) if (!e.dead && !e.gone) c.dbg.damageEnemy(e, 9999, 0, 'bullet'); }); if (!(await C(() => window.__cus.G.siegeActive))) break; }
+  check('v4 Fights leave lasting marks (blood, bullet holes) that are saved', await C(() => ((window.__cus.G.s.world.decals || {}).cabin || []).length > 0));
+  await sleep(2400); await C(() => window.__cus.dbg.closeAll()); await skipDialogues(page);
+  // Guard dog + safe room
+  await C(() => { const c = window.__cus; c.G.s.time.minute = 12 * 60; c.dbg.setWeather('clear'); c.dbg.addItem('guard_dog', 1, true); c.dbg.addItem('safe_room_kit', 1, true); });
+  await page.keyboard.press('KeyI'); await sleep(200);
+  await page.click('[data-act="install"][data-id="guard_dog"]'); await sleep(150);
+  await page.click('[data-act="install"][data-id="safe_room_kit"]'); await sleep(150);
+  await C(() => window.__cus.dbg.closeAll());
+  check('v4 Adopt Duke the guard dog', await C(() => !!window.__cus.G.dog && window.__cus.G.s.companion.dog.owned));
+  await C(() => { const c = window.__cus; const p = c.G.player; c.G.player.invuln = 9999; c.G.enemies = []; const e = c.dbg.spawnEnemy('handler', p.x + 140, p.y); e.alerted = true; });
+  const pack = await C(() => window.__cus.G.enemies.filter((e) => e.type === 'attack_dog').length);
+  check('v4 Dog handlers bring attack dogs', pack === 2);
+  let bitten = false;
+  for (let i = 0; i < 40 && !bitten; i++) { await sleep(200); bitten = await C(() => window.__cus.G.enemies.some((e) => e.hp < e.maxHp)); }
+  check('v4 Duke goes after attackers', bitten);
+  const safe = await C(() => { const c = window.__cus; c.G.enemies = []; const bed = c.G.map.props.find((p) => p.id === 'bed'); c.G.siegeActive = true; c.G.player.x = bed.x; c.G.player.y = bed.y + 30; c.G.player.invuln = 0; c.G.player.hp = 100; c.dbg.damagePlayer(20, bed.x + 100, bed.y, 'bullet'); const hp = c.G.player.hp; c.G.siegeActive = false; return hp; });
+  check('v4 Safe room halves damage by the bed during attacks', safe === 90, `hp ${safe}`);
+  const drop = await C(() => { const c = window.__cus; const e = c.dbg.spawnEnemy('lieutenant', 300, 300); c.dbg.damageEnemy(e, 99999, 0, 'bullet'); return c.G.pickups.some((p) => p.kind === 'item' && (p.item === 'shotgun' || p.item === 'shells')); });
+  check('v4 Attackers drop their guns or ammo', drop);
+  // Chapter 4 run
+  await C(() => { const c = window.__cus; c.G.s.companion.ruth.joined = true; c.G.s.chapter = 3; c.G.s.story.done = { 1: true, 2: true, 3: true }; c.G.s.rel.ingrid = 60; c.G.s.choices.deputy = 'bribe'; c.dbg.addItem('ledger', 1, true); c.dbg.moveToChapter(4); });
+  await sleep(400); await page.click('[data-go]').catch(() => {}); await sleep(400); await skipDialogues(page);
+  const r4 = await C(() => ({ ch: window.__cus.G.s.chapter, map: window.__cus.G.map.id, step: window.__cus.G.s.story.step, dog: !!window.__cus.G.dog, ruth: window.__cus.G.npcs.some((n) => n.id === 'ruth') }));
+  check('v4 Move to Chapter 4 (the estate) — Ruth and Duke come along', r4.ch === 4 && r4.map === 'estate' && r4.step === 'ch4_arrive' && r4.dog && r4.ruth, JSON.stringify(r4));
+  await page.screenshot({ path: OUT + 'v4-estate.png' });
+  await tp(page, 34, 25); await sleep(600); await skipDialogues(page);
+  const talk4 = async (id, pick = 0) => { await C((id) => { const c = window.__cus; const d = c.G.npcs.find((n) => n.id === id); c.G.player.x = d.x; c.G.player.y = d.y + 24; c.dbg.input.mouse.inside = false; c.G.player.angle = -Math.PI / 2; }, id); await sleep(250); await pressE(page); await sleep(250); await skipDialogues(page, pick); };
+  await C(() => { window.__cus.G.s.time.minute = 10 * 60; }); await sleep(200);
+  await talk4('eleanor');
+  check('Ch4: Eleanor (vouched for by Ingrid) gives a safe room kit', (await step(page)) === 'ch4_find_work' && await C(() => window.__cus.G.s.inv.safe_room_kit >= 1));
+  await talk4('walt');
+  await C(() => { window.__cus.G.events.emit('jobDone', 'woodcut'); }); await sleep(300); await skipDialogues(page);
+  await sleep(200);
+  await talk4('reyes', 1);
+  check('Ch4: Agent Reyes and the ledger choice', (await step(page)) === 'ch4_fortify' && await C(() => window.__cus.G.s.choices.reyes === 'copy'));
+  await C(() => { const c = window.__cus; const o = c.G.s.home.openings; for (const k of ['gate_l', 'gate_r']) o[k].hp = o[k].baseHp; c.G.s.story.flags.fortified = 2; c.G.events.emit('defenseInstalled'); }); await sleep(300); await skipDialogues(page);
+  const plan4 = await C(() => window.__cus.G.s.world.siege && window.__cus.G.s.world.siege.plan.waves.map((w) => w.dir));
+  check('Ch4: iron gate + three defenses -> Nico\'s attack by road and by water', plan4 && plan4.includes('lake') && plan4.includes('shore'), JSON.stringify(plan4));
+  await C(() => { const c = window.__cus; c.G.player.x = 34 * 32; c.G.player.y = 25 * 32; c.G.player.invuln = 99999; c.G.s.time.minute = 21 * 60 + 58; });
+  for (let i = 0; i < 80 && !(await C(() => window.__cus.G.siegeActive)); i++) await sleep(150);
+  await skipDialogues(page);
+  await C(() => { window.__cus.G.siege.t = 49; }); await sleep(800);
+  check('Ch4: boats land attackers at the dock', await C(() => (window.__cus.G.boats || []).length >= 1));
+  for (let i = 0; i < 200; i++) { await sleep(200); await C(() => { const c = window.__cus; if (c.G.cutscene) c.dbg.skipCutscene(); for (const e of c.G.enemies) if (!e.dead && !e.gone) c.dbg.damageEnemy(e, 9999, 0, 'bullet'); }); if (!(await C(() => window.__cus.G.siegeActive))) break; }
+  await sleep(2200); await page.locator('#modal-root button', { hasText: 'Continue' }).click().catch(() => {}); await sleep(4300); await skipDialogues(page);
+  await C(() => { const pk = window.__cus.G.pickups.find((p) => p.kind === 'signet'); if (pk) { window.__cus.G.player.x = pk.x; window.__cus.G.player.y = pk.y; } }); await sleep(900); await skipDialogues(page);
+  check('Ch4: Nico\'s ring -> Leo\'s call', (await step(page)) === 'ch4_eleanor_truth');
+  await C(() => { window.__cus.G.s.time.minute = 12 * 60; }); await sleep(300);
+  await talk4('eleanor'); await sleep(600);
+  check('Ch4: chapter 4 ending screen', await C(() => window.__cus.G.s.story.done[4] === true) && (await page.textContent('#modal-root')).includes('THE ESTATE'));
+  await page.screenshot({ path: OUT + 'v4-chapter4-end.png' });
+  await ctx.close();
+}
+
+/* ================================================================== */
 /* Mobile: iPhone landscape, multi-touch, rotation, backgrounding      */
 /* ================================================================== */
 if (want('mobile')) {

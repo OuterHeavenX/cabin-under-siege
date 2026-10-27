@@ -7,12 +7,13 @@ You are Frank Lowe — formerly Frankie Corsetti of the Vescari crime family —
 to build an honest life in a cabin outside the small town of Pine Hollow. By day you
 work, meet people and fix up the place. Some nights, the family comes for you.
 
-This build (v0.3) contains **three complete, playable chapters** plus an arcade mode:
+This build (v0.4) contains **four complete, playable chapters** plus an arcade mode:
 
 1. **The Cabin** — Pine Hollow, a remote cabin and a small town.
 2. **Larch Street** — Millbrook, Ohio: a house on a quiet street, a neighbor with secrets, and Sal Benedetto.
 3. **The Wisconsin Farm** — Kettle Crossing: a whole farmstead, a crooked deputy, and Vinnie Vescari's ledger.
-4. **Endless Siege** — wave after wave at any home you've reached in the story.
+4. **The Estate** — Port Whitcombe, Lake Champlain: a walled manor, an FBI agent who wants the ledger, and Nico Vescari coming over the water.
+5. **Endless Siege** — wave after wave at any home you've reached in the story.
 
 ### Audio
 
@@ -36,6 +37,27 @@ than using simple beeps:
 `audio/manifest.json` — each listed sound replaces the generated one (music files
 loop per mood). See [`audio/README.md`](audio/README.md) for the sound names and
 recommended free sources.
+
+### What's new in v0.4
+
+- **Noir look in the game itself**: painted portraits for every speaking character, cold
+  blue nights, a red tint and heavier vignette during attacks, faint film grain.
+- **Weather**: rain (streaks, splashes, rain on the roof, thunder) and fog. Rain hides you a
+  little; fog cuts everyone's sight, which blunts snipers.
+- **Cutscenes**: letterboxed camera moves with title cards when an attack begins, when a
+  boss arrives, for Leo's phone call, the ledger, the ring, and arriving at each new home.
+  Tap (or Esc) to skip.
+- **Damage that stays**: bullet holes, blood, broken glass and scorch marks remain where the
+  fight happened until you repair or they fade.
+- **Duke the guard dog** (sold at every store): follows you around home, barks at and marks
+  strangers, bites and pins attackers, moves with you to new homes.
+- **Safe room**: steel-plate the bedroom — during attacks you take half damage by the bed and
+  slowly recover.
+- **Loot**: attackers sometimes drop their gun, its ammo, or a weapon part.
+- **Dog handlers**: a new attacker who brings two fast attack dogs.
+- **Chapter 4: The Estate** — Eleanor Whitcombe, Theo Park, Walt Bishop and Agent Dana Reyes.
+  Give the FBI the ledger, give them copies, or keep it — and your Chapter 3 deputy choice comes
+  back too. Nico Vescari attacks by truck and by boat. Ends with Leo's invitation to Short Hills.
 
 ### What's new in v0.3
 
@@ -230,7 +252,7 @@ validation/migration, simultaneous two-finger touch (joystick + aim) in an iPhon
 landscape viewport, rotation to portrait and back, and pausing when backgrounded. It fails
 on any console error. Screenshots go to `test-output/`.
 
-Current result: **all checks pass** (see the count printed at the end of `npm test`). The v0.2 block covers buying/switching/firing the shotgun and rifle, rifle pierce, favors, shutters, traps, cameras, arsonist fire, the lieutenant's rally, weakest-point targeting, the move to Chapter 2, the full Chapter 2 story and siege, saving in Chapter 2 and migrating a version-1 save.
+Current result: **all checks pass** (see the count printed at the end of `npm test`). Run one part with `ONLY=desktop|v2|audio|v3|v4|mobile npm test` (comma-separate several). The v0.4 block covers portraits, rain, cutscenes and skipping, lasting damage, Duke, the safe room, dog handlers, loot drops and the full Chapter 4 story; the v0.3 block covers Ruth's move, Chapter 3, farm life, difficulty and Endless Siege. The v0.2 block covers buying/switching/firing the shotgun and rifle, rifle pierce, favors, shutters, traps, cameras, arsonist fire, the lieutenant's rally, weakest-point targeting, the move to Chapter 2, the full Chapter 2 story and siege, saving in Chapter 2 and migrating a version-1 save.
 
 ### iPhone / iPad checklist (real device testing still needed)
 
@@ -352,8 +374,8 @@ tools/                        Dev server, smoke test, icon generator
 
 ## Future ideas (not playable yet)
 
-- **Chapters 4–5**: a wealthy estate and the final mansion confrontation (listed in the
-  Journal as *planned*).
+- **Chapter 5**: the final confrontation at Leo Vescari's mansion in Short Hills (listed in
+  the Journal as *planned*).
 - More enemy types (dog handler, demolition crew), a mechanic job, deeper NPC routines.
 - More upgrades: cameras, a safe room, traps, reinforced shutters, a guard dog.
 - Weather, seasons, hunger/fatigue as optional survival settings.
