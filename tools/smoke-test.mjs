@@ -1174,6 +1174,75 @@ if (want('v5')) {
 }
 
 /* ================================================================== */
+/* Controller + desktop build (Steam Deck): no touch UI, pad everywhere */
+/* ================================================================== */
+if (want('pad')) {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const page = await ctx.newPage();
+  watch(page, 'pad');
+  await page.goto(URL + '?desktop');
+  await page.waitForSelector('#t-new');
+  const C = (fn, a) => ev(page, fn, a);
+  await C(() => { window.__fakePad = { connected: true, mapping: 'standard', buttons: Array.from({ length: 17 }, () => ({ pressed: false, value: 0 })), axes: [0, 0, 0, 0] }; });
+  const btn = async (i, ms = 100) => { await C((i) => { window.__fakePad.buttons[i] = { pressed: true, value: 1 }; }, i); await sleep(ms); await C((i) => { window.__fakePad.buttons[i] = { pressed: false, value: 0 }; }, i); await sleep(100); };
+  const stick = (a) => C((a) => { window.__fakePad.axes = a; }, a);
+  const foc = () => C(() => { const f = document.querySelector('.pad-focus'); return f ? (f.id || f.textContent.trim().slice(0, 30)) : null; });
+  await sleep(250);
+  check('pad Desktop build: Quit to Desktop on the title, no touch controls', await C(() => !!document.getElementById('t-quit') && document.body.classList.contains('desktop-app')) && await page.isHidden('#touch'));
+  check('pad Title: a controller highlights a button', (await foc()) === 't-new', await foc());
+  await btn(13);
+  check('pad D-pad down moves the highlight', (await foc()) === 't-endless', await foc());
+  await btn(12); await btn(0); await sleep(300);
+  check('pad A presses (New Game -> difficulty)', await C(() => window.__cus.G.modal === 'difficulty'));
+  check('pad Difficulty picker highlights Normal', ((await foc()) || '').startsWith('Normal'), await foc());
+  await btn(0); await sleep(900);
+  check('pad Pick a difficulty and start', await C(() => window.__cus.G.running && window.__cus.G.s.difficulty === 'normal'));
+  for (let i = 0; i < 30 && (await C(() => !!window.__cus.G.modal || !!window.__cus.G.cutscene)); i++) await btn(0, 60);
+  check('pad A continues conversations', await C(() => !window.__cus.G.modal));
+  check('pad Controller prompts show A, not E; no menu button; cursor hidden', await C(() => document.body.classList.contains('pad')) && await page.isHidden('#menu-btn'));
+  const p0 = await C(() => [window.__cus.G.player.x, window.__cus.G.player.y]);
+  await stick([0, 1, 0, 0]); await sleep(600); await stick([0, 0, 0, 0]);
+  const p1 = await C(() => [window.__cus.G.player.x, window.__cus.G.player.y]);
+  check('pad Left stick moves Frank', p1[1] - p0[1] > 40, `${Math.round(p1[1] - p0[1])}px`);
+  await stick([0, 0, -1, 0]); await sleep(200);
+  const ang = await C(() => window.__cus.G.player.angle);
+  const mag0 = await C(() => window.__cus.G.player.mag);
+  await C(() => { window.__fakePad.buttons[7] = { pressed: true, value: 1 }; }); await sleep(200); await C(() => { window.__fakePad.buttons[7] = { pressed: false, value: 0 }; });
+  await stick([0, 0, 0, 0]); await sleep(100);
+  check('pad Right stick aims, RT fires', Math.abs(Math.abs(ang) - Math.PI) < 0.3 && (await C(() => window.__cus.G.player.mag)) < mag0, `angle ${ang.toFixed(2)}`);
+  await btn(9); await sleep(200);
+  check('pad Menu button opens the pause menu', await C(() => window.__cus.G.modal === 'menu'));
+  const t0 = await C(() => document.querySelector('.tab.on').textContent);
+  await btn(5); await sleep(200);
+  check('pad RB flips menu tabs', (await C(() => document.querySelector('.tab.on').textContent)) !== t0);
+  for (let i = 0; i < 8 && (await C(() => document.querySelector('.tab.on').textContent)) !== 'Settings'; i++) await btn(5);
+  check('pad Settings: fullscreen + quit to desktop, no touch options', await C(() => !!document.querySelector('[data-act="quitapp"]') && !!document.querySelector('[data-act="fullscreen"]') && !document.querySelector('[data-set="touchControls"]')));
+  await btn(1); await sleep(200);
+  check('pad B closes menus', await C(() => !window.__cus.G.modal));
+  await page.screenshot({ path: OUT + 'pad-play.png' });
+  await ctx.close();
+}
+
+/* Packaged Electron app (only when `node tools/build-desktop.mjs` has been run). */
+if (want('electron')) {
+  const exe = decodeURIComponent(new globalThis.URL('../desktop/out/Cabin Under Siege-linux-x64/cabin-under-siege', import.meta.url).pathname);
+  const { existsSync: ex, mkdtempSync } = await import('node:fs');
+  if (!ex(exe) || !process.env.DISPLAY) console.log('SKIP  electron: build the desktop app and run under a display (xvfb-run) to test it');
+  else {
+    const { _electron } = require('playwright');
+    const app = await _electron.launch({ executablePath: exe, args: ['--no-sandbox', '--windowed'], env: { ...process.env, XDG_CONFIG_HOME: mkdtempSync('/tmp/cus-') } });
+    const page = await app.firstWindow();
+    watch(page, 'electron');
+    await page.waitForSelector('#t-new', { timeout: 20000 });
+    const info = await ev(page, () => ({ url: location.href, desktop: !!window.cusDesktop, quit: !!document.getElementById('t-quit') }));
+    check('electron Packaged app loads the game from app://', info.url.startsWith('app://') && info.desktop && info.quit, JSON.stringify(info));
+    await page.click('#t-new'); await sleep(250); await page.click('[data-diff-pick="normal"]'); await sleep(900);
+    check('electron Audio starts without a click; saving works', await ev(page, () => window.__cus.dbg.audioDebug().state === 'running' && !!localStorage.getItem('cabinUnderSiege.save')));
+    await app.close();
+  }
+}
+
+/* ================================================================== */
 /* Mobile: iPhone landscape, multi-touch, rotation, backgrounding      */
 /* ================================================================== */
 if (want('mobile')) {

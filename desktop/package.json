@@ -1,0 +1,18 @@
+{
+  "name": "cabin-under-siege",
+  "productName": "Cabin Under Siege",
+  "version": "0.7.0",
+  "private": true,
+  "description": "Cabin Under Siege — desktop / Steam Deck build",
+  "main": "main.cjs",
+  "author": "Cabin Under Siege",
+  "license": "MIT",
+  "scripts": {
+    "start": "node ../tools/build-desktop.mjs --stage && electron . --no-sandbox",
+    "dist": "node ../tools/build-desktop.mjs"
+  },
+  "devDependencies": {
+    "@electron/packager": "20.3.0",
+    "electron": "44.7.0"
+  }
+}

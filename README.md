@@ -40,6 +40,21 @@ than using simple beeps:
 loop per mood). See [`audio/README.md`](audio/README.md) for the sound names and
 recommended free sources.
 
+### What's new in v0.7 — Steam Deck & desktop (itch.io)
+
+- **An installable desktop game** (Electron) for the Steam Deck, Linux and Windows: fullscreen at
+  the Deck's 1280×800, no browser bar, no on-screen touch buttons, audio that starts without a
+  click, a *Quit to Desktop* button, and F11 for fullscreen. Saves live in the app's own folder.
+- **Full controller support** (Steam Deck, Xbox, PlayStation, anything "standard"):
+  left stick move, right stick aim, RT fire, A interact, B dodge, X reload, Y switch weapon,
+  RB melee, LB quick item, Menu pause, View journal, D-pad shortcuts. Without the right stick,
+  aim assist picks targets like it does on touch. Full stick tilt (or LT / L3) sprints.
+- **Menus, the title screen and conversations work with the pad**: a gold highlight moves with
+  the D-pad or stick, A selects, B backs out, LB/RB flip tabs, the right stick scrolls, and
+  left/right change sliders and drop-downs. Button prompts switch between keyboard keys and
+  controller buttons depending on what you touched last.
+- The browser version gets controller support too.
+
 ### What's new in v0.6 — Chapter 5, the finale
 
 - **Short Hills, New Jersey**: Frank comes home to an old watch house on the ridge. Millburn Avenue
@@ -311,7 +326,7 @@ validation/migration, simultaneous two-finger touch (joystick + aim) in an iPhon
 landscape viewport, rotation to portrait and back, and pausing when backgrounded. It fails
 on any console error. Screenshots go to `test-output/`.
 
-Current result: **all checks pass** (see the count printed at the end of `npm test`). Run one part with `ONLY=desktop|v2|audio|v3|v4|v5|mobile npm test` (comma-separate several). The v5 block plays Chapter 5 end to end: the move to Short Hills, chores, Mickey's jobs, recon, the ally phone calls, Carlo's siege, the floor plans, the night-only drive, guards holding posts, the locked study, Ruth's rescue, Dante's key and the justice ending. The v0.4 block covers portraits, rain, cutscenes and skipping, lasting damage, Duke, the safe room, dog handlers, loot drops and the full Chapter 4 story; the v0.3 block covers Ruth's move, Chapter 3, farm life, difficulty and Endless Siege. The v0.2 block covers buying/switching/firing the shotgun and rifle, rifle pierce, favors, shutters, traps, cameras, arsonist fire, the lieutenant's rally, weakest-point targeting, the move to Chapter 2, the full Chapter 2 story and siege, saving in Chapter 2 and migrating a version-1 save.
+Current result: **all checks pass** (see the count printed at the end of `npm test`). Run one part with `ONLY=desktop|v2|audio|v3|v4|v5|pad|electron|mobile npm test` (comma-separate several). The pad block drives the desktop build with a simulated controller (title, difficulty, dialogue, move, aim, fire, pause menu, tabs, settings, back); the electron block launches the packaged app (after `node tools/build-desktop.mjs`, under a display such as `xvfb-run`). The v5 block plays Chapter 5 end to end: the move to Short Hills, chores, Mickey's jobs, recon, the ally phone calls, Carlo's siege, the floor plans, the night-only drive, guards holding posts, the locked study, Ruth's rescue, Dante's key and the justice ending. The v0.4 block covers portraits, rain, cutscenes and skipping, lasting damage, Duke, the safe room, dog handlers, loot drops and the full Chapter 4 story; the v0.3 block covers Ruth's move, Chapter 3, farm life, difficulty and Endless Siege. The v0.2 block covers buying/switching/firing the shotgun and rifle, rifle pierce, favors, shutters, traps, cameras, arsonist fire, the lieutenant's rally, weakest-point targeting, the move to Chapter 2, the full Chapter 2 story and siege, saving in Chapter 2 and migrating a version-1 save.
 
 ### iPhone / iPad checklist (real device testing still needed)
 
@@ -335,6 +350,35 @@ Safari**. Please verify on a real device:
 ---
 
 ## Deployment
+
+### Steam Deck / desktop (itch.io)
+
+The desktop game lives in `desktop/` (an Electron shell that serves the same files from
+`app://game/`). Build it locally:
+
+```bash
+cd desktop && npm install && cd ..
+node tools/build-desktop.mjs          # Linux x64 (Steam Deck) → desktop/dist/*.zip
+node tools/build-desktop.mjs --win    # + Windows x64
+cd desktop && npm start               # run it windowed from source: add --windowed
+```
+
+Or let GitHub build it: the **Desktop build (itch.io)** workflow runs on every push that touches
+the game and leaves both zips under *Artifacts*. To upload to itch.io automatically, add the
+secret `BUTLER_API_KEY` (itch.io → Settings → API keys) and the variable `ITCH_GAME`
+(`yourname/cabin-under-siege`). Butler pushes the `linux` and `windows` channels.
+
+On itch.io: create the project as a *Downloadable* game, then mark the `linux` upload as
+**Linux** and the `windows` one as **Windows**. Each build includes a `.itch.toml` so the itch
+app knows what to launch (`cabin-under-siege.sh` on Linux, which starts the game without
+Chromium's setuid sandbox helper, since unzipped files can't keep its permissions).
+
+**Playing on the Deck:** in Desktop Mode install it with the itch app (or unzip the download
+somewhere like `~/Games/CabinUnderSiege`), then in Steam choose *Add a Non-Steam Game*, browse
+to `cabin-under-siege.sh` (file type: *All Files*), and launch it from Game Mode. The default
+*Gamepad* controller template is all it needs.
+
+### Web
 
 It's a static site with no bundler. `npm run build` just copies the playable files
 (`index.html`, `css/`, `src/`, `icons/`, `audio/`, `sw.js`, manifest, `_headers`) into `dist/`.

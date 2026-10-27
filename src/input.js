@@ -10,8 +10,20 @@ export const input = {
   held: { fire: false, sprint: false },
   pressed: new Set(),
   touchMode: false,
+  padMode: false, // a controller was used last: show its buttons, hide the cursor
+  padMove: null,
   keys: new Set(),
 };
+
+/** The installable desktop build (Steam Deck / itch.io), not a browser tab. */
+export const desktopApp = !!window.cusDesktop || new URLSearchParams(location.search).has('desktop');
+
+export function setPadMode(on) {
+  if (input.padMode === on) return;
+  input.padMode = on;
+  document.body.classList.toggle('pad', on);
+  if (on && input.touchMode) setTouchMode(false);
+}
 
 const KEYMAP = {
   KeyE: 'interact', Enter: 'interact', KeyR: 'reload', KeyQ: 'use', KeyF: 'melee', Space: 'dodge',
@@ -49,12 +61,14 @@ let aimTouch = { id: null };
 
 export function readMove() {
   if (joy.id !== null) return { x: joy.x, y: joy.y };
+  if (input.padMove) return input.padMove;
   const m = keyMove();
   const l = Math.hypot(m.x, m.y);
   return l > 0 ? { x: m.x / l, y: m.y / l } : m;
 }
 
 export function setTouchMode(on) {
+  if (desktopApp) on = false; // no on-screen controls in the desktop build
   input.touchMode = on;
   document.body.classList.toggle('touch', on);
   const el = document.getElementById('touch');
@@ -71,6 +85,7 @@ export function initInput(canvas) {
       if (e.code === 'Space' || e.code === 'Enter') press('advance');
     }
     input.keys.add(e.code);
+    setPadMode(false);
     if (e.code === 'ShiftLeft' || e.code === 'ShiftRight') input.held.sprint = true;
     if (G.settings.touchControls === 'auto' && input.touchMode) setTouchMode(false);
   });
@@ -82,7 +97,9 @@ export function initInput(canvas) {
 
   // Mouse on the canvas
   canvas.addEventListener('mousemove', (e) => {
+    if (input.padMode && Math.hypot(e.clientX - input.mouse.x, e.clientY - input.mouse.y) < 6) return; // ignore jitter
     input.mouse.x = e.clientX; input.mouse.y = e.clientY; input.mouse.inside = true; input.mouse.moved = true;
+    setPadMode(false);
   });
   canvas.addEventListener('mouseleave', () => { input.mouse.inside = false; });
   canvas.addEventListener('mousedown', (e) => {

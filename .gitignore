@@ -3,3 +3,7 @@ test-output/
 dist/
 .wrangler/
 .DS_Store
+desktop/node_modules/
+desktop/game/
+desktop/out/
+desktop/dist/

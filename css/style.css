@@ -408,3 +408,16 @@ body.cine #dialogue { z-index: 19; }
 
 .objective-box.chores .chore { margin-top: 4px; font-size: 13px; }
 .objective-box.chores .chore.done { opacity: 0.6; }
+
+/* ---------------- controller / desktop app ---------------- */
+body:not(.pad) .pad-only { display: none !important; }
+body.pad .kb-only { display: none !important; }
+body.pad, body.pad * { cursor: none !important; }
+body.pad .menu-btn, body.desktop-app .menu-btn { display: none; }
+body.desktop-app #rotate-hint { display: none !important; }
+kbd.pad-a, kbd.pad-y { border-radius: 50%; min-width: 1.5em; display: inline-block; text-align: center; padding: 0; color: #fff; font-weight: 700; border-color: rgba(0,0,0,0.4); }
+kbd.pad-a { background: #2f8f3a; }
+kbd.pad-y { background: #b8902a; }
+.pad-focus { outline: 3px solid #e8c15a !important; outline-offset: 2px; box-shadow: 0 0 0 6px rgba(232, 193, 90, 0.25), 0 0 18px rgba(232, 193, 90, 0.35) !important; }
+select.pad-focus, input.pad-focus { outline-offset: 1px; }
+label:has(> .pad-focus) { color: #f4d98a; }

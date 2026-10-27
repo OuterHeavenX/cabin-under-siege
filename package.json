@@ -1,6 +1,6 @@
 {
   "name": "cabin-under-siege",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "private": true,
   "description": "Top-down survival action RPG for mobile and desktop browsers. You left the family. The family didn't leave you.",
   "type": "module",
@@ -9,7 +9,9 @@
     "test": "node tools/smoke-test.mjs",
     "icons": "node tools/make-icons.mjs",
     "build": "node tools/build.mjs",
-    "deploy": "node tools/build.mjs && npx wrangler deploy"
+    "deploy": "node tools/build.mjs && npx wrangler deploy",
+    "desktop": "node tools/build-desktop.mjs",
+    "desktop:win": "node tools/build-desktop.mjs --win"
   },
   "devDependencies": {
     "playwright": "^1.47.0"

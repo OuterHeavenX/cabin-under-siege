@@ -111,7 +111,7 @@ export function updateHud(dt, info) {
   const tgt = info.target;
   if (tgt) {
     els.prompt.classList.remove('hidden');
-    els.prompt.innerHTML = `<kbd>E</kbd> ${escapeHtml(tgt.label)}`;
+    els.prompt.innerHTML = `<kbd class="kb-only">E</kbd><kbd class="pad-only pad-a">A</kbd> ${escapeHtml(tgt.label)}`;
     els.actLabel.textContent = tgt.short || 'ACT';
     els.actBtn.classList.add('ready');
   } else {

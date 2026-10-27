@@ -10,7 +10,8 @@ import { QUESTS, questWaypoint } from './game/quests.js';
 import { newHome } from './game/state.js';
 import { showChapterStart, openDifficultyPicker, openEndlessPicker } from './ui/menus.js';
 import { buildGroundCanvas, buildRoofCanvas, render } from './world/render.js';
-import { initInput, consume, endFrame, resetInput, setTouchMode, input, suppressGhostClick } from './input.js';
+import { initInput, consume, endFrame, resetInput, setTouchMode, input, suppressGhostClick, desktopApp } from './input.js';
+import { updateGamepad } from './gamepad.js';
 import { initAudio, setVolumes, updateAudio, setMusic, setAmbient, suspendAudio, resumeAudio, sfx, setListener, setFireLevel, audioDebug, renderOffline, musicBar, birdCall } from './audio.js';
 import { initHud, updateHud, toast, banner } from './ui/hud.js';
 import { initDialogue, updateDialogue, playDialogue } from './ui/dialogue.js';
@@ -315,6 +316,7 @@ function frame(ts) {
   if (raw < 0.5) watchPerf(raw);
   G.time += dt;
   try {
+    updateGamepad(dt);
     if (G.running) {
       handleGlobalKeys();
       if (G.cutscene) updateCutscene(dt);
@@ -575,6 +577,15 @@ function showTitle() {
 }
 
 function initTitle() {
+  if (desktopApp) {
+    document.body.classList.add('desktop-app');
+    document.querySelector('.title-note').textContent = 'Controller, or keyboard and mouse. F11 toggles fullscreen.';
+    const q = document.createElement('button');
+    q.id = 't-quit'; q.className = 'btn big'; q.textContent = 'Quit to Desktop';
+    q.addEventListener('click', () => quitApp());
+    document.querySelector('.title-btns').appendChild(q);
+    window.addEventListener('keydown', (e) => { if (e.code === 'F11') { e.preventDefault(); toggleFullscreen(); } });
+  }
   const go = (fn) => () => { initAudio(); setVolumes(G.settings.sfxVolume, G.settings.musicVolume); fn(); };
   document.getElementById('t-continue').addEventListener('click', go(continueGame));
   document.getElementById('t-new').addEventListener('click', go(() => {
@@ -594,6 +605,18 @@ function initTitle() {
   rh.addEventListener('click', () => rh.classList.add('dismissed'));
 }
 
+/* ---------------- desktop app ---------------- */
+function quitApp() {
+  if (G.running && !G.endless) saveGame('quit');
+  if (window.cusDesktop && window.cusDesktop.quit) window.cusDesktop.quit();
+  else window.close();
+}
+function toggleFullscreen() {
+  if (window.cusDesktop && window.cusDesktop.toggleFullscreen) { window.cusDesktop.toggleFullscreen(); return; }
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  else document.documentElement.requestFullscreen().catch(() => {});
+}
+
 /* ---------------- boot ---------------- */
 function boot() {
   loadSettings();
@@ -607,13 +630,13 @@ function boot() {
   initDialogue();
   initReliableTaps();
   initEvents();
-  setMenuHooks({ quitToTitle, reloadFromSave: () => continueGame(), restartEndless: (site) => startEndless(site, startGame) });
+  setMenuHooks({ quitApp: desktopApp ? quitApp : null, toggleFullscreen: desktopApp ? toggleFullscreen : null, quitToTitle, reloadFromSave: () => continueGame(), restartEndless: (site) => startEndless(site, startGame) });
   initTitle();
   showTitle();
   if (G.settings.touchControls === 'on' || (G.settings.touchControls === 'auto' && matchMedia('(pointer: coarse)').matches)) setTouchMode(true);
   document.getElementById('touch').classList.add('hidden');
   requestAnimationFrame(frame);
-  if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  if ('serviceWorker' in navigator && location.protocol === 'https:' && !desktopApp) {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
   }
   // Test/debug handle (harmless in production; used by the automated smoke test).

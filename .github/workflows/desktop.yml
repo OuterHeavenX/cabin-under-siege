@@ -1,0 +1,57 @@
+# Builds the installable desktop game (Steam Deck / Linux and Windows) and,
+# when itch.io is set up, uploads it there with butler.
+#
+# Download the zips from the run's "Artifacts" section (Actions tab; GitHub wraps
+# each in another zip, unzip once to get the itch.io-ready zip), or set up
+# automatic itch.io uploads (Settings → Secrets and variables → Actions):
+#   secret   BUTLER_API_KEY — from https://itch.io/user/settings/api-keys
+#   variable ITCH_GAME      — your itch.io "user/game", e.g. frank/cabin-under-siege
+name: Desktop build (itch.io)
+
+on:
+  push:
+    branches: [main, claude/cabin-chapter-1]
+    tags: ['v*']
+    paths: ['src/**', 'css/**', 'index.html', 'icons/**', 'audio/**', 'desktop/**', 'tools/build-desktop.mjs', '.github/workflows/desktop.yml']
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      HAS_BUTLER: ${{ secrets.BUTLER_API_KEY != '' && vars.ITCH_GAME != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Electron
+        working-directory: desktop
+        run: npm ci --no-audit --no-fund
+      - name: Build Linux (Steam Deck) and Windows
+        run: node tools/build-desktop.mjs --win
+      - id: ver
+        run: echo "version=$(node -p "require('./desktop/package.json').version")" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cabin-under-siege-linux-x64-v${{ steps.ver.outputs.version }}
+          path: desktop/dist/cabin-under-siege-linux-x64-*.zip
+          retention-days: 30
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cabin-under-siege-windows-x64-v${{ steps.ver.outputs.version }}
+          path: desktop/dist/cabin-under-siege-windows-x64-*.zip
+          retention-days: 30
+      - if: env.HAS_BUTLER != 'true'
+        run: echo "::notice::BUTLER_API_KEY / ITCH_GAME not set, so nothing was uploaded to itch.io. Download the builds from Artifacts."
+      - name: Upload to itch.io
+        if: env.HAS_BUTLER == 'true'
+        env:
+          BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+          ITCH_GAME: ${{ vars.ITCH_GAME }}
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          curl -sSL -o butler.zip https://broth.itch.zone/butler/linux-amd64/LATEST/archive/default
+          unzip -q butler.zip -d butler && chmod +x butler/butler
+          ./butler/butler push "desktop/out/Cabin Under Siege-linux-x64" "$ITCH_GAME:linux" --userversion "$VERSION"
+          ./butler/butler push "desktop/out/Cabin Under Siege-win32-x64" "$ITCH_GAME:windows" --userversion "$VERSION"

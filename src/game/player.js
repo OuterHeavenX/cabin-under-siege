@@ -77,7 +77,7 @@ export function updatePlayer(dt) {
   const moving = Math.hypot(mv.x, mv.y) > 0.05;
   let sprint = false;
   const mvMag = Math.hypot(mv.x, mv.y);
-  if (moving && (input.held.sprint || (input.touchMode && G.settings.autoSprint && mvMag > 0.97)) && p.stamina > 5) sprint = true;
+  if (moving && (input.held.sprint || ((input.touchMode || input.padMode) && G.settings.autoSprint && mvMag > 0.97)) && p.stamina > 5) sprint = true;
   if (G.repairHold) sprint = false;
 
   if (p.dodgeT > 0) {
@@ -111,7 +111,7 @@ export function updatePlayer(dt) {
       const t = assistTarget(p, 0.3);
       if (t) p.angle = p.angle + angleDiff(p.angle, angleTo(p.x, p.y, t.x, t.y)) * 0.6;
     }
-  } else if (!input.touchMode && input.mouse.inside) {
+  } else if (!input.touchMode && !input.padMode && input.mouse.inside) {
     const c = G.camera;
     const wx = (input.mouse.x - G.view.w / 2) / c.zoom + c.x;
     const wy = (input.mouse.y - G.view.h / 2) / c.zoom + c.y;
@@ -132,7 +132,7 @@ export function updatePlayer(dt) {
   if (firing && p.reloadT > 0 && w.perRound && p.mag > 0) { p.reloadT = 0; }
   if (firing && p.reloadT <= 0 && p.fireCd <= 0 && p.dodgeT <= 0 && p.swapT <= 0 && !G.repairHold) {
     // FIRE button without stick aim: aim assist picks a target in a wide cone.
-    if (input.touchMode && !(input.aim.active) && G.settings.aimAssist) {
+    if ((input.touchMode || input.padMode) && !(input.aim.active) && G.settings.aimAssist) {
       const t = assistTarget(p, 1.2);
       if (t) p.angle = angleTo(p.x, p.y, t.x, t.y);
     }

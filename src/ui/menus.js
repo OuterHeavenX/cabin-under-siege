@@ -25,7 +25,7 @@ import { restBlocker, startSleep } from '../game/time.js';
 import { saveGame, canSaveNow, exportSave, readImportFile, writeSaveData, saveSettings } from '../game/save.js';
 import { sfx, setVolumes } from '../audio.js';
 import { toast } from './hud.js';
-import { resetInput, setTouchMode, input } from '../input.js';
+import { resetInput, setTouchMode, input, desktopApp } from '../input.js';
 import { drawMinimap } from '../world/render.js';
 import { equipWeapon, magSize } from '../game/player.js';
 import { WEAPONS } from '../data/weapons.js';
@@ -187,6 +187,8 @@ function handleMenuClick(e, entry) {
     case 'help': openHelp(); return;
     case 'quit': confirmBox('Return to the title screen? Unsaved progress since your last save will be lost.', 'Quit to title', () => { closeAllModals(); hooks.quitToTitle && hooks.quitToTitle(); }); return;
     case 'resume': closeAllModals(); return;
+    case 'fullscreen': hooks.toggleFullscreen && hooks.toggleFullscreen(); return;
+    case 'quitapp': confirmBox('Quit to the desktop? The game saves first if it\'s safe to.', 'Quit', () => { hooks.quitApp && hooks.quitApp(); }); return;
     default: return;
   }
   renderMenu(entry);
@@ -359,19 +361,19 @@ function settingsTab() {
     <label>Sound volume <input type="range" min="0" max="100" value="${Math.round(s.sfxVolume * 100)}" data-set="sfxVolume"></label>
     <label>Music volume <input type="range" min="0" max="100" value="${Math.round(s.musicVolume * 100)}" data-set="musicVolume"></label>
     <label>${chk('aimAssist')} Aim assist (nudges aim toward nearby attackers)</label>
-    <label>${chk('fireWhileAiming')} Fire while pushing the aim stick (touch)</label>
-    <label>${chk('autoSprint')} Sprint at full joystick tilt (touch)</label>
+    ${desktopApp ? '' : `<label>${chk('fireWhileAiming')} Fire while pushing the aim stick (touch)</label>`}
+    <label>${chk('autoSprint')} Sprint at full stick tilt (${desktopApp ? 'controller' : 'touch & controller'})</label>
     <label>${chk('showDamageNumbers')} Show damage numbers</label>
     <label>Screen shake ${sel('screenShake', [['full', 'Full'], ['reduced', 'Reduced'], ['off', 'Off']])}</label>
-    <label>Touch controls ${sel('touchControls', [['auto', 'Automatic'], ['on', 'Always on'], ['off', 'Off']])}</label>
-    <label>Graphics ${sel('quality', [['auto', `Automatic${G.autoLow ? ' (low)' : ''}`], ['high', 'High'], ['low', 'Low (older phones)']])}</label>
+    ${desktopApp ? '' : `<label>Touch controls ${sel('touchControls', [['auto', 'Automatic'], ['on', 'Always on'], ['off', 'Off']])}</label>`}
+    <label>Graphics ${sel('quality', [['auto', `Automatic${G.autoLow ? ' (low)' : ''}`], ['high', 'High'], ['low', desktopApp ? 'Low (saves battery)' : 'Low (older phones)']])}</label>
     ${G.s ? `<label>Difficulty <select data-diff>${Object.entries(DIFFICULTY).map(([k, d]) => `<option value="${k}" ${(G.s.difficulty || 'normal') === k ? 'selected' : ''}>${d.name}</option>`).join('')}</select></label>` : ''}
   </div>
   <h3>Save</h3>
   <p class="small">The game autosaves when you sleep, travel, finish jobs, install defenses and survive attacks. Last save: <b>${saved}</b>.</p>
   <div class="row-btns"><button class="btn" data-act="save" ${why ? 'disabled' : ''}>Save now</button><button class="btn" data-act="export">Export save file</button><button class="btn" data-act="import">Import save file</button></div>
   ${why ? `<p class="small muted">${escapeHtml(why)}</p>` : ''}
-  <div class="row-btns"><button class="btn" data-act="help">Controls & Help</button><button class="btn danger" data-act="quit">Quit to title</button><button class="btn primary" data-act="resume">Resume</button></div>
+  <div class="row-btns"><button class="btn" data-act="help">Controls & Help</button>${desktopApp ? '<button class="btn" data-act="fullscreen">Fullscreen on/off</button>' : ''}<button class="btn danger" data-act="quit">Quit to title</button>${desktopApp ? '<button class="btn danger" data-act="quitapp">Quit to desktop</button>' : ''}<button class="btn primary" data-act="resume">Resume</button></div>
   <p class="small muted">Cabin Under Siege v${GAME_VERSION}</p>`;
 }
 
@@ -402,14 +404,22 @@ export function openHelp() {
         <li><kbd>Space</kbd> Dodge roll · <kbd>Q</kbd> Use quick item</li>
         <li><kbd>Esc</kbd>/<kbd>P</kbd> Pause menu · <kbd>I</kbd> Items · <kbd>C</kbd> Character · <kbd>K</kbd> Skills · <kbd>V</kbd> Home · <kbd>M</kbd> Map · <kbd>J</kbd> Journal · <kbd>H</kbd> Help</li>
       </ul></div>
-      <div><h3>Touch</h3><ul>
+      <div><h3>Controller / Steam Deck</h3><ul>
+        <li><kbd>L stick</kbd> Move (full tilt or <kbd>LT</kbd> / <kbd>L3</kbd> sprints) · <kbd>R stick</kbd> Aim</li>
+        <li><kbd>RT</kbd> Fire · <kbd>X</kbd> Reload · <kbd>Y</kbd> Switch weapon</li>
+        <li><kbd>A</kbd> Interact / talk / continue · <kbd>B</kbd> Dodge roll</li>
+        <li><kbd>RB</kbd> Melee shove · <kbd>LB</kbd> Use quick item</li>
+        <li><kbd>☰ Menu</kbd> Pause · <kbd>⧉ View</kbd> Journal · D-pad: <kbd>↑</kbd> Map <kbd>↓</kbd> Items <kbd>←</kbd> Home <kbd>→</kbd> Character</li>
+        <li>In menus: D-pad / stick to move, <kbd>A</kbd> select, <kbd>B</kbd> back, <kbd>LB</kbd>/<kbd>RB</kbd> tabs, <kbd>R stick</kbd> scroll</li>
+      </ul></div>
+      ${desktopApp ? '' : `<div><h3>Touch</h3><ul>
         <li>Left side: drag anywhere to move (full tilt sprints)</li>
         <li>Right stick: aim — push it far to fire</li>
         <li><b>FIRE</b>: shoots where you aim (aim assist picks a target)</li>
         <li><b>ACT</b>: talk, open doors, chop, repair — label shows the action</li>
         <li><b>RELOAD</b>, <b>MELEE</b>, <b>DODGE</b>, <b>USE</b> (quick item), <b>SWAP</b> (next weapon)</li>
         <li>☰ top-right: pause menu</li>
-      </ul></div>
+      </ul></div>`}
     </div>
     <h3>How it works</h3><ul>
       <li><b>Days</b>: work jobs from the job board (7–5), shop (8–8), chop wood, talk to people. Friends ask for <b>favors</b> with good rewards.</li>

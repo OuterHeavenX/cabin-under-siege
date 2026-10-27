@@ -1,7 +1,7 @@
 // Service worker: lets the game run offline after the first visit.
 // Network-first for freshness, falling back to the cache when offline.
 // Bump CACHE when shipping a new version.
-const CACHE = 'cabin-under-siege-v0.6.0';
+const CACHE = 'cabin-under-siege-v0.7.0';
 const ASSETS = [
   './',
   './index.html',
@@ -45,6 +45,7 @@ const ASSETS = [
   "./src/game/time.js",
   "./src/game/weather.js",
   "./src/input.js",
+  "./src/gamepad.js",
   "./src/main.js",
   "./src/ui/cutscene.js",
   "./src/ui/dialogue.js",
