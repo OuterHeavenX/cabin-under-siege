@@ -383,8 +383,8 @@ Safari**. Please verify on a real device:
 (save slots by code) and `/api/scores` (daily leaderboard), storing both in the D1 database
 `cabin-under-siege-db` (bound as `DB` in `wrangler.jsonc`; tables are created automatically).
 `npm start` runs the same Worker locally against SQLite, so everything works offline in
-development. The desktop app needs to know the website's address: set `CLOUD_SERVER` in
-`src/config.js` (or players can enter it under Settings → Cloud server).
+development. The desktop app reaches the live site at `CLOUD_SERVER` in `src/config.js`
+(https://cabin-under-siege.jimmyflete.workers.dev); players can override it under Settings → Cloud server.
 
 ### Steam Deck / desktop (itch.io)
 

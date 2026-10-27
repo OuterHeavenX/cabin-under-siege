@@ -6,7 +6,7 @@ export const SAVE_VERSION = 2;
 export const SAVE_KEY = 'cabinUnderSiege.save';
 export const SETTINGS_KEY = 'cabinUnderSiege.settings';
 /** Where the desktop app finds cloud saves and the leaderboard (the deployed website). */
-export const CLOUD_SERVER = '';
+export const CLOUD_SERVER = 'https://cabin-under-siege.jimmyflete.workers.dev';
 
 /** In-game minutes that pass per real second during normal play. */
 export const GAME_MIN_PER_SEC = 2;
