@@ -118,7 +118,33 @@ if (want('desktop')) {
   await sleep(150);
   await pressE(page);
   await skipDialogues(page);
-  check('Story: talk to Ruth -> go to town (+bandages)', (await step(page)) === 'go_town' && (await ev(page, () => window.__cus.G.s.inv.bandage)) >= 4);
+  check('Story: talk to Ruth -> settle in: five chores (+bandages)', (await step(page)) === 'settle_in' && (await ev(page, () => window.__cus.G.s.inv.bandage)) >= 4 && await ev(page, () => Object.keys(window.__cus.G.s.errands).length === 5));
+  const hammerGame = async () => {
+    for (let i = 0; i < 400 && await page.isVisible('.rg-hit').catch(() => false); i++) {
+      const inZone = await ev(page, () => { const z = document.querySelector('.rg-zone'), n = document.querySelector('.rg-needle'); if (!z || !n) return false; const l = parseFloat(z.style.left), w = parseFloat(z.style.width), p = parseFloat(n.style.left); return p > l + 1 && p < l + w - 1; });
+      if (inZone) await page.locator('.rg-hit').dispatchEvent('pointerdown');
+      await sleep(15);
+    }
+    await sleep(250);
+  };
+  // The fallen pine blocks the car until it's cut up.
+  await tp(page, 24, 32.5, 'cabin'); await faceTo(page, 26, 32.5); await sleep(200);
+  check('Ch1: a fallen pine blocks the driveway (no driving yet)', /fallen pine/i.test(await ev(page, () => (window.__cus.G.interactTarget || {}).label || '')));
+  await tp(page, 24.5, 35.4); await faceTo(page, 24.5, 36.5); await sleep(150);
+  for (let i = 0; i < 7; i++) { await ev(page, () => { window.__cus.G.player.stamina = 100; }); await pressE(page); }
+  await skipDialogues(page);
+  check('Chore: clear the driveway (6 axe swings)', await ev(page, () => window.__cus.G.s.errands.chore_drive.state === 'done'));
+  // Ruth's ten logs
+  await ev(page, () => window.__cus.dbg.addItem('wood', 10, true));
+  const ruthL = await ev(page, () => { const r = window.__cus.G.npcs.find((n) => n.id === 'ruth'); return { x: r.x / 32, y: r.y / 32 }; });
+  await tp(page, ruthL.x - 1, ruthL.y); await faceTo(page, ruthL.x, ruthL.y); await sleep(150);
+  await pressE(page); await sleep(200); await skipDialogues(page);
+  check('Chore: "A Cold Night" — bring Ruth 10 logs', await ev(page, () => window.__cus.G.s.errands.chore_logs.state === 'done'));
+  // The sticking back door (repair minigame)
+  await tp(page, 24.5, 19.2, 'cabin'); await faceTo(page, 24.5, 17.5); await sleep(200);
+  await pressE(page); await sleep(200); await hammerGame(); await skipDialogues(page);
+  check('Chore: fix the sticking back door (minigame)', await ev(page, () => window.__cus.G.s.errands.chore_door.state === 'done'));
+  check('Story: still settling in (3 of 4 chores)', (await step(page)) === 'settle_in');
 
   // Drive to town
   await tp(page, 24, 32.5, 'cabin');
@@ -128,11 +154,17 @@ if (want('desktop')) {
   await sleep(2000);
   await skipDialogues(page);
   check('2. Travel cabin -> town by car', (await ev(page, () => window.__cus.G.map.id)) === 'town');
-  check('Story: arrive in town -> find work', (await step(page)) === 'find_work');
   await page.screenshot({ path: OUT + 'desktop-town.png' });
+  // Stock the pantry at Dee's
+  await setTime(page, 9 * 60); await sleep(300);
+  await tp(page, 13, 15); await faceTo(page, 13, 14); await sleep(150);
+  await pressE(page); await sleep(200);
+  for (let i = 0; i < 3; i++) { await page.click('[data-buy="sandwich"]'); await sleep(80); }
+  await page.keyboard.press('Escape'); await sleep(200); await skipDialogues(page); await sleep(200); await skipDialogues(page);
+  check('Chore: stock the pantry (buy 3 groceries)', await ev(page, () => window.__cus.G.s.errands.chore_pantry.state === 'done'));
+  check('Story: four chores -> find work', (await step(page)) === 'find_work');
 
   // Talk to Gus
-  await setTime(page, 9 * 60);
   await sleep(300);
   const gus = await ev(page, () => { const r = window.__cus.G.npcs.find((n) => n.id === 'gus'); return { x: r.x / 32, y: r.y / 32 }; });
   await tp(page, gus.x - 1, gus.y);
@@ -140,7 +172,7 @@ if (want('desktop')) {
   await sleep(150);
   await pressE(page);
   await skipDialogues(page);
-  check('Story: meet Gus -> first job', (await step(page)) === 'first_job');
+  check('Story: meet Gus -> earn the town\'s trust', (await step(page)) === 'town_trust');
 
   // ---- Job 1: woodcutting (real chopping at the woodlot) ----
   const money0 = await ev(page, () => window.__cus.G.s.money);
@@ -173,7 +205,7 @@ if (want('desktop')) {
   const money1 = await ev(page, () => window.__cus.G.s.money);
   check('3a. Woodcutting job pays money', money1 > money0, `$${money0} -> $${money1}`);
   await skipDialogues(page);
-  check('Story: first job -> see Dee', (await step(page)) === 'see_dee');
+  check('Story: jobs count toward the town\'s trust', /1\/3/.test(await ev(page, () => document.getElementById('objective').textContent)) || (await step(page)) === 'town_trust');
 
   // ---- Job 2: delivery ----
   await setTime(page, 10 * 60);
@@ -233,15 +265,41 @@ if (want('desktop')) {
   check('4b. Level up happened and granted attribute points', (await ev(page, () => window.__cus.G.s.stats.level)) >= 2 && (await ev(page, () => window.__cus.G.s.stats.attrPoints)) >= 2,
     `level ${await ev(page, () => window.__cus.G.s.stats.level)}`);
 
+  // ---- Townsfolk errands: Pastor Abe's pies and Old Man Tibbs's firewood ----
+  check('Story: three jobs alone aren\'t enough — help the townsfolk too', (await step(page)) === 'town_trust');
+  const folk = async (id) => { await ev(page, (id) => { const c = window.__cus; const d = c.G.npcs.find((n) => n.id === id); c.G.player.x = d.x; c.G.player.y = d.y + 22; c.G.player.angle = -Math.PI / 2; d.idleT = 30; c.dbg.input.mouse.inside = false; }, id); await sleep(200); await pressE(page); await sleep(200); await skipDialogues(page, 0); };
+  await setTime(page, 10 * 60); await sleep(200);
+  await folk('folk2');
+  check('Townsfolk offer errands (Pastor Abe\'s bake sale)', await ev(page, () => (window.__cus.G.s.errands.abe_pies || {}).state === 'active'));
+  await tp(page, 12.5, 17.2); await faceTo(page, 12.5, 16.4); await sleep(200); await pressE(page); await sleep(200); await skipDialogues(page);
+  await tp(page, 39.5, 19.4); await faceTo(page, 39.5, 18.6); await sleep(200); await pressE(page); await sleep(200); await skipDialogues(page);
+  check('Errand: carry the pies to the chapel', await ev(page, () => window.__cus.G.s.errands.abe_pies.state === 'done'));
+  await folk('folk11');
+  await tp(page, 31.5, 32.4); await faceTo(page, 31.5, 31.5); await sleep(200);
+  for (let i = 0; i < 11; i++) { await ev(page, () => { window.__cus.G.player.stamina = 100; }); await pressE(page); }
+  await skipDialogues(page);
+  await folk('folk11'); await sleep(300); await skipDialogues(page);
+  check('Errand: split Old Man Tibbs\'s firewood -> go home and sleep', await ev(page, () => window.__cus.G.s.errands.tibbs_wood.state === 'done') && (await step(page)) === 'rest');
+  // Next morning at the cabin: boot prints, the hunting blind.
+  await ev(page, () => { const c = window.__cus; c.G.s.time.day += 1; c.G.s.time.minute = 7 * 60; });
+  await tp(page, 24.5, 30, 'cabin'); await sleep(700); await skipDialogues(page);
+  check('Story: the next morning, Ruth finds boot prints', (await step(page)) === 'trail');
+  await tp(page, 19.5, 29.4); await faceTo(page, 19.5, 28.6); await sleep(200); await pressE(page); await sleep(200); await skipDialogues(page);
+  await tp(page, 9.5, 8.4); await faceTo(page, 9.5, 7.5); await sleep(200); await pressE(page); await sleep(200); await skipDialogues(page); await sleep(300); await skipDialogues(page);
+  check('Story: follow the trail to a hunting blind -> see Dee', (await step(page)) === 'see_dee');
+  await page.screenshot({ path: OUT + 'desktop-blind.png' });
+  await tp(page, 12, 20, 'town');
+
   // ---- Story: Dee & the stranger ----
   await setTime(page, 11 * 60);
   await sleep(200);
-  const dee = await ev(page, () => { const r = window.__cus.G.npcs.find((n) => n.id === 'dee'); return { x: r.x / 32, y: r.y / 32 }; });
+  const dee = await ev(page, () => { const r = window.__cus.G.npcs.find((n) => n.id === 'dee'); const pt = window.__cus.G.map.points.dee_store; r.x = pt.x; r.y = pt.y; r.path = null; r.spot = 'dee_store'; return { x: r.x / 32, y: r.y / 32 }; });
   await tp(page, dee.x, dee.y + 1.9);
   await faceTo(page, dee.x, dee.y);
   await sleep(150);
   await pressE(page);
   await skipDialogues(page);
+  if (process.env.DEBUG) console.log('dee', await step(page), await ev(page, () => JSON.stringify({ m: window.__cus.G.map.id, t: window.__cus.G.s.time, modal: window.__cus.G.modal, tgt: (window.__cus.G.interactTarget || {}).label })));
   check('Story: Dee -> stranger', (await step(page)) === 'stranger');
   await sleep(200);
   const st = await ev(page, () => { const r = window.__cus.G.npcs.find((n) => n.stranger); return r && r.present ? { x: r.x / 32, y: r.y / 32 } : null; });
@@ -253,7 +311,7 @@ if (want('desktop')) {
   await skipDialogues(page, 0); // "Never heard of him" — Shadow JP
   await sleep(200);
   await skipDialogues(page);
-  check('Story: stranger -> reinforce (+2 board kits)', (await step(page)) === 'reinforce' && (await ev(page, () => window.__cus.G.s.inv.board_kit)) >= 2);
+  check('Story: stranger -> a probe attack tonight (+2 board kits)', (await step(page)) === 'probe' && (await ev(page, () => window.__cus.G.s.inv.board_kit)) >= 2 && await ev(page, () => window.__cus.G.s.world.siege && window.__cus.G.s.world.siege.plan.kind === 'probe'));
 
   // ---- Shopping ----
   await tp(page, 13, 15);
@@ -295,6 +353,28 @@ if (want('desktop')) {
   await skipDialogues(page);
   check('2b. Travel town -> cabin by car', (await ev(page, () => window.__cus.G.map.id)) === 'cabin');
 
+  // ---- The probe: two scouts test the cabin ----
+  await ev(page, () => { const c = window.__cus; c.G.player.x = 24.5 * 32; c.G.player.y = 24 * 32; c.G.player.invuln = 99999; c.G.s.time.minute = 22 * 60 + 58; });
+  for (let i = 0; i < 80 && !(await ev(page, () => window.__cus.G.siegeActive)); i++) await sleep(150);
+  check('Ch1: two scouts test the cabin at night', await ev(page, () => window.__cus.G.siegeActive && window.__cus.G.siege.plan.kind === 'probe'));
+  for (let i = 0; i < 100; i++) { await sleep(200); await ev(page, () => { const c = window.__cus; for (const e of c.G.enemies) if (!e.dead && !e.gone) c.dbg.damageEnemy(e, 9999, 0, 'bullet'); }); if (!(await ev(page, () => window.__cus.G.siegeActive))) break; }
+  await sleep(2400); await ev(page, () => window.__cus.dbg.closeAll()); await sleep(700); await skipDialogues(page);
+  check('Story: probe survived -> prepare', (await step(page)) === 'prepare');
+  await ev(page, () => { const c = window.__cus; c.G.player.invuln = 0; c.G.s.time.day += 1; c.G.s.time.minute = 10 * 60; });
+  // Lessons: first aid from Ruth, carpentry from Gus; Harold's watch for the rifle.
+  const heal0 = await ev(page, () => window.__cus.dbg.derived().healMult);
+  const r3 = await ev(page, () => { const r = window.__cus.G.npcs.find((n) => n.id === 'ruth'); return { x: r.x / 32, y: r.y / 32 }; });
+  await tp(page, r3.x - 1, r3.y); await faceTo(page, r3.x, r3.y); await sleep(150); await pressE(page); await sleep(200); await skipDialogues(page);
+  check('Ch1: Ruth teaches first aid (+15% healing)', (await ev(page, () => window.__cus.dbg.derived().healMult)) > heal0 && await ev(page, () => (window.__cus.G.s.quests.ruth_watch || {}).state === 'active'));
+  await ev(page, () => { window.__cus.G.s.quests.ruth_watch.state = 'return'; });
+  await pressE(page); await sleep(200); await skipDialogues(page);
+  check('Ch1: Harold\'s watch -> Harold\'s rifle', await ev(page, () => window.__cus.G.s.inv.rifle === 1));
+  await tp(page, 48, 29, 'town'); await sleep(300);
+  const g3 = await ev(page, () => { const r = window.__cus.G.npcs.find((n) => n.id === 'gus'); return { x: r.x / 32, y: r.y / 32 }; });
+  await tp(page, g3.x - 1, g3.y); await faceTo(page, g3.x, g3.y); await sleep(150); await pressE(page); await sleep(200); await skipDialogues(page); await sleep(300); await skipDialogues(page);
+  check('Ch1: Gus teaches carpentry -> fortify (3 defenses)', (await step(page)) === 'reinforce' && await ev(page, () => window.__cus.G.s.unlocks.carpentry));
+  await tp(page, 24.5, 30, 'cabin'); await sleep(200);
+
   // ---- Reinforce the cabin ----
   await setTime(page, 14 * 60);
   await tp(page, 20.5, 27.6);
@@ -304,7 +384,6 @@ if (want('desktop')) {
   await sleep(200);
   await skipDialogues(page);
   check('7c. Board up a window', await ev(page, () => window.__cus.G.s.home.openings.win_fl.boards));
-  check('Story: reinforce -> first siege scheduled', (await step(page)) === 'first_siege' && await ev(page, () => !!window.__cus.G.s.world.siege));
   await tp(page, 24.5, 16.2);
   await faceTo(page, 24.5, 17.5);
   await sleep(150);
@@ -322,6 +401,8 @@ if (want('desktop')) {
   await page.click('[data-act="place"][data-id="sandbags"]');
   await sleep(150);
   check('7e. Place sandbag cover', await ev(page, () => window.__cus.G.s.home.covers.length === 1));
+  await skipDialogues(page);
+  check('Story: three defenses -> the first siege is scheduled', (await step(page)) === 'first_siege' && await ev(page, () => !!window.__cus.G.s.world.siege && window.__cus.G.s.world.siege.plan.kind === 'story'));
   await page.keyboard.press('KeyI'); await sleep(60);
   await sleep(150);
   await page.click('[data-act="install"][data-id="alarm_kit"]');

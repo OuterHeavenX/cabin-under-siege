@@ -38,6 +38,24 @@ than using simple beeps:
 loop per mood). See [`audio/README.md`](audio/README.md) for the sound names and
 recommended free sources.
 
+### What's new in v0.4.1 — a longer, richer Chapter 1
+
+Chapter 1 now takes 30–40 minutes over about six in-game days, in three acts. The story
+unlocks through side quests, trust and time instead of a straight line of single steps:
+
+- **Act 1, Settling In:** five chores, finish any four — *A Cold Night* (bring Ruth 10 logs),
+  fix the sticking back door, patch the leaky roof, stock the pantry at Dee's, and cut up the
+  pine that fell across your driveway (until then the car can't leave; walk to town instead).
+- **Act 2, Small Town:** Gus wants three jobs before he'll vouch for you, and the townsfolk
+  have errands (Pastor Abe's bake sale, Jenny Miller's cat, Mr. Henderson's fence, Old Man
+  Tibbs's firewood — help two). Then a night's sleep, boot prints by your window, a trail to a
+  hunting blind full of Parliament butts, Dee, the man in the grey coat, and two scouts who
+  come to test the cabin.
+- **Act 3, Digging In:** Ruth teaches first aid (+15% healing), Gus teaches carpentry
+  (unlocks barricades), Harold's watch earns Harold's rifle; three defenses, then Big Carmine.
+- The Journal shows the chore checklist and active errands. The errand system (bring, buy,
+  chop, repair, visit, find, return) is reusable for later chapters.
+
 ### What's new in v0.4
 
 - **Noir look in the game itself**: painted portraits for every speaking character, cold
