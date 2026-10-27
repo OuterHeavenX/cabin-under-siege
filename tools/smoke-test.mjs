@@ -553,7 +553,8 @@ if (want('desktop')) {
   const pre = await ev(page, () => ({ money: window.__cus.G.s.money, level: window.__cus.G.s.stats.level, skills: window.__cus.G.s.skills.length, step: window.__cus.G.s.story.step }));
   await ev(page, () => { const c = window.__cus; c.G.s.world.siege = null; c.dbg.startSiege({ plan: c.dbg.makeRaidPlan(2, 'ambush') }); });
   await sleep(300);
-  await ev(page, () => { const G = window.__cus.G; G.player.invuln = 0; G.player.hp = 5; window.__cus.dbg.damagePlayer(50, G.player.x + 10, G.player.y); });
+  // Ruth (now ♥3) pulls you up once per attack — spend that first.
+  await ev(page, () => { const G = window.__cus.G; G.allyState = { revived: true }; G.player.invuln = 0; G.player.hp = 5; window.__cus.dbg.damagePlayer(50, G.player.x + 10, G.player.y); });
   await sleep(500);
   check('10a. Defeat screen shown', (await page.textContent('#modal-root')).includes('blacked out'));
   await page.screenshot({ path: OUT + 'desktop-defeat.png' });
