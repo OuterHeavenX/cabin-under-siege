@@ -1,8 +1,8 @@
 // Chapter 1: "The Cabin". Steps, objectives, scripted conversations and the
 // authored first siege. Later chapters can add their own step tables.
 import { G } from './state.js';
-import { addItem, count } from './inventory.js';
-import { addJP, addRel, addXP } from './progression.js';
+import { addItem, count, removeItem } from './inventory.js';
+import { addJP, addRel, addXP, relOf } from './progression.js';
 import { addSign, addThreat, scheduleSiege, storyPlan } from './siege.js';
 import { playCutscene } from '../ui/cutscene.js';
 import { playDialogue } from '../ui/dialogue.js';
@@ -55,7 +55,18 @@ export const STEPS = {
   ch3_siege: { obj: 'Vinnie Vescari is coming. Be home by 10 PM — and hold the farm.' },
   ch3_ledger: { obj: 'Search Vinnie for whatever he was carrying.' },
   ch3_ingrid_truth: { obj: 'Show Ingrid what you found.' },
-  ch3_free: { obj: 'Chapter 3 complete. Work, fortify, and stay alive. (Chapter 4 — the Vescari estate — is planned for a future update.)' },
+  ch3_free: { obj: 'Chapter 3 complete. Keep playing — or, when you\'re ready, use your car at the farmhouse to leave for the lake estate (Chapter 4).' },
+  // ---- Chapter 4: The Estate ----
+  ch4_arrive: { obj: 'Look around the estate — step into the manor.' },
+  ch4_meet_eleanor: { obj: 'Introduce yourself to Mrs. Whitcombe at the gatehouse.' },
+  ch4_find_work: { obj: 'Find Walt Bishop at the Point Yacht Club in Port Whitcombe.' },
+  ch4_job: { obj: 'Take and complete a job from the yacht club board.' },
+  ch4_reyes: { obj: 'A woman in a grey suit is waiting on the estate dock (daytime).' },
+  ch4_fortify: { obj: 'Repair the iron gate (both halves) and install three defenses. The lake side is wide open.' },
+  ch4_siege: { obj: 'Nico Vescari is coming — by road and by water. Be home by 10 PM and hold the manor.' },
+  ch4_ring: { obj: 'Search the lakeshore for whatever Nico dropped.' },
+  ch4_eleanor_truth: { obj: 'Tell Mrs. Whitcombe what happened.' },
+  ch4_free: { obj: 'Chapter 4 complete. Work, fortify, and stay alive. (Chapter 5 — the mansion in Short Hills — is planned for a future update.)' },
 };
 
 export function objectiveText() {
@@ -136,6 +147,19 @@ export function storyWaypoint() {
     case 'ch3_siege': return { map: 'farm', ...G.maps.farm.points.cabin_in, label: 'Farmhouse' };
     case 'ch3_ledger': { const pk = G.pickups.find((p) => p.kind === 'ledger'); return pk ? { map: G.map.id, x: pk.x, y: pk.y, label: 'Ledger' } : null; }
     case 'ch3_ingrid_truth': return { ...npcPoint('ingrid'), label: 'Ingrid' };
+    case 'ch4_arrive': return { map: 'estate', ...G.maps.estate.points.cabin_front, label: 'Manor' };
+    case 'ch4_meet_eleanor': return { ...npcPoint('eleanor'), label: 'Eleanor' };
+    case 'ch4_find_work': return { ...npcPoint('walt'), label: 'Walt' };
+    case 'ch4_job': {
+      if (G.s.job) return jobWaypoint();
+      const jb = G.maps.estate.props.find((p) => p.id === 'jobboard');
+      return { map: 'estate', x: jb.x, y: jb.y, label: 'Job board' };
+    }
+    case 'ch4_reyes': return { map: 'estate', ...G.maps.estate.points.reyes, label: 'Dock' };
+    case 'ch4_fortify': return { map: 'estate', ...G.maps.estate.points.gate, label: 'Iron gate' };
+    case 'ch4_siege': return { map: 'estate', ...G.maps.estate.points.cabin_in, label: 'Manor' };
+    case 'ch4_ring': { const pk = G.pickups.find((p) => p.kind === 'signet'); return pk ? { map: G.map.id, x: pk.x, y: pk.y, label: 'Ring' } : null; }
+    case 'ch4_eleanor_truth': return { ...npcPoint('eleanor'), label: 'Eleanor' };
     default: return G.s.job ? jobWaypoint() : null;
   }
 }
@@ -274,6 +298,59 @@ export function storyDialogue(id) {
       onEnd: () => { addRel('tess', 6); addXP(25, 'Met Tess'); setStep('ch3_job'); },
     };
   }
+  if (id === 'eleanor' && st.step === 'ch4_meet_eleanor') {
+    const vouched = relOf('ingrid') >= 2 || G.s.choices.marcusHelp;
+    return {
+      lines: [
+        { who: 'Eleanor Whitcombe', text: 'Mr. Lowe. Or is it Mr. Corsetti? Don\'t look so stricken. My husband laundered money for the Vescaris for twenty-two years. I know the type.' },
+        ...(vouched ? [
+          { who: 'Eleanor Whitcombe', text: 'Ingrid Haugen telephoned. Her father hid my sister from a very bad man in 1971. The Haugens do not ask favors lightly, so neither shall I refuse one.' },
+          { who: 'Eleanor Whitcombe', text: 'The manor is yours to live in and to defend. I\'ve had the bedroom plated in steel — Edward\'s paranoia, finally useful. You\'ll find a kit in your things.' },
+        ] : [
+          { who: 'Eleanor Whitcombe', text: 'I hired you because a man with something to lose keeps a house in good order. Do not mistake that for affection.' },
+        ]),
+        { who: 'Eleanor Whitcombe', text: 'Walt Bishop at the yacht club has work. The iron gate is rusted half off its hinges. And the lake, Mr. Lowe, has no wall at all.' },
+      ],
+      onEnd: () => {
+        if (vouched) { addItem('safe_room_kit', 1, true); addItem('medkit', 1, true); addRel('eleanor', 25); toast('Eleanor gave you a Safe Room Kit and a first-aid kit.', 'item', 3); }
+        else addRel('eleanor', 4);
+        addXP(30, 'Met Eleanor'); setStep('ch4_find_work');
+      },
+    };
+  }
+  if (id === 'walt' && st.step === 'ch4_find_work') {
+    return {
+      lines: [
+        { who: 'Walt Bishop', text: 'You\'re the caretaker. Mrs. Whitcombe called. She never calls.' },
+        { who: ME, text: 'I need work. Honest work.' },
+        { who: 'Walt Bishop', text: 'Board\'s by the door. Docks, deliveries, repairs, fish for the club kitchen. Show up on time and I don\'t care what your name used to be.' },
+      ],
+      onEnd: () => { addRel('walt', 6); addXP(25, 'Met Walt'); setStep('ch4_job'); },
+    };
+  }
+  if (id === 'eleanor' && st.step === 'ch4_eleanor_truth') {
+    const ch = G.s.choices;
+    return {
+      lines: [
+        { who: 'Eleanor Whitcombe', text: 'Boats on my lake, holes in my wainscoting, and a dead man\'s ring on my caretaker\'s finger. It has been an eventful week.' },
+        { who: ME, text: 'Nico Vescari. Leo\'s son. He\'s alive. Leo called. He wants me at his house in Short Hills.' },
+        ...(ch.reyes === 'give' ? [{ who: 'Eleanor Whitcombe', text: 'And your Agent Reyes has the book. So Leo is cornered. Cornered men are the most dangerous kind, Mr. Lowe. Edward taught me that.' }]
+          : ch.reyes === 'copy' ? [{ who: 'Eleanor Whitcombe', text: 'Copies with the FBI, the original in your coat. Clever. Leo will want the original very badly.' }]
+            : [{ who: 'Eleanor Whitcombe', text: 'You kept the book. Then you are the only thing standing between Leo Vescari and twenty years in a federal prison. He knows it.' }]),
+        { who: 'Eleanor Whitcombe', text: 'Go, then. End it. And Mr. Lowe — the gatehouse has a spare room, should you ever want to come back and be boring.' },
+      ],
+      onEnd: () => {
+        st.done[4] = true;
+        st.step = 'ch4_free';
+        G.s.world.threat = Math.max(G.s.world.threat, 60);
+        G.s.world.quietUntilDay = G.s.time.day + 2;
+        addRel('eleanor', 12);
+        addXP(180, 'Chapter 4 complete');
+        saveGame('chapter');
+        showChapterEnd(4);
+      },
+    };
+  }
   if (id === 'ingrid' && st.step === 'ch3_ingrid_truth') {
     return {
       lines: [
@@ -281,8 +358,8 @@ export function storyDialogue(id) {
         { who: ME, text: 'Vinnie had this. Leo\'s books. Every payoff, every account, every judge and every cop on the take — including Deputy Mott.' },
         { who: 'Ingrid Haugen', text: '...That\'s not a ledger, Frank. That\'s a war.' },
         { who: ME, text: 'Leo won\'t stop. Not while I\'m breathing and not while this exists. So I stop running.' },
-        { who: 'Ingrid Haugen', text: 'Marcus knows a federal prosecutor who\'d sell his mother for that book. But Leo will see it coming.' },
-        { who: ME, text: 'Then I go to him first. The Vescari estate. Before he comes here again.' },
+        { who: 'Ingrid Haugen', text: 'Then you need walls. Real ones. There\'s a woman on Lake Champlain — Eleanor Whitcombe. Her husband washed Vescari money for twenty years. She owes my family.' },
+        { who: ME, text: 'A walled estate, and a woman who knows how Leo thinks. That\'s where I make my stand.' },
       ],
       onEnd: () => {
         st.done[3] = true;
@@ -324,6 +401,7 @@ export function initStoryEvents() {
     if (G.s.story.step === 'first_job') setStep('see_dee');
     if (G.s.story.step === 'ch2_job') setStep('ch2_rosa');
     if (G.s.story.step === 'ch3_job') setStep('ch3_deputy');
+    if (G.s.story.step === 'ch4_job') setStep('ch4_reyes');
   });
   ev.on('defenseInstalled', () => {
     const st = G.s.story;
@@ -343,6 +421,15 @@ export function initStoryEvents() {
   ev.on('defenseInstalled', () => { if (G.s.story.step === 'ch3_fortify') { G.s.story.flags.fortified = (G.s.story.flags.fortified || 0) + 1; checkFarmReady(); } });
   ev.on('repaired', () => { if (G.s.story.step === 'ch3_fortify') checkFarmReady(); });
   ev.on('talkDeputy', (n) => deputyTalk(n));
+  ev.on('talkReyes', (n) => reyesTalk(n));
+  ev.on('defenseInstalled', () => { if (G.s.story.step === 'ch4_fortify') { G.s.story.flags.fortified = (G.s.story.flags.fortified || 0) + 1; checkEstateReady(); } });
+  ev.on('repaired', () => { if (G.s.story.step === 'ch4_fortify') checkEstateReady(); });
+  ev.on('signetFound', () => {
+    const f = G.s.story.flags;
+    if (f.signetRead) return;
+    if (G.siegeActive) { f.signetPending = true; toast('You pocket Nico\'s ring. Deal with it when it\'s quiet.', 'info', 3); return; }
+    readSignet();
+  });
   ev.on('ledgerFound', () => {
     const f = G.s.story.flags;
     if (f.ledgerRead) return;
@@ -355,6 +442,7 @@ export function initStoryEvents() {
     if (kind === 'note' && !f.noteRead && count('note') === 0) addPickup('note', e.x, e.y + 6, 1, { map: G.map.id });
     if (kind === 'burner' && !f.burnerRead && count('burner') === 0) addPickup('burner', e.x, e.y + 6, 1, { map: G.map.id });
     if (kind === 'ledger' && !f.ledgerRead && count('ledger') === 0) addPickup('ledger', e.x, e.y + 6, 1, { map: G.map.id });
+    if (kind === 'signet' && !f.signetRead && count('signet') === 0) addPickup('signet', e.x, e.y + 6, 1, { map: G.map.id });
   });
   ev.on('burnerFound', () => {
     const f = G.s.story.flags;
@@ -381,6 +469,18 @@ export function initStoryEvents() {
   ev.on('siegeWon', (sg) => {
     if (sg.plan.kind !== 'story') return;
     const f = G.s.story.flags;
+    if (G.s.chapter === 4) {
+      f.firstSiegeDone = true;
+      if (f.signetPending) { f.signetPending = false; setTimeout(readSignet, 2500); return; }
+      if (f.signetRead) return;
+      if (!G.pickups.some((p) => p.kind === 'signet') && count('signet') === 0) {
+        const p = G.map.points.reyes;
+        addPickup('signet', p.x - 40, p.y, 1, { map: G.map.id });
+        toast('Something glints on the dock where Nico\'s boat pulled away.', 'info', 4);
+      }
+      setTimeout(() => { if (G.s.story.step === 'ch4_siege') setStep('ch4_ring'); }, 3800);
+      return;
+    }
     if (G.s.chapter === 3) {
       f.firstSiegeDone = true;
       if (f.ledgerPending) { f.ledgerPending = false; setTimeout(readLedger, 2500); return; }
@@ -473,6 +573,69 @@ function checkFarmReady() {
     { who: ME, text: 'Gate\'s fixed. House is ready. If Leo sent Vinnie himself, he\'ll come hard and loud.' },
     { who: ME, text: 'Trucks. Rifles in the treeline. Keep moving, keep them off the house.' },
   ]);
+}
+
+function checkEstateReady() {
+  const o = G.s.home.openings;
+  const gateOk = ['gate_l', 'gate_r'].every((k) => o[k] && o[k].hp >= (o[k].baseHp || 100) + (o[k].reinforced ? 150 : 0) - 0.5);
+  const n = G.s.story.flags.fortified || 0;
+  if (!gateOk || n < 3) {
+    toast(`Estate defenses: iron gate ${gateOk ? 'repaired ✓' : 'still broken'} · defenses ${Math.min(3, n)}/3`, 'info', 3);
+    return;
+  }
+  const t = G.s.time;
+  const day = t.minute < 20 * 60 + 30 ? t.day : t.day + 1;
+  scheduleSiege(storyPlan(), day, 22 * 60);
+  addSign('strange_car');
+  setStep('ch4_siege');
+  playDialogue([
+    { who: ME, text: 'Gate\'s hung. The manor\'s as tight as a house with forty windows gets. But the lake side is wide open.' },
+    { who: ME, text: 'Nico won\'t knock at the front. He\'ll come off the water. Watch the dock.' },
+  ]);
+}
+
+/** Agent Reyes on the dock: what you do with the ledger. */
+function reyesTalk(n) {
+  const st = G.s.story;
+  const mott = (G.s.choices || {}).deputy === 'bribe';
+  const has = count('ledger') > 0;
+  const R = 'Agent Dana Reyes';
+  playDialogue([
+    { who: R, text: 'Special Agent Dana Reyes, FBI organized crime. Relax, Mr. Corsetti. If I wanted you in cuffs you\'d be in cuffs.' },
+    { who: R, text: 'Vinnie Vescari\'s ledger. You have it. I want it. With that book I can put Leo Vescari and half of Newark City Hall away for the rest of their lives.' },
+    ...(mott ? [{ who: R, text: 'Page forty-one, by the way. Your friend Deputy Mott. He sold your new address to Nico Vescari for five thousand dollars. You should pick better friends.' }] : []),
+    { who: R, text: has ? 'So. Do we have a deal?' : 'You don\'t have it on you? Then tell me where it is. Do we have a deal?',
+      choices: [
+        { text: '"Take it. Put them all away."', effect: () => { G.s.choices.reyes = 'give'; if (has) removeItem('ledger', 1); addThreat(-15); addJP('neighbor', 10); return [{ who: R, text: 'Smart. You\'re a witness now. I\'ll have agents watching the road — you\'ll hear from us before they hit you.' }, { who: ME, text: '(The feds will warn you early, and fewer of Nico\'s people will make it through. But Leo knows you talked.)' }]; } },
+        { text: '"You get copies. I keep the book."', effect: () => { G.s.choices.reyes = 'copy'; addJP('shadow', 12); return [{ who: R, text: 'Copies won\'t hold up in court without the original. But they\'ll start the grand jury. Fine. For now.' }, { who: ME, text: '(Leverage kept. Nobody\'s coming to help.)' }]; } },
+        { text: '"No deal. It\'s my insurance."', effect: () => { G.s.choices.reyes = 'keep'; addThreat(10, 'you turned down the FBI'); return [{ who: R, text: 'Insurance only works if you live long enough to collect. Here\'s my card. Call before the boats come.' }, { who: ME, text: '(You keep every card. Nico will bring everything he has.)' }]; } },
+      ] },
+  ], () => {
+    G.npcs = G.npcs.filter((x) => x !== n);
+    st.flags.metReyes = true;
+    addXP(30, 'Met Agent Reyes');
+    setStep('ch4_fortify');
+    checkEstateReady();
+  });
+}
+
+function readSignet() {
+  const f = G.s.story.flags;
+  if (f.signetRead) return;
+  f.signetRead = true;
+  const fed = (G.s.choices || {}).reyes === 'give';
+  playCutscene({ focus: { x: G.player.x, y: G.player.y }, zoom: 1.6, title: 'THE RING', sub: 'A gold signet. A V, worn smooth by three generations of thumbs.', hold: 1.8, sting: 'phone', lines: [
+    { who: ME, text: 'Leo\'s father\'s ring. Leo gave it to Nico at his confirmation. I was there. I carried the cake.' },
+    { who: ME, text: '(The phone in the manor is ringing.)' },
+    { who: 'Leo Vescari', text: 'Frankie. You have something of my son\'s.' },
+    { who: ME, text: fed ? 'He\'s alive, Leo. The FBI pulled him out of the lake. He\'ll be talking by morning.' : 'He\'s alive, Leo. I put him back in his boat and pushed it toward Burlington.' },
+    { who: 'Leo Vescari', text: 'Then you showed my family mercy. I won\'t forget it. And I won\'t forgive it.' },
+    { who: 'Leo Vescari', text: 'Short Hills. My house. Come and finish this like family, Frankie — or I come to you, and I don\'t send anyone. I come myself.' },
+  ], onEnd: () => {
+    addXP(40, 'The ring'); addJP('shadow', 15);
+    const s = G.s.story.step;
+    if (s === 'ch4_ring' || s === 'ch4_siege') setStep('ch4_eleanor_truth');
+  } });
 }
 
 /** The deputy's visit: a choice with consequences for the coming attack. */
@@ -577,6 +740,20 @@ export function updateStory(dt) {
         ...(ruth ? [{ who: 'Ruth Calloway', text: 'Well, it\'s no Pine Hollow. But the soil\'s good. I\'ll have a garden in by Sunday.' }] : []),
         { who: ME, text: 'There\'s a dairy across the pasture. Neighbors first. Always neighbors first.' },
       ], () => setStep('ch3_meet_ingrid'));
+    }
+  }
+  if (st.step === 'ch4_arrive' && G.map.id === 'estate') {
+    const b = G.map.buildingAt(G.player.x, G.player.y);
+    if (b && b.id === 'manor') {
+      st.step = 'ch4_meet_eleanor';
+      const ruth = G.s.companion && G.s.companion.ruth.joined;
+      const dog = G.s.companion && G.s.companion.dog && G.s.companion.dog.owned;
+      playDialogue([
+        { who: ME, text: 'Whitcombe Manor. Forty rooms, a stone wall, an iron gate, and a lake that goes all the way to Canada.' },
+        ...(ruth ? [{ who: 'Ruth Calloway', text: 'Frank. There are eleven bathrooms. Eleven. Harold and I raised two boys with one.' }] : []),
+        ...(dog ? [{ who: ME, text: '(Duke has already found the kitchen.)' }] : []),
+        { who: ME, text: 'The owner lives in the gatehouse by the road. Neighbors first. Even when the neighbor owns the house.' },
+      ], () => setStep('ch4_meet_eleanor'));
     }
   }
   if (st.step === 'ch2_arrive' && G.map.id === 'millbrook') {

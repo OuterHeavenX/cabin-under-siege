@@ -893,7 +893,7 @@ if (want('v3')) {
   await ev(page, () => window.__cus.quitToTitle()); await sleep(300);
   await page.click('#t-endless'); await sleep(300);
   const sites = await ev(page, () => [...document.querySelectorAll('[data-site]')].map((b) => b.dataset.site + (b.disabled ? '-locked' : '')));
-  check('v3 Endless Siege: cabin open, later homes locked until reached in the story', sites.join(',') === 'cabin,house-locked,farm-locked', sites.join(','));
+  check('v3 Endless Siege: cabin open, later homes locked until reached in the story', sites.join(',') === 'cabin,house-locked,farm-locked,estate-locked', sites.join(','));
   await page.click('[data-site="cabin"]'); await sleep(500);
   await ev(page, () => { window.__cus.G.endless.breakT = 0.3; window.__cus.G.player.invuln = 99999; });
   for (let w = 0; w < 2; w++) {

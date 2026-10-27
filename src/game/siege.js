@@ -63,6 +63,18 @@ export function makeRaidPlan(size, kind = 'raid') {
 
 export function storyPlan() {
   const ch = G.s.choices || {};
+  if (G.s.chapter === 4) {
+    const waves = [
+      { dir: 'west', types: ['truck', 'handler'], delay: 0 },
+      { dir: 'lake', types: ['gunman', 'gunman', 'enforcer'], delay: 16 },
+      { dir: 'westwoods', types: ['sniper', 'scout', 'arsonist'], delay: 32 },
+      { dir: 'shore', types: ['lieutenant', 'enforcer', 'gunman'], delay: 50, boss: 0 },
+    ];
+    if (ch.reyes === 'give') { waves[1].types.pop(); waves[2].types.pop(); } // the feds stop some of them on the road
+    if (ch.reyes === 'keep') waves[2].types.push('sniper');
+    if (ch.deputy === 'bribe') waves[0].types.push('gunman'); // Mott sold the address
+    return { kind: 'story', hpMult: 1.25, bossName: 'Nico Vescari', bossItem: 'signet', waves };
+  }
   if (G.s.chapter === 3) {
     const waves = [
       { dir: 'west', types: ['truck', 'scout', 'scout'], delay: 0 },
@@ -190,6 +202,12 @@ export function updateThreatClock() {
       toast(`The phone line is dead — if ${nbName} tried to call, it didn't get through.`, 'warn', 4);
     }
   }
+  if (s && !s.reyesCalled && s.plan.kind === 'story' && G.s.chapter === 4 && (G.s.choices || {}).reyes === 'give' && siegeTonight() && G.s.time.minute >= 17 * 60) {
+    s.reyesCalled = true;
+    s.extraLead = Math.max(s.extraLead || 0, 120);
+    sfx('phone');
+    banner('📞 Agent Reyes: "Two boats left Burlington an hour ago and a truck crossed at Rouses Point. Tonight, around ten. We stopped one car — not all of them."', 'danger', 8);
+  }
   if (s && !s.mottCalled && s.plan.kind === 'story' && G.s.chapter === 3 && (G.s.choices || {}).deputy === 'bribe' && siegeTonight() && G.s.time.minute >= 17 * 60) {
     s.mottCalled = true; s.extraLead = Math.max(s.extraLead || 0, 90);
     sfx('phone');
@@ -256,7 +274,7 @@ export function startSiege(s, immediate = false) {
 
 const BOSS_LINES = {
   'Big Carmine': ['The family\'s collector', '"Frankie! Come out and say hello to your family!"'],
-  'Sal Benedetto': ['Leo\'s accountant', '"Nobody walks away from the books, Frankie. Nobody."'],
+  'Sal "the Knife" Benedetto': ['Leo\'s accountant', '"Nobody walks away from the books, Frankie. Nobody."'],
   'Vinnie Vescari': ['Leo\'s nephew', '"You took something of ours. I\'m here to collect."'],
   'Nico Vescari': ['Leo\'s son', '"My father sends his love. I came to deliver it."'],
 };
@@ -284,6 +302,10 @@ export function updateSiege(dt) {
       if (sg.plan.kind === 'ambush') e.alerted = true;
       sg.spawned++;
     });
+    if (wave.dir === 'lake' || wave.dir === 'shore') {
+      (G.boats = G.boats || []).push({ x: sp.x + 40, y: sp.y + 6, a: Math.PI, t: 0 });
+      sfx('boat', { x: sp.x, y: sp.y });
+    }
     const d = derived();
     if (d.showDirections || sg.waveIdx === 0) banner(`Attackers approaching from ${sp.label}!`, 'danger', 4);
     G.events.emit('waveSpawn', wave);
@@ -338,6 +360,7 @@ function endSiege() {
   sfx('victory');
   setMusic(isNight() ? 'night' : 'day');
   centerMessage(kind === 'story' ? 'YOU SURVIVED THE NIGHT' : 'ATTACK REPELLED', `${sg.killed} down · ${sg.fled} fled`, 3.5);
+  G.boats = [];
   G.events.emit('siegeWon', sg);
   G.siege = null;
   // Shells for the next fight so a long siege can't leave you stranded.

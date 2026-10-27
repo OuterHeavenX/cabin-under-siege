@@ -51,6 +51,10 @@ export function spawnNpcs() {
     G.npcs.push({ id: 'stranger', def: { name: 'Man in a Grey Coat', body: '#3b3f46', hair: '#111', skin: '#d6a98a' }, stranger: true,
       x: m.points.stranger.x, y: m.points.stranger.y, radius: 10, angle: Math.PI / 2, path: null, walkPhase: 0, spot: 'stranger' });
   }
+  if (m.points.reyes) {
+    G.npcs.push({ id: 'reyes', def: { name: 'Agent Dana Reyes', body: '#1d2230', hair: '#1a1210', skin: '#b88660' }, reyes: true,
+      x: m.points.reyes.x, y: m.points.reyes.y, radius: 10, angle: Math.PI, path: null, walkPhase: 0, spot: 'reyes' });
+  }
   if (m.points.deputy) {
     G.npcs.push({ id: 'deputy', def: { name: 'Deputy Carl Mott', body: '#6b5a3a', hair: '#3a2a1a', skin: '#e0b08a', hat: true }, deputy: true,
       x: m.points.deputy.x, y: m.points.deputy.y, radius: 10, angle: -Math.PI / 2, path: null, walkPhase: 0, spot: 'deputy' });
@@ -66,6 +70,7 @@ export function npcPresent(n) {
     const signActive = s && !s.done && s.day === G.s.time.day;
     return (storyWants || signActive) && minute >= 8 * 60 && minute < 19 * 60;
   }
+  if (n.reyes) return G.s.story.step === 'ch4_reyes' && minute >= 8 * 60 && minute < 19 * 60;
   if (n.deputy) return G.s.story.step === 'ch3_deputy' && minute >= 8 * 60 && minute < 19 * 60;
   return true;
 }
@@ -124,6 +129,7 @@ export function interactNpc(n) {
   }
   if (n.stranger) { G.events.emit('talkStranger', n); return; }
   if (n.deputy) { G.events.emit('talkDeputy', n); return; }
+  if (n.reyes) { G.events.emit('talkReyes', n); return; }
   // Story conversations take priority over the menu.
   const story = storyDialogue(n.id);
   if (story) { playDialogue(story.lines, story.onEnd); firstTalkBonus(n.id); return; }
@@ -168,6 +174,14 @@ function memoryLine(id) {
     if (ruthJoined()) out.push('Your Ruth beat me at cribbage three times. I don\'t lose at cribbage, Frank.');
   }
   if (id === 'bo' && done('bo_fish')) out.push('Best fish fry in ten years. People asked who caught them. I said a mysterious stranger. Fits.');
+  if (id === 'eleanor') {
+    if (done('eleanor_brooch')) out.push('I wore Mother\'s cameo to the club. Commodore Ames asked where I found it. I said, "Under a hedge, like most things worth having."');
+    if (c.reyes === 'give') out.push('An FBI agent in my rose garden. Edward is spinning in his mausoleum. I find I don\'t mind.');
+    if (c.reyes === 'keep') out.push('You kept the book. Edward kept things too. It did not end well for him, Mr. Lowe.');
+    if (ruthJoined()) out.push('Your Mrs. Calloway corrected my roses. Nobody corrects my roses. I have invited her to tea.');
+  }
+  if (id === 'theo' && done('theo_motor')) out.push('The charter guys caught a forty-pound pike. I told them my caretaker friend fixed the motor. They think you\'re a legend.');
+  if (id === 'walt' && done('walt_logs')) out.push('Club voted to name the path after you. I vetoed it. You\'d hate that.');
   if (id === 'tess' && done('tess_scale')) out.push('Scale\'s still reading true. The Johansson boys are furious. They were the ones getting the deal.');
   return out.length ? choose(out) : null;
 }

@@ -232,8 +232,91 @@ export const NPCS = {
   },
 };
 
+// ---------------- Chapter 4: Whitcombe Estate, Lake Champlain ----------------
+Object.assign(NPCS, {
+  eleanor: {
+    name: 'Eleanor Whitcombe',
+    title: 'Owner of the estate',
+    bio: 'Eighty-one, sharp as a tack and twice as dangerous. Her late husband laundered money for half of New England; she knows exactly who you are, and hired you as caretaker anyway.',
+    body: '#2d3346', hair: '#ece8e0', skin: '#efd2bc',
+    map: 'estate',
+    home: ['estate', 'eleanor_in'],
+    schedule: [
+      [8 * 60, 13 * 60, 'estate', 'eleanor_garden'],
+      [13 * 60, 21 * 60, 'estate', 'eleanor_porch'],
+    ],
+    homeLine: 'The gatehouse curtains are drawn. Mrs. Whitcombe does not receive callers after nine.',
+    idle: [
+      'Edward built that wall to keep the press out. It kept me in, mostly.',
+      'The lake freezes in January. Until then, anyone with a boat can knock at the back door.',
+      'Tea is at four. You are not invited, but you may stand nearby.',
+      'I have outlived two doctors, a senator and my husband. I intend to outlive this family of yours too.',
+      'The silver is counted, Mr. Lowe. Every Tuesday.',
+    ],
+    friendly: [
+      'You have better manners than Edward\'s business partners. Low bar, but you clear it.',
+      'I had the gardener\'s shed restocked. Medical supplies. Don\'t thank me; it\'s unbecoming.',
+      'Edward kept a shotgun in the boathouse. I suppose it\'s yours now. Don\'t scratch it.',
+    ],
+  },
+  theo: {
+    name: 'Theo Park',
+    title: 'Marina & provisions owner',
+    bio: 'Inherited the marina from his mother and runs it with a spreadsheet and a podcast habit. Sells bait, ammunition and artisanal jam with equal enthusiasm.',
+    body: '#2f6f8f', hair: '#1b1b1b', skin: '#e3bc94',
+    map: 'estate',
+    home: ['estate', 'theo_home'],
+    schedule: [
+      [8 * 60, 20 * 60, 'estate', 'theo_store'],
+      [20 * 60, 22 * 60, 'estate', 'theo_porch'],
+    ],
+    homeLine: 'The marina lights are off. A sign says: BACK AT 8. PROBABLY.',
+    idle: [
+      'Bait, boat fuel, buckshot, and blueberry jam. Port Whitcombe is a full-service community.',
+      'A guy rented a speedboat last week and paid in hundreds. Hundreds! Who does that?',
+      'You\'re the caretaker at the big house? Mrs. Whitcombe made my mom cry in 1994. Respect.',
+      'Lake\'s calm tonight. Sound carries over calm water, you know.',
+      'I started a podcast about the estate. Three listeners. Two are my aunts.',
+    ],
+    friendly: [
+      'Put a case of shells aside. Marked it "jam" on the invoice.',
+      'If boats come in after dark, I\'ll call. I can see the whole bay from the counter.',
+      'You\'re the most interesting person in this town and I\'ve decided not to ask why.',
+    ],
+  },
+  walt: {
+    name: 'Walt Bishop',
+    title: 'Yacht club groundskeeper & job contact',
+    bio: 'Has kept the Point Yacht Club running for thirty years. Former Navy. Speaks in short sentences and hands out work to anyone who shows up on time.',
+    body: '#7a3a2a', hair: '#9a9a9a', skin: '#cf9c76',
+    map: 'estate',
+    home: ['estate', 'walt_home'],
+    schedule: [
+      [7 * 60, 17 * 60, 'estate', 'walt_yard'],
+      [17 * 60, 21 * 60, 'estate', 'walt_porch'],
+    ],
+    homeLine: "Walt's cottage is dark. Reveille is at five.",
+    idle: [
+      'Board\'s by the door. Docks, deliveries, repairs. Pick one.',
+      'Twenty years Navy. Ten on a destroyer. Nothing on this lake surprises me.',
+      'Club members tip badly. Club members tip in advice.',
+      'Weather rolls off the Adirondacks fast. Watch the west.',
+      'The Whitcombe place had visitors in the eighties. Black cars. Same as now.',
+    ],
+    friendly: [
+      'You pull your weight. Pay\'s going up.',
+      'Keep a flare gun by the dock. Light shows you who\'s coming.',
+      'If it comes to a fight, you call me. I still know how.',
+    ],
+  },
+});
+
 // Unnamed townsfolk who walk around during the day, per map.
 export const TOWNSFOLK = {
+  estate: [
+    { id: 'folk9', name: 'Commodore Ames', body: '#1d2a44', hair: '#e0e0e0', skin: '#efd2bc', route: ['walk_a', 'walk_b', 'walk_d'] },
+    { id: 'folk10', name: 'June Tremblay', body: '#a05a7a', hair: '#7a4a2a', skin: '#e8b898', route: ['walk_b', 'walk_d', 'walk_a'] },
+  ],
   town: [
     { id: 'folk1', name: 'Mr. Henderson', body: '#8a7a5a', hair: '#bbbbbb', skin: '#e0b08f', route: ['walk_a', 'walk_e', 'walk_f'] },
     { id: 'folk2', name: 'Pastor Abe', body: '#2e2e2e', hair: '#5a4632', skin: '#a8754f', route: ['walk_e', 'walk_c', 'walk_a'] },
@@ -251,6 +334,12 @@ export const TOWNSFOLK = {
 };
 
 export const FOLK_LINES = {
+  estate: [
+    'The Whitcombe place had a caretaker in \'09. He left in a hurry.',
+    'Sailing season\'s over. Only fools and fishermen on the lake now.',
+    'Somebody\'s been anchoring off the point at night. No lights.',
+    'Mrs. Whitcombe sent back her soup at the club. Twice. Legend.',
+  ],
   town: [
   'Morning! You\'re the fella in the old Calloway cabin, right?',
   'Watch yourself on Route 9 after dark. Deer everywhere.',

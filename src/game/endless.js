@@ -16,6 +16,7 @@ export const ENDLESS_SITES = [
   { id: 'cabin', map: 'cabin', home: 'cabin', chapter: 1, name: 'The Cabin', place: 'Pine Hollow' },
   { id: 'house', map: 'millbrook', home: 'house', chapter: 2, name: 'Larch Street', place: 'Millbrook' },
   { id: 'farm', map: 'farm', home: 'farm', chapter: 3, name: 'The Farm', place: 'Kettle Crossing' },
+  { id: 'estate', map: 'estate', home: 'estate', chapter: 4, name: 'The Estate', place: 'Port Whitcombe' },
 ];
 
 export function endlessData() {
@@ -74,7 +75,7 @@ function wavePlan(n) {
   for (let g = 0; g < groups; g++) waves.push({ dir: dirs[(n + g * 2) % dirs.length], types: [], delay: g * 10 });
   types.forEach((t, i) => waves[i % groups].types.push(t));
   if (n % 5 === 0) waves[waves.length - 1].types.push('lieutenant');
-  if (G.endless.site.id === 'farm' && n >= 3 && n % 3 === 0) waves[0].types.unshift('truck');
+  if ((G.endless.site.id === 'farm' || G.endless.site.id === 'estate') && n >= 3 && n % 3 === 0) waves[0].types.unshift('truck');
   return { kind: 'endless', hpMult: 1 + (n - 1) * 0.07, bossName: 'Lieutenant', waves };
 }
 

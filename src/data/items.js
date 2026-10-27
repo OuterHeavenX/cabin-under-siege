@@ -98,6 +98,10 @@ export const ITEMS = {
     name: 'Burner Phone', icon: '📱', cat: 'Story', cap: 1, sell: 0, story: true,
     desc: 'Taken from Sal Benedetto. One saved number, labeled only "L".',
   },
+  signet: {
+    name: 'Vescari Signet Ring', icon: '💍', cat: 'Story', cap: 1, sell: 0, story: true,
+    desc: 'Leo\'s father\'s gold ring, taken from Nico Vescari on the dock.',
+  },
   ledger: {
     name: 'Leo\'s Ledger', icon: '📒', cat: 'Story', cap: 1, sell: 0, story: true,
     desc: 'Vinnie Vescari\'s copy of the family books — every payoff, every account, every name.',
@@ -215,6 +219,13 @@ SHOPS.bo = {
   name: 'Lindqvist Feed & Supply',
   owner: 'bo',
   stock: [...SHOPS.rosa.stock.map((s) => ({ ...s, price: Math.round(s.price * (s.id === 'wood' ? 0.8 : 1)) }))],
+};
+
+// Chapter 4: Park's Marina & Provisions.
+SHOPS.theo = {
+  name: "Park's Marina & Provisions",
+  owner: 'theo',
+  stock: [...SHOPS.rosa.stock.map((s) => ({ ...s, price: Math.round(s.price * 1.1) }))],
 };
 
 // Stove recipes (cooking).

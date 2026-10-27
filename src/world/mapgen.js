@@ -706,3 +706,190 @@ export function buildFarmMap(home) {
   };
   return m;
 }
+
+/* ------------------------------------------------------------------ */
+/* Chapter 4: Whitcombe Estate, Lake Champlain                         */
+/* ------------------------------------------------------------------ */
+export function buildEstateMap(home) {
+  const W = 80, H = 60;
+  const m = new GameMap('estate', W, H, 'Port Whitcombe');
+  const rnd = seeded(4404);
+  m.cropsPickable = true;
+  m.stone = new Set();
+  m.hedge = new Set();
+  const stone = (cx, cy) => { m.setSolid(cx, cy, SO.WALL); m.stone.add(m.idx(cx, cy)); };
+  const hedge = (cx, cy) => { m.setSolid(cx, cy, SO.FENCE); m.hedge.add(m.idx(cx, cy)); };
+
+  // Lake Champlain along the east; a sandy shore.
+  for (let cy = 0; cy < H; cy++) {
+    const shore = 61 + Math.round(Math.sin(cy * 0.35) * 1.2);
+    for (let cx = shore; cx < W; cx++) { m.setGround(cx, cy, GR.WATER); m.setSolid(cx, cy, SO.WATER); }
+    for (let cx = shore - 3; cx < shore; cx++) m.setGround(cx, cy, GR.DIRT);
+  }
+  // Roads: county road north, lane west, village road south.
+  m.fillGround(0, 2, 60, 2, GR.ROAD);
+  m.fillGround(7, 4, 2, 47, GR.ROAD);
+  m.fillGround(0, 50, 60, 2, GR.ROAD);
+  // Estate drive with a turning circle.
+  m.fillGround(33, 4, 2, 15, GR.GRAVEL);
+  m.fillGround(29, 12, 10, 6, GR.GRAVEL);
+  m.fillSolid(32, 13, 4, 4, SO.ROCK); m.decor.push({ kind: 'fountain', x: 32, y: 13, w: 4, h: 4 });
+
+  // Stone wall with an iron gate on the drive, a garden gate south, open to the lake on the east lawn.
+  for (let cx = 12; cx <= 56; cx++) { if (cx !== 33 && cx !== 34) stone(cx, 10); if (cx !== 30) stone(cx, 46); }
+  for (let cy = 10; cy <= 46; cy++) { stone(12, cy); if (cy < 25 || cy > 31) stone(56, cy); }
+  const o = home.openings;
+  addDoor(m, 'gate_l', 33, 10, o.gate_l, 'Iron Gate (left)');
+  addDoor(m, 'gate_r', 34, 10, o.gate_r, 'Iron Gate (right)');
+  addDoor(m, 'garden_gate', 30, 46, o.garden_gate, 'Garden Gate');
+  for (const c of [33, 34]) m.setGround(c, 10, GR.GRAVEL);
+
+  // The manor.
+  building(m, { id: 'manor', name: 'Whitcombe Manor', x: 24, y: 19, w: 20, h: 13, roof: '#2d2a33', isHome: true });
+  for (let cy = 20; cy <= 30; cy++) if (cy < 24 || cy > 26) m.setSolid(33, cy, SO.WALL); // central hall wall
+  for (let cx = 25; cx <= 32; cx++) if (cx !== 28 && cx !== 29) m.setSolid(cx, 25, SO.WALL); // west wing rooms
+  addDoor(m, 'front_l', 33, 19, o.front_l, 'Front Doors (left)');
+  addDoor(m, 'front_r', 34, 19, o.front_r, 'Front Doors (right)');
+  addDoor(m, 'terrace_door', 34, 31, o.terrace_door, 'Terrace Door');
+  addDoor(m, 'west_door', 24, 28, o.west_door, 'West Door', true);
+  addDoor(m, 'east_door', 43, 25, o.east_door, 'East Door', true);
+  addWindow(m, 'win_n1', 27, 19, o.win_n1, 'Library Window');
+  addWindow(m, 'win_n2', 30, 19, o.win_n2, 'Study Window');
+  addWindow(m, 'win_n3', 37, 19, o.win_n3, 'Parlor Window');
+  addWindow(m, 'win_n4', 40, 19, o.win_n4, 'Dining Window');
+  addWindow(m, 'win_s1', 28, 31, o.win_s1, 'Bedroom Window');
+  addWindow(m, 'win_s2', 39, 31, o.win_s2, 'Kitchen Window');
+  addWindow(m, 'win_w', 24, 22, o.win_w, 'West Window', true);
+  addWindow(m, 'win_e', 43, 29, o.win_e, 'East Window', true);
+  m.fillGround(29, 32, 11, 2, GR.PORCH); // terrace
+  m.fillGround(31, 18, 6, 1, GR.PORCH); // front steps
+  // Furniture
+  m.fillSolid(25, 26, 2, 2, SO.FURN); m.decor.push({ kind: 'bed', x: 25, y: 26, w: 2, h: 2 });
+  addProp(m, { id: 'bed', kind: 'bed', x: 27.6 * TILE, y: 28.2 * TILE, label: 'Bed', r: 44 });
+  m.fillSolid(40, 26, 3, 1, SO.FURN); m.decor.push({ kind: 'stove', x: 40, y: 26, w: 3, h: 1 });
+  addProp(m, { id: 'stove', kind: 'stove', x: 41.5 * TILE, y: 27.5 * TILE, label: 'Stove', r: 44 });
+  m.fillSolid(42, 20, 1, 3, SO.FURN); m.decor.push({ kind: 'workbench', x: 42, y: 20, w: 1, h: 3 });
+  addProp(m, { id: 'workbench', kind: 'workbench', x: 41.3 * TILE, y: 21.5 * TILE, label: 'Workbench', r: 42 });
+  m.fillSolid(36, 21, 4, 2, SO.FURN); m.decor.push({ kind: 'table', x: 36, y: 21, w: 4, h: 2 });
+  m.fillSolid(25, 20, 1, 4, SO.FURN); m.decor.push({ kind: 'shelf', x: 25, y: 20, w: 1, h: 4 });
+  m.decor.push({ kind: 'rug', x: 29, y: 21, w: 3, h: 2 }, { kind: 'rug', x: 35, y: 27, w: 4, h: 2 });
+  m.decor.push({ kind: 'phone', x: 32, y: 20, w: 1, h: 1 });
+  addProp(m, { id: 'phone', kind: 'phone', x: 32.5 * TILE, y: 20.6 * TILE, label: 'Telephone', r: 40 });
+
+  // Car, mailbox, phone pole
+  m.fillSolid(36, 14, 2, 3, SO.CAR);
+  addProp(m, { id: 'car', kind: 'car', x: 37 * TILE, y: 15.5 * TILE, label: 'Your Car', r: 64 });
+  m.setSolid(31, 4, SO.FURN); m.decor.push({ kind: 'mailbox', x: 31, y: 4, w: 1, h: 1 });
+  addProp(m, { id: 'mailbox', kind: 'mailbox', x: 31.5 * TILE, y: 4.6 * TILE, label: 'Mailbox', r: 40 });
+  m.setSolid(29, 4, SO.WALL); m.decor.push({ kind: 'pole', x: 29, y: 4, w: 1, h: 1 });
+  addProp(m, { id: 'phonepole', kind: 'phonepole', x: 29.5 * TILE, y: 4.6 * TILE, label: 'Phone Line', r: 48 });
+
+  // Formal gardens: hedge rows, a gazebo, the kitchen garden.
+  for (let cx = 16; cx <= 52; cx++) if (cx < 29 || cx > 31) { if (cx % 9 !== 0) hedge(cx, 37); if (cx % 9 !== 4) hedge(cx, 42); }
+  m.fillSolid(19, 39, 3, 2, SO.FURN); m.decor.push({ kind: 'gazebo', x: 19, y: 39, w: 3, h: 2 });
+  m.fillGround(46, 38, 8, 4, GR.GARDEN);
+  m.fillGround(29, 34, 3, 12, GR.GRAVEL);
+  // Greenhouse
+  building(m, { id: 'greenhouse', name: 'Greenhouse', x: 46, y: 13, w: 8, h: 6, roof: 'rgba(170,220,210,0.55)', floor: GR.TILEFLOOR });
+  addDoor(m, 'gh_door', 49, 18, npcDoorRec(), 'Greenhouse Door');
+  m.fillGround(47, 14, 6, 4, GR.GARDEN);
+  // Statues along the drive
+  for (const [cx, cy] of [[31, 7], [36, 7]]) { m.setSolid(cx, cy, SO.ROCK); m.decor.push({ kind: 'statue', x: cx, y: cy, w: 1, h: 1 }); }
+
+  // Lake lawn, dock and boathouse
+  m.fillGround(57, 27, 9, 3, GR.PORCH);
+  for (let cx = 61; cx <= 65; cx++) for (let cy = 27; cy <= 29; cy++) m.setSolid(cx, cy, SO.NONE);
+  m.decor.push({ kind: 'boat', x: 63, y: 30, w: 3, h: 1 });
+  building(m, { id: 'boathouse', name: 'Boathouse', x: 55, y: 34, w: 5, h: 5, roof: '#4a3a2a' });
+  for (let cy = 34; cy <= 38; cy++) m.stone.delete(m.idx(56, cy));
+  addDoor(m, 'bh_door', 57, 34, npcDoorRec(), 'Boathouse Door');
+
+  // Eleanor's gatehouse
+  building(m, { id: 'gatehouse', name: 'The Gatehouse', x: 20, y: 5, w: 7, h: 5, roof: '#3a3346' });
+  addDoor(m, 'eleanor_door', 26, 7, npcDoorRec(), "Eleanor's Door", true);
+  addWindow(m, 'gh_w1', 22, 9, npcWinRec(), 'Window');
+
+  // Port Whitcombe village
+  building(m, { id: 'marina', name: 'Park\'s Marina & Provisions', x: 46, y: 53, w: 10, h: 6, roof: '#1f4f6a', floor: GR.TILEFLOOR, shop: 'theo' });
+  addDoor(m, 'marina_door', 50, 53, npcDoorRec(), 'Store Door');
+  addWindow(m, 'marina_w', 53, 53, npcWinRec(), 'Window');
+  m.fillSolid(47, 55, 6, 1, SO.COUNTER); m.decor.push({ kind: 'counter', x: 47, y: 55, w: 6, h: 1 });
+  m.fillSolid(47, 57, 7, 1, SO.FURN); m.decor.push({ kind: 'shelf', x: 47, y: 57, w: 7, h: 1 });
+  addProp(m, { id: 'store_counter', kind: 'counter', x: 50 * TILE, y: 54.3 * TILE, label: 'Store Counter', r: 44 });
+  m.fillGround(56, 54, 6, 2, GR.PORCH);
+  for (let cx = 57; cx <= 63; cx++) for (let cy = 54; cy <= 55; cy++) if (m.getSolid(cx, cy) === SO.WATER) { m.setSolid(cx, cy, SO.NONE); m.setGround(cx, cy, GR.PORCH); }
+  m.decor.push({ kind: 'boat', x: 59, y: 56, w: 3, h: 1 });
+  building(m, { id: 'yacht', name: 'Point Yacht Club', x: 30, y: 53, w: 10, h: 6, roof: '#e8e2d4', floor: GR.TILEFLOOR });
+  addDoor(m, 'yacht_door', 34, 53, npcDoorRec(), 'Club Door');
+  m.setSolid(37, 52, SO.FURN); m.decor.push({ kind: 'board', x: 37, y: 52, w: 1, h: 1 });
+  addProp(m, { id: 'jobboard', kind: 'jobboard', x: 37.5 * TILE, y: 51.5 * TILE, label: 'Job Board', r: 46 });
+  addProp(m, { id: 'logdrop', kind: 'logdrop', x: 42.5 * TILE, y: 52.6 * TILE, label: 'Club Drop-off', r: 54 });
+  addProp(m, { id: 'shed', kind: 'shed', x: 27.5 * TILE, y: 52.6 * TILE, label: 'Supply Crates', r: 46 });
+  m.fillSolid(41, 53, 2, 2, SO.FURN); m.decor.push({ kind: 'crate', x: 41, y: 53, w: 2, h: 2 });
+  building(m, { id: 'chapel', name: 'St. Brendan\'s', x: 18, y: 53, w: 7, h: 6, roof: '#5a5a62' });
+  addDoor(m, 'chapel_door', 21, 53, npcDoorRec(), 'Chapel Door');
+  building(m, { id: 'theo_house', name: 'Park House', x: 2, y: 53, w: 6, h: 5, roof: '#6a4a3a' });
+  addDoor(m, 'theo_door', 4, 53, npcDoorRec(), "Theo's Door");
+  building(m, { id: 'walt_house', name: 'Bishop Cottage', x: 10, y: 53, w: 6, h: 5, roof: '#4a5a3a' });
+  addDoor(m, 'walt_door', 12, 53, npcDoorRec(), "Walt's Door");
+
+  // Trees: west woods, the strip between wall and village, north of the road.
+  const clear = [[0, 1, 60, 4], [6, 4, 9, 51], [12, 10, 56, 46], [0, 49, 62, 52], [0, 52, 62, 59], [19, 4, 27, 10], [28, 4, 39, 10], [56, 24, 62, 32]];
+  const avoid = (cx, cy) => clear.some((r) => rectHas(r, cx, cy));
+  scatterTrees(m, rnd, 0, 4, 11, 49, 0.34, avoid);
+  scatterTrees(m, rnd, 12, 47, 58, 49, 0.3, avoid);
+  scatterTrees(m, rnd, 0, 0, 59, 1, 0.3, avoid);
+  scatterTrees(m, rnd, 40, 4, 58, 9, 0.18, avoid);
+  scatterTrees(m, rnd, 13, 11, 22, 18, 0.12, avoid);
+  [[15, 33], [50, 30], [45, 44], [16, 22], [52, 22]].forEach(([cx, cy]) => addTree(m, cx, cy, 'oak'));
+  [[44, 6], [14, 48], [53, 11]].forEach(([cx, cy]) => m.setSolid(cx, cy, SO.ROCK));
+
+  m.spawns = {
+    west: { ...P(0.5, 2.5), label: 'the county road' },
+    north: { ...P(52.5, 2.5), label: 'the north road' },
+    westwoods: { ...P(0.5, 28), label: 'the west woods' },
+    south: { ...P(0.5, 50.5), label: 'the village road' },
+    lake: { ...P(64.5, 28.5), label: 'the lake — by boat' },
+    shore: { ...P(59.5, 44.5), label: 'the south shore — by boat' },
+  };
+  m.points = {
+    start: P(34, 17.5), arrive: P(34, 17.5), car: P(37, 17.6),
+    cabin_in: P(34, 25), porch: P(34, 18.2), cabin_front: P(34, 18.2), gate: P(34, 10.6),
+    eleanor_garden: P(24, 13), eleanor_porch: P(27.6, 7.5), eleanor_in: P(23, 7),
+    theo_store: P(50, 56.3), theo_home: P(5, 55.5), theo_porch: P(4.5, 52.2),
+    walt_yard: P(36, 51.6), walt_home: P(13, 55.5), walt_porch: P(12.5, 52.2),
+    store_door: P(50.5, 52.2), stranger: P(44.5, 51.6), deputy: P(34, 17.6), reyes: P(59.5, 28.5),
+    garden: P(48, 40), recovery: P(23, 7), footprints: P(22, 28.5), strange_car: P(42, 2.5), woodlot: P(5, 30),
+    ruth_c_day: P(49.5, 39.5), ruth_c_eve: P(31.5, 33), ruth_c_home: P(41, 23.5),
+    walk_a: P(20, 51.6), walk_b: P(44, 51.6), walk_c: P(8.5, 30), walk_d: P(56, 52.2),
+  };
+  m.deliveryTargets = {
+    yacht: { name: 'the Point Yacht Club', ...P(34.5, 52.2) },
+    chapel: { name: 'St. Brendan\'s chapel', ...P(21.5, 52.2) },
+    gatehouse: { name: 'the gatehouse', ...P(27.6, 7.5) },
+    walt: { name: 'Bishop Cottage', ...P(12.5, 52.2) },
+  };
+  m.repairTargets = {
+    dock: { name: 'the estate dock', ...P(60, 29.6) },
+    greenhouse: { name: 'the greenhouse vents', ...P(49.5, 19.4) },
+    fountain: { name: 'the fountain pump', ...P(34, 17.6) },
+    chapel_bell: { name: 'the chapel bell rope', ...P(21.5, 52.2) },
+  };
+  m.discover = [
+    { id: 'estate', name: 'Whitcombe Estate', ...P(34, 25), r: 220 },
+    { id: 'lake', name: 'Lake Champlain', ...P(60, 28), r: 150 },
+    { id: 'portw', name: 'Port Whitcombe', ...P(34, 54), r: 200 },
+    { id: 'gardens', name: 'The Formal Gardens', ...P(25, 40), r: 140 },
+  ];
+  m.lights = [
+    { x: 33.5 * TILE, y: 11.5 * TILE, r: 150 }, { x: 34 * TILE, y: 33.5 * TILE, r: 140 }, { x: 59 * TILE, y: 28.5 * TILE, r: 130 },
+    { x: 24 * TILE, y: 11.5 * TILE, r: 110 },
+  ];
+  for (let cx = 6; cx < 60; cx += 9) m.lights.push({ x: cx * TILE, y: 49.6 * TILE, r: 120, street: true });
+  for (const b of m.buildings) m.lights.push({ x: (b.x + b.w / 2) * TILE, y: (b.y + b.h / 2) * TILE, r: Math.max(b.w, b.h) * 16, building: b.id });
+  m.homeInfo = {
+    building: 'manor', interior: { cx: 34, cy: 25 }, allyPost: P(36.5, 20.6), gate: { cx: 34, cy: 10 },
+    flood: { x: 34 * TILE, y: 18 * TILE, r: 340 }, porch: { x: 34 * TILE, y: 18 * TILE, r: 110 },
+  };
+  return m;
+}

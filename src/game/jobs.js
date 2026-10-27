@@ -90,7 +90,7 @@ export function jobHint() {
   if (!j) return '';
   const town = workMap();
   switch (j.type) {
-    case 'woodcut': return count('wood') >= j.need ? `Bring ${j.need} wood to the drop-off at ${C().jobPlace}.` : `Chop trees (wood ${count('wood')}/${j.need}). ${{ 1: 'The woodlot east of the yard is closest.', 2: 'Millbrook Park has plenty of deadfall.', 3: 'The windbreaks along the fields are full of trees.' }[C().id] || ''}`;
+    case 'woodcut': return count('wood') >= j.need ? `Bring ${j.need} wood to the drop-off at ${C().jobPlace}.` : `Chop trees (wood ${count('wood')}/${j.need}). ${{ 1: 'The woodlot east of the yard is closest.', 2: 'Millbrook Park has plenty of deadfall.', 3: 'The windbreaks along the fields are full of trees.', 4: 'The west woods past the lane are thick with timber.' }[C().id] || ''}`;
     case 'harvest': return count('vegetables') >= j.need ? `Bring ${j.need} vegetables to the drop-off at ${C().jobPlace}.` : `Pick vegetables in your garden (${count('vegetables')}/${j.need}).`;
     case 'fishing': return count('fish') >= j.need ? `Bring ${j.need} fish to the drop-off at ${C().jobPlace}.` : `Catch fish at the pond (${count('fish')}/${j.need}).`;
     case 'delivery': return j.stage === 'pickup' ? `Pick up the parcel at the ${C().storeName} counter.` : `Deliver the parcel to ${town.deliveryTargets[j.target].name}.`;

@@ -19,9 +19,14 @@ export const CHAPTERS = {
     neighbor: 'ingrid', shopkeeper: 'bo', jobContact: 'tess', jobPlace: 'the Grain Co-op', storeName: 'Lindqvist Feed & Supply',
     hardwareName: 'Lindqvist Feed & Supply', firstStep: 'ch3_arrive',
   },
+  4: {
+    id: 4, name: 'The Estate', place: 'Port Whitcombe', homeMap: 'estate', workMap: 'estate', maps: ['estate'],
+    neighbor: 'eleanor', shopkeeper: 'theo', jobContact: 'walt', jobPlace: 'the Point Yacht Club', storeName: "Park's Marina",
+    hardwareName: "Park's Marina", firstStep: 'ch4_arrive',
+  },
 };
 
-export const LAST_CHAPTER = 3;
+export const LAST_CHAPTER = 4;
 
 export const chapter = () => CHAPTERS[(G.s && G.s.chapter) || 1] || CHAPTERS[1];
 export const homeMapId = () => chapter().homeMap;

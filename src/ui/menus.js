@@ -760,8 +760,14 @@ const CHAPTER_END = {
   3: {
     title: 'THE WISCONSIN FARM',
     body: 'Vinnie Vescari is gone, the farm still stands, and you hold the one thing Leo Vescari truly fears: his own books.',
-    hook: 'No more running. The next move is yours — straight to the Vescari estate on the Jersey shore.',
-    next: 'Chapter 4 (the estate) is planned for a future update. You can keep playing: farm, fish, work the co-op, help your neighbors and hold the farm against the raids that keep coming.',
+    hook: 'Ingrid knows a woman with a walled estate on Lake Champlain who owes her family a favor — and who knows the Vescaris better than anyone.',
+    next: 'Chapter 4 is ready: keep playing here as long as you like, then use your car at the farmhouse to leave for the Whitcombe Estate.',
+  },
+  4: {
+    title: 'THE ESTATE',
+    body: 'Nico Vescari came over the water with everything his father could buy, and the manor is still standing. His ring is in your pocket.',
+    hook: 'Leo Vescari has stopped sending people. "Short Hills. My house. Come and finish this like family."',
+    next: 'Chapter 5 (the mansion) is planned for a future update. Keep playing: work the yacht club, fish the lake, help Eleanor, and hold the estate against the raids that keep coming.',
   },
   2: {
     title: 'LARCH STREET',
@@ -781,7 +787,7 @@ export function showChapterEnd(n = 1) {
 }
 
 export function showChapterStart(n, onGo) {
-  const titles = { 2: ['LARCH STREET', 'Millbrook, Ohio — six hundred miles from Pine Hollow.'], 3: ['THE WISCONSIN FARM', 'Kettle Crossing, Wisconsin — two hundred acres and a broken gate.'] };
+  const titles = { 2: ['LARCH STREET', 'Millbrook, Ohio — six hundred miles from Pine Hollow.'], 3: ['THE WISCONSIN FARM', 'Kettle Crossing, Wisconsin — two hundred acres and a broken gate.'], 4: ['THE ESTATE', 'Port Whitcombe, Lake Champlain — a stone wall, an iron gate, and open water.'] };
   const [t, sub] = titles[n] || ['', ''];
   const el = openModal('chapterStart', `<div class="chapter-card"><div class="ch-num">CHAPTER ${n}</div><h2>${t}</h2><p class="muted">${escapeHtml(sub)}</p>
     <p class="small">Your level, skills, money, weapons and gear come with you. Installed lights, alarms and cameras are packed back into your inventory; boards, braces and shutters stay behind.</p>

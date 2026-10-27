@@ -2,7 +2,7 @@
 import { G, newSave, isNight } from './game/state.js';
 import { TILE } from './config.js';
 import { clamp, dist, fmtClock, escapeHtml } from './util.js';
-import { buildCabinMap, buildTownMap, buildMillbrookMap, buildFarmMap } from './world/mapgen.js';
+import { buildCabinMap, buildTownMap, buildMillbrookMap, buildFarmMap, buildEstateMap } from './world/mapgen.js';
 import { chapter, homeMapId, workMapId, atHome, LAST_CHAPTER } from './game/chapters.js';
 import { QUESTS, questWaypoint } from './game/quests.js';
 import { newHome } from './game/state.js';
@@ -82,6 +82,7 @@ const MAP_BUILDERS = {
   town: () => buildTownMap(),
   millbrook: () => buildMillbrookMap(G.s.home),
   farm: () => buildFarmMap(G.s.home),
+  estate: () => buildEstateMap(G.s.home),
 };
 
 function buildMaps() {
@@ -111,10 +112,10 @@ export function loadMap(id, pos) {
   G.map = G.maps[id];
   G.enemies = [];
   G.bullets = [];
-  G.pickups = G.pickups.filter((p) => (p.kind === 'note' || p.kind === 'burner' || p.kind === 'ledger') && p.map === id);
+  G.pickups = G.pickups.filter((p) => (p.kind === 'note' || p.kind === 'burner' || p.kind === 'ledger' || p.kind === 'signet') && p.map === id);
   G.particles = [];
   G.floaters = [];
-  G.fires = []; G.lobs = []; G.casings = []; G.smoke = [];
+  G.fires = []; G.lobs = []; G.casings = []; G.smoke = []; G.boats = [];
   applyChopped(G.map);
   if (id === homeMapId()) refreshSignProps();
   const p = G.player;
@@ -454,7 +455,7 @@ function moveToChapter(n) {
   s.pastHomes[old.id || 'cabin'] = { leftOnDay: s.time.day };
   s.chapter = n;
   unlockEndlessFor(n);
-  s.home = newHome(n === 3 ? 'farm' : n === 2 ? 'house' : 'cabin');
+  s.home = newHome(n === 4 ? 'estate' : n === 3 ? 'farm' : n === 2 ? 'house' : 'cabin');
   s.job = null;
   s.story.step = chapter().firstStep;
   s.story.flags = {};

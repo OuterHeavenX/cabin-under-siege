@@ -147,6 +147,42 @@ export const QUESTS = {
     ],
     reward: { money: 0, xp: 40, rel: 10, jp: ['neighbor', 8], items: { hearty_meal: 2, medkit: 1 } },
   },
+  eleanor_brooch: {
+    npc: 'eleanor', map: 'estate', type: 'find', title: 'The Cameo Brooch',
+    spots: [[24.5, 39.5], [44.5, 40.5], [17.5, 44.5], [50.5, 33.5]], label: 'Something glinting under the hedge',
+    objective: 'Find Mrs. Whitcombe\'s cameo brooch somewhere in the formal gardens.',
+    offer: [
+      { who: 'Eleanor Whitcombe', text: 'I lost my mother\'s cameo in the gardens. I refuse to crawl about under hedges at my age. You, however, are of a crawling age.' },
+    ],
+    found: 'A cameo brooch: a woman\'s profile in pale shell, set in old gold.',
+    done: [
+      { who: 'Eleanor Whitcombe', text: 'Mother\'s cameo. ...Thank you, Mr. Lowe. Truly.' },
+      { who: 'Eleanor Whitcombe', text: 'Edward\'s things are in the boathouse. He was a coward with excellent taste in rifles. Take the scope from his old Winchester.' },
+    ],
+    reward: { money: 80, xp: 50, rel: 14, jp: ['survivor', 8], items: { scope: 1, medkit: 1 } },
+  },
+  theo_motor: {
+    npc: 'theo', map: 'estate', type: 'repair', title: 'Outboard Trouble',
+    target: [58.5, 55.4], label: 'Fix the rental boat\'s outboard motor',
+    objective: 'Repair the outboard on Theo\'s rental boat at the marina dock (Toolkit).',
+    offer: [
+      { who: 'Theo Park', text: 'My only rental boat won\'t start, and I have a fishing charter at dawn. I watched three videos. I made it worse.' },
+    ],
+    found: 'The outboard coughs, sputters and settles into a steady purr.',
+    done: [{ who: 'Theo Park', text: 'You are a wizard. A large, quiet wizard. Here — and a box of shells marked "jam".' }],
+    reward: { money: 70, xp: 45, rel: 14, jp: ['handyman', 8], items: { shells: 12 } },
+  },
+  walt_logs: {
+    npc: 'walt', map: 'estate', type: 'chop', title: 'Storm Damage', chops: 5,
+    target: [24.5, 48.5], label: 'Saw up the fallen birch',
+    objective: 'Clear the birch that came down across the club path (5 swings).',
+    offer: [
+      { who: 'Walt Bishop', text: 'Wind took a birch down across the path behind the club. Members are climbing over it in loafers. Fix it.' },
+    ],
+    found: 'The path is clear. You stack the wood neatly; Walt would want it neat.',
+    done: [{ who: 'Walt Bishop', text: 'Neat. Good. Here\'s pay, and a steel door brace from the club storeroom.' }],
+    reward: { money: 60, xp: 40, rel: 12, jp: ['survivor', 6], items: { wood: 5, door_brace: 1 } },
+  },
 };
 
 const qstate = () => G.s.quests || (G.s.quests = {});
