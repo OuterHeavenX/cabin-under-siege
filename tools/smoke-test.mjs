@@ -540,6 +540,21 @@ async function faceTo(page, x, y) { await ev(page, ([x, y]) => { const p = windo
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
   const moved = Math.hypot(p1.x - p0.x, p1.y - p0.y);
   check('14b. Simultaneous touch move + aim', moved > 20 && Math.abs(Math.cos(p1.a) + 1) < 0.3, `moved ${Math.round(moved)}px, angle ${p1.a.toFixed(2)}`);
+  // Pause button: works while another finger holds the joystick, and has a forgiving hit area.
+  const mb = await page.locator('#menu-btn').boundingBox();
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: tps([[jx, jy]]) });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: tps([[jx, jy], [mb.x + mb.width / 2, mb.y + mb.height / 2]]) });
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await sleep(150);
+  const menuWhileMoving = await page.isVisible('.paused-tag');
+  await page.tap('[data-close]');
+  await sleep(150);
+  await page.touchscreen.tap(mb.x - 6, mb.y + mb.height + 8); // just outside the visible button
+  await sleep(150);
+  const menuEdge = await page.isVisible('.paused-tag');
+  if (menuEdge) await page.tap('[data-close]');
+  await sleep(150);
+  check('Pause button opens reliably (multi-touch + edge taps)', menuWhileMoving && menuEdge);
   await page.tap('#btn-reload');
   await page.tap('#btn-dodge');
   await sleep(200);

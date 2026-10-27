@@ -161,7 +161,7 @@ validation/migration, simultaneous two-finger touch (joystick + aim) in an iPhon
 landscape viewport, rotation to portrait and back, and pausing when backgrounded. It fails
 on any console error. Screenshots go to `test-output/`.
 
-Current result: **65/65 checks pass**.
+Current result: **66/66 checks pass**.
 
 ### iPhone / iPad checklist (real device testing still needed)
 
