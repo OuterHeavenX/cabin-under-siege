@@ -26,6 +26,43 @@ import { WEAPONS } from '../data/weapons.js';
 import { GAME_VERSION } from '../config.js';
 
 const root = () => document.getElementById('modal-root');
+
+/*
+ * Reliable taps for every button in menus. Mobile Safari sometimes drops the
+ * synthetic "click" (finger drifted a few pixels, another finger on the screen,
+ * double-tap heuristics). So a button is pressed when a pointer goes down and
+ * comes back up on it; the browser's own click that may follow is swallowed so
+ * nothing fires twice. Taps that began before a menu opened (the finger that
+ * opened it) never count, because their pointerdown wasn't on a menu button.
+ */
+let tapsReady = false;
+export function initReliableTaps() {
+  if (tapsReady) return;
+  tapsReady = true;
+  const r = document;
+  const eligible = (b) => b && !b.disabled && !b.closest('#touch') && b.id !== 'menu-btn';
+  let down = null;
+  let synthBtn = null, synthUntil = 0;
+  r.addEventListener('pointerdown', (e) => {
+    const b = e.target.closest && e.target.closest('button');
+    down = eligible(b) ? { b, x: e.clientX, y: e.clientY, id: e.pointerId } : null;
+  }, true);
+  r.addEventListener('pointerup', (e) => {
+    const d = down;
+    down = null;
+    if (!d || e.pointerId !== d.id || !d.b.isConnected || d.b.disabled) return;
+    const b = document.elementFromPoint(e.clientX, e.clientY)?.closest('button');
+    if (b !== d.b || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 18) return;
+    synthBtn = b; synthUntil = performance.now() + 600;
+    b.click();
+  }, true);
+  r.addEventListener('pointercancel', () => { down = null; }, true);
+  r.addEventListener('click', (e) => {
+    if (!e.isTrusted) return;
+    // Swallow the native click that follows a press we already handled.
+    if (performance.now() < synthUntil && e.target.closest && e.target.closest('button') === synthBtn) { e.stopPropagation(); e.preventDefault(); }
+  }, true);
+}
 const stack = [];
 let menuTab = 'inv';
 const hooks = {}; // set by main: quitToTitle, reloadFromSave
@@ -44,7 +81,7 @@ export function openModal(name, html, { onClose = null, closable = true, cls = '
   resetInput();
   wrap.addEventListener('click', (e) => {
     // Ignore the trailing click of the tap that opened this modal (it can land on ✕).
-    if (performance.now() - entry.openedAt < 400) { if (e.target.closest('[data-close]')) e.preventDefault(); return; }
+    if (e.isTrusted && performance.now() - entry.openedAt < 350) { e.preventDefault(); return; }
     if (e.target.closest('[data-close]')) { e.preventDefault(); closeModal(); sfx('ui'); }
   });
   return wrap;

@@ -26,7 +26,7 @@ export function press(action) { input.pressed.add(action); }
 let suppressClickUntil = 0;
 export function suppressGhostClick() { suppressClickUntil = performance.now() + 400; }
 window.addEventListener('click', (e) => {
-  if (performance.now() < suppressClickUntil && e.target.closest && e.target.closest('#modal-root')) { e.stopPropagation(); e.preventDefault(); }
+  if (e.isTrusted && performance.now() < suppressClickUntil && e.target.closest && e.target.closest('#modal-root')) { e.stopPropagation(); e.preventDefault(); }
 }, true);
 export function consume(action) {
   if (input.pressed.has(action)) { input.pressed.delete(action); return true; }

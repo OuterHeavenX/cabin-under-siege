@@ -347,3 +347,6 @@ body.touch .prompt kbd { display: none; }
   .item-row { grid-template-columns: 32px minmax(0, 1fr); }
   .item-row .item-btns, .item-row > .btn { grid-column: 1 / -1; justify-content: end; justify-self: end; }
 }
+
+/* Larger invisible tap area around the ✕ close button */
+.close-btn::after { content: ""; position: absolute; inset: -10px -10px -12px -12px; }

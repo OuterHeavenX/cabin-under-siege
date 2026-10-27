@@ -12,7 +12,7 @@ import { initInput, consume, endFrame, resetInput, setTouchMode, input, suppress
 import { initAudio, setVolumes, updateAudio, setMusic, setAmbient, suspendAudio, resumeAudio, sfx, setListener, setFireLevel, audioDebug, renderOffline, musicBar, birdCall } from './audio.js';
 import { initHud, updateHud, toast, banner } from './ui/hud.js';
 import { initDialogue, updateDialogue, playDialogue } from './ui/dialogue.js';
-import { openMenu, closeModal, topModal, setMenuHooks, openHelp, confirmBox, pickImport, modalOpen, closeAllModals } from './ui/menus.js';
+import { initReliableTaps, openMenu, closeModal, topModal, setMenuHooks, openHelp, confirmBox, pickImport, modalOpen, closeAllModals } from './ui/menus.js';
 import { createPlayer, updatePlayer, inCombat } from './game/player.js';
 import { updateBullets, updateEffects } from './game/combat.js';
 import { updateEnemies, initEnemyEvents } from './game/enemies.js';
@@ -493,6 +493,7 @@ function boot() {
   initInput(canvas);
   initHud();
   initDialogue();
+  initReliableTaps();
   initEvents();
   setMenuHooks({ quitToTitle, reloadFromSave: () => continueGame() });
   initTitle();
@@ -506,7 +507,7 @@ function boot() {
   // Test/debug handle (harmless in production; used by the automated smoke test).
   window.__cus = {
     G, newGame, continueGame, travel, loadMap, saveGame, quitToTitle,
-    dbg: { birdCall, renderOffline, musicBar, sfx, audioDebug, input, openingStrength, homeMapId, openMenu, startFire, damageEnemy, spawnEnemy, startSiege, makeRaidPlan, scheduleSiege, addSign, addItem, addXP, addJP, buySkill, derived, damagePlayer, count },
+    dbg: { closeAll: () => closeAllModals(), birdCall, renderOffline, musicBar, sfx, audioDebug, input, openingStrength, homeMapId, openMenu, startFire, damageEnemy, spawnEnemy, startSiege, makeRaidPlan, scheduleSiege, addSign, addItem, addXP, addJP, buySkill, derived, damagePlayer, count },
   };
 }
 

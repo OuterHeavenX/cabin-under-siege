@@ -815,6 +815,38 @@ async function faceTo(page, x, y) { await ev(page, ([x, y]) => { if (window.__cu
   await page.tap('#btn-dodge');
   await sleep(200);
 
+  // Close buttons must work even when the browser drops the click (iOS Safari does).
+  await page.evaluate(() => { window.__dropClicks = true; window.addEventListener('click', (e) => { if (window.__dropClicks && e.isTrusted) { e.stopImmediatePropagation(); e.preventDefault(); } }, true); });
+  const mb2 = await page.locator('#menu-btn').boundingBox();
+  await page.touchscreen.tap(mb2.x + mb2.width / 2, mb2.y + mb2.height / 2);
+  await sleep(500);
+  const cb = await page.locator('.modal-wrap .close-btn').boundingBox();
+  await page.touchscreen.tap(cb.x + cb.width / 2, cb.y + cb.height / 2);
+  await sleep(200);
+  const closedWithoutClick = !(await page.isVisible('.menu-head'));
+  // A quick tap on ✕ right after opening also works.
+  await page.touchscreen.tap(mb2.x + mb2.width / 2, mb2.y + mb2.height / 2);
+  await sleep(120);
+  const cb2 = await page.locator('.modal-wrap .close-btn').boundingBox();
+  await page.touchscreen.tap(cb2.x + cb2.width / 2, cb2.y + cb2.height / 2);
+  await sleep(200);
+  const quickClose = !(await page.isVisible('.menu-head'));
+  await page.evaluate(() => { window.__dropClicks = false; });
+  // One tap on a stacked confirm's Cancel closes only the confirm.
+  await page.touchscreen.tap(mb2.x + mb2.width / 2, mb2.y + mb2.height / 2);
+  await sleep(450);
+  await page.evaluate(() => window.__cus.dbg.openMenu('settings'));
+  await sleep(200);
+  await page.locator('[data-act="quit"]').tap();
+  await sleep(450);
+  const cancel = await page.locator('.modal-wrap.small [data-close]').last().boundingBox();
+  await page.touchscreen.tap(cancel.x + cancel.width / 2, cancel.y + cancel.height / 2);
+  await sleep(250);
+  const onlyConfirmClosed = (await page.isVisible('.menu-head')) && (await page.locator('[data-yes]').count()) === 0;
+  await page.evaluate(() => window.__cus.dbg.closeAll());
+  await sleep(150);
+  check('Touch: ✕ closes menus even if the browser drops the click; quick taps work; one tap closes one layer', closedWithoutClick && quickClose && onlyConfirmClosed, JSON.stringify({ closedWithoutClick, quickClose, onlyConfirmClosed }));
+
   // rotate to portrait and back
   await page.setViewportSize({ width: 390, height: 844 });
   await sleep(400);
