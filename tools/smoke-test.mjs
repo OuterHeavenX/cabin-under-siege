@@ -1147,8 +1147,8 @@ if (want('v5')) {
   check('Ch5: no assault in daylight', /Wait for dark/.test(dayLabel || ''), dayLabel);
   await C(() => { window.__cus.G.s.time.minute = 22 * 60; window.__cus.G.player.invuln = 0; }); await sleep(300);
   await pressE(page); await sleep(3500); await skipDialogues(page);
-  const m5 = await C(() => { const c = window.__cus; return { map: c.G.map.id, assault: !!c.G.assault, guards: c.G.enemies.filter((e) => e.guard && !e.dead).length, gate: !!c.G.map.gateRammed, dante: c.G.enemies.some((e) => e.name === 'Dante Ruggiero') }; });
-  check('Ch5: the mansion — guards on post, Ingrid rams the gate, Walt draws off two', m5.map === 'mansion' && m5.assault && m5.gate && m5.dante && m5.guards === 12, JSON.stringify(m5));
+  const m5 = await C(() => { const c = window.__cus; return { map: c.G.map.id, assault: !!c.G.assault, guards: c.G.enemies.filter((e) => e.guard && !e.dead && e.type !== 'attack_dog').length, dogsOnPost: c.G.enemies.filter((e) => e.type === 'attack_dog').every((e) => e.guard), gate: !!c.G.map.gateRammed, dante: c.G.enemies.some((e) => e.name === 'Dante Ruggiero') }; });
+  check('Ch5: the mansion — guards on post, Ingrid rams the gate, Walt draws off two', m5.map === 'mansion' && m5.assault && m5.gate && m5.dante && m5.guards === 12 && m5.dogsOnPost, JSON.stringify(m5));
   await page.screenshot({ path: OUT + 'v5-mansion.png' });
   // Guards stay on post until they see you.
   await C(() => { const c = window.__cus; c.G.player.x = 3 * 32; c.G.player.y = 40 * 32; }); await sleep(1500);
