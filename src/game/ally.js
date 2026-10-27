@@ -35,7 +35,7 @@ export function allyStartSiege() {
   G.allyState = { revived: false };
   if (!allyAvailable() || !r) return;
   r.ally = true; r.hp = ALLY_MAX_HP; r.downed = false; r.fireCd = 1.5; r.aimT = 0; r.path = null;
-  banner(G.s.chapter === 1 ? 'Ruth is coming over with Harold\'s shotgun!' : 'Ruth grabs Harold\'s shotgun. "Not on my watch."', 'good', 3.5);
+  banner(G.s.chapter === 1 ? 'Ruth is coming over with Harold\'s old shotgun! (He left her that one — you got his rifle.)' : 'Ruth grabs Harold\'s shotgun. "Not on my watch."', 'good', 3.5);
 }
 
 export function allyEndSiege() {

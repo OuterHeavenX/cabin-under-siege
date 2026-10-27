@@ -126,7 +126,7 @@ function carAction() {
     const toWork = G.map.id === ch.homeMap;
     opts.push({ label: toWork ? `Drive to ${ch.place} (20 min)` : 'Drive home (20 min)', action: () => travelFn && travelFn(toWork ? ch.workMap : ch.homeMap, 'car') });
   }
-  const canLeave = (G.s.story.done || {})[G.s.chapter] && G.s.chapter < LAST_CHAPTER && G.map.id === ch.homeMap;
+  const canLeave = ((G.s.story.done || {})[G.s.chapter] || (G.s.chapter === 1 && G.s.story.chapterComplete)) && G.s.chapter < LAST_CHAPTER && G.map.id === ch.homeMap;
   if (canLeave) opts.push({ label: 'Leave for good — start the next chapter', action: () => G.events.emit('requestMove') });
   if (!opts.length) return { label: 'Your car (everything here is within walking distance)', short: 'CAR', action: () => toast('Everything in Millbrook is within walking distance.', 'info') };
   if (opts.length === 1) return { label: opts[0].label, short: 'DRIVE', action: opts[0].action, prio: canLeave ? 3 : 0 };

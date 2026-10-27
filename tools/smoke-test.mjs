@@ -17,6 +17,8 @@ mkdirSync(OUT, { recursive: true });
 
 const results = [];
 const check = (name, ok, detail = '') => { results.push({ name, ok: !!ok, detail }); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${detail ? '  — ' + detail : ''}`); };
+// ONLY=v2,v3 npm test runs just those sections.
+const want = (name) => !process.env.ONLY || process.env.ONLY.split(',').includes(name);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const server = spawn(process.execPath, ['tools/serve.mjs', String(PORT)], { stdio: 'ignore' });
@@ -68,7 +70,7 @@ async function faceTo(page, x, y) { await ev(page, ([x, y]) => { if (window.__cu
 /* ================================================================== */
 /* Desktop run: the whole chapter                                      */
 /* ================================================================== */
-{
+if (want('desktop')) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
   const page = await ctx.newPage();
   watch(page, 'desktop');
@@ -520,7 +522,7 @@ async function faceTo(page, x, y) { await ev(page, ([x, y]) => { if (window.__cu
 /* ================================================================== */
 /* v0.2: weapons, new enemies, defenses, favors and Chapter 2          */
 /* ================================================================== */
-{
+if (want('v2')) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
   const page = await ctx.newPage();
   watch(page, 'v0.2');
@@ -653,10 +655,13 @@ async function faceTo(page, x, y) { await ev(page, ([x, y]) => { if (window.__cu
   // ---- Chapter 2 ----
   await setTime(page, 10 * 60, (await ev(page, () => window.__cus.G.s.time.day)) + 1);
   await tp(page, 24, 32.5, 'cabin'); await faceTo(page, 26, 32.5); await sleep(200);
+  if (process.env.DEBUG) console.log('car target', await ev(page, () => JSON.stringify({ t: window.__cus.G.interactTarget && window.__cus.G.interactTarget.label, en: window.__cus.G.enemies.filter((e) => !e.dead && !e.gone).map((e) => e.type), modal: window.__cus.G.modal })));
   await pressE(page); await sleep(200);
+  if (process.env.DEBUG) console.log('after E', await ev(page, () => document.querySelector('#modal-root').innerText.slice(0, 200)));
   if (await page.isVisible('[data-opt]')) { const n = await page.locator('[data-opt]').count(); for (let i = 0; i < n; i++) { const t = await page.locator('[data-opt]').nth(i).textContent(); if (t.includes('Leave')) { await page.locator('[data-opt]').nth(i).click(); break; } } }
   await sleep(150);
   await page.click('[data-yes]'); await sleep(400);
+  await skipDialogues(page, 1); await sleep(300); // Ruth's goodbye (or her offer to come — decline here; v3 tests the yes)
   await page.screenshot({ path: OUT + 'v2-chapter2-card.png' });
   await page.click('[data-go]'); await sleep(300);
   const moved = await ev(page, () => ({ ch: window.__cus.G.s.chapter, map: window.__cus.G.map.id, step: window.__cus.G.s.story.step, cam: window.__cus.G.s.inv.camera_kit, rifle: window.__cus.G.s.inv.rifle, lvl: window.__cus.G.s.stats.level }));
@@ -728,7 +733,7 @@ async function faceTo(page, x, y) { await ev(page, ([x, y]) => { if (window.__cu
   /* ---------------- v0.3: Ruth companion, Chapter 3, farm life ---------------- */
   {
     const C = (fn, a) => ev(page, fn, a);
-    await C(() => { const s = window.__cus.G.s; s.rel.ruth = 40; s.story.done = { 1: true }; s.time.minute = 11 * 60; });
+    await C(() => { const s = window.__cus.G.s; s.rel.ruth = 70; s.story.done = { 1: true }; s.time.minute = 11 * 60; });
     await C(() => window.__cus.G.events.emit('requestMove')); await sleep(200);
     await page.click('[data-yes]'); await sleep(300);
     await skipDialogues(page, 0); await sleep(300);
@@ -834,7 +839,7 @@ async function faceTo(page, x, y) { await ev(page, ([x, y]) => { if (window.__cu
 /* ================================================================== */
 /* Audio: every sound renders at a sane level; recorded files override  */
 /* ================================================================== */
-{
+if (want('audio')) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
   const page = await ctx.newPage();
   watch(page, 'audio');
@@ -871,7 +876,7 @@ async function faceTo(page, x, y) { await ev(page, ([x, y]) => { if (window.__cu
 /* ================================================================== */
 /* v0.3: difficulty, Endless Siege, graphics quality                   */
 /* ================================================================== */
-{
+if (want('v3')) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
   const page = await ctx.newPage();
   watch(page, 'endless');
@@ -919,7 +924,7 @@ async function faceTo(page, x, y) { await ev(page, ([x, y]) => { if (window.__cu
 /* ================================================================== */
 /* Mobile: iPhone landscape, multi-touch, rotation, backgrounding      */
 /* ================================================================== */
-{
+if (want('mobile')) {
   const iphone = devices['iPhone 13'] || { viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true };
   const ctx = await browser.newContext({ ...iphone, viewport: { width: 844, height: 390 }, screen: { width: 844, height: 390 } });
   const page = await ctx.newPage();

@@ -31,7 +31,8 @@ export const QUESTS = {
     found: 'A tarnished silver pocket watch, engraved "H.C. — 1971".',
     done: [
       { who: 'Ruth Calloway', text: '...Oh. Oh, Frank. You found it.' },
-      { who: 'Ruth Calloway', text: 'Harold would want you to have his rifle. It\'s been sitting in the closet since the funeral. Take it — and the shells. Don\'t argue.' },
+      { who: 'Ruth Calloway', text: 'Harold kept two guns: his deer rifle and the old pump shotgun by the back door. He\'d want you to have the rifle. It\'s been sitting in the closet since the funeral. Take it — and the shells. Don\'t argue.' },
+      { who: 'Ruth Calloway', text: 'The shotgun stays with me. A woman alone at the end of a dirt road keeps one thing by the door.' },
     ],
     reward: { money: 0, xp: 50, rel: 14, jp: ['neighbor', 8], items: { rifle: 1, rifle_ammo: 10 } },
   },
