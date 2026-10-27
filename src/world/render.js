@@ -5,6 +5,7 @@ import { TILE } from '../config.js';
 import { GR, SO } from './map.js';
 import { lowQuality } from '../game/difficulty.js';
 import { drawDecals, drawWorldWeather, drawScreenAtmosphere } from './atmosphere.js';
+import { castPoly, lightPoly, FLASH_ANGLE, FLASH_RANGE } from './shadowcast.js';
 import { hash2, dist, clamp } from '../util.js';
 import { activeLights, darkness, inFloodlight } from './lights.js';
 import { derived } from '../game/progression.js';
@@ -1363,36 +1364,63 @@ function drawLighting(ctx, dk, ox, oy, z) {
   if (!lightCanvas) { lightCanvas = document.createElement('canvas'); lctx = lightCanvas.getContext('2d'); }
   if (lightCanvas.width !== lw || lightCanvas.height !== lh) { lightCanvas.width = lw; lightCanvas.height = lh; }
   const l = lctx;
+  const lq = lowQuality();
   l.globalCompositeOperation = 'source-over';
   l.clearRect(0, 0, lw, lh);
-  l.fillStyle = `rgba(6,10,28,${0.8 * dk})`;
+  l.fillStyle = `rgba(6,10,28,${0.84 * dk})`;
   l.fillRect(0, 0, lw, lh);
   l.globalCompositeOperation = 'destination-out';
   const toS = (x, y) => [(x * z + ox) * scale, (y * z + oy) * scale];
-  const hole = (x, y, r, strength = 1) => {
+  const offscreen = (x, y, r) => { const [sx, sy] = toS(x, y); const rr = r * z * scale; return sx < -rr || sy < -rr || sx > lw + rr || sy > lh + rr; };
+  // A radial light, optionally clipped to a visibility polygon (walls cast shadows).
+  const hole = (x, y, r, strength = 1, poly = null) => {
+    if (offscreen(x, y, r)) return;
     const [sx, sy] = toS(x, y);
     const rr = r * z * scale;
-    if (sx < -rr || sy < -rr || sx > lw + rr || sy > lh + rr) return;
-    const g = l.createRadialGradient(sx, sy, rr * 0.15, sx, sy, rr);
+    l.save();
+    if (poly) { l.beginPath(); poly.forEach(([px, py], k) => { const [qx, qy] = toS(px, py); k ? l.lineTo(qx, qy) : l.moveTo(qx, qy); }); l.closePath(); l.clip(); }
+    const g = l.createRadialGradient(sx, sy, rr * 0.12, sx, sy, rr);
     g.addColorStop(0, `rgba(0,0,0,${strength})`);
+    g.addColorStop(0.55, `rgba(0,0,0,${strength * 0.75})`);
     g.addColorStop(1, 'rgba(0,0,0,0)');
     l.fillStyle = g;
     l.beginPath(); l.arc(sx, sy, rr, 0, Math.PI * 2); l.fill();
+    l.restore();
   };
   const p = G.player;
   const m = G.map;
   const inside = m.buildingAt(p.x, p.y);
   for (const li of activeLights()) {
+    const flick = li.fire ? 1 + Math.sin(G.time * 17 + li.x) * 0.06 + Math.sin(G.time * 31) * 0.04 : 1;
     if (li.building) {
       const b = m.buildings.find((bb) => bb.id === li.building);
-      if (inside === b) hole(li.x, li.y, li.r * 1.4, 1);
-      else hole(li.x, li.y, li.r * 0.6, 0.45);
-    } else hole(li.x, li.y, li.r, li.street ? 0.85 : 1);
+      if (inside === b) hole(li.x, li.y, li.r * 1.4, 1, lq ? null : lightPoly(m, { ...li, r: li.r * 1.4 }));
+      else hole(li.x, li.y, li.r * 1.6, 0.55, lq ? null : lightPoly(m, { ...li, r: li.r * 1.6 })); // spills out through the windows
+    } else hole(li.x, li.y, li.r * flick, li.street ? 0.85 : 1, lq || li.fire ? null : lightPoly(m, li));
   }
+  // Frank: a small circle of night vision and a flashlight beam that walls stop.
   const d = derived();
-  hole(p.x, p.y, d.seeRadius * 0.85, 0.9);
-  if (p.muzzle > 0) hole(p.x, p.y, 150, 1);
-  for (const e of G.enemies) if (!e.dead && e.muzzle > 0) hole(e.x, e.y, 120, 0.9);
+  hole(p.x, p.y, Math.max(70, d.seeRadius * 0.42), 0.85);
+  const range = FLASH_RANGE + (d.seeRadius - 170) * 0.8;
+  const beam = lq ? null : castPoly(m, p.x, p.y, range, p.angle - FLASH_ANGLE, p.angle + FLASH_ANGLE, 40);
+  G.flashBeam = { x: p.x, y: p.y, a: p.angle, r: range, poly: beam };
+  {
+    const [sx, sy] = toS(p.x, p.y);
+    const rr = range * z * scale;
+    l.save();
+    l.beginPath();
+    if (beam) { l.moveTo(sx, sy); beam.forEach(([px, py]) => { const [qx, qy] = toS(px, py); l.lineTo(qx, qy); }); }
+    else { l.moveTo(sx, sy); l.arc(sx, sy, rr, p.angle - FLASH_ANGLE, p.angle + FLASH_ANGLE); }
+    l.closePath(); l.clip();
+    const g = l.createRadialGradient(sx, sy, rr * 0.05, sx, sy, rr);
+    g.addColorStop(0, 'rgba(0,0,0,0.95)'); g.addColorStop(0.7, 'rgba(0,0,0,0.8)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+    l.fillStyle = g; l.fillRect(sx - rr, sy - rr, rr * 2, rr * 2);
+    l.restore();
+  }
+  // Gunfire lights up the room for a split second.
+  if (p.muzzle > 0) hole(p.x, p.y, 190, 1, lq ? null : castPoly(m, p.x, p.y, 190, 0, Math.PI * 2, 48));
+  for (const e of G.enemies) if (!e.dead && e.muzzle > 0) hole(e.x, e.y, 140, 0.9, lq ? null : castPoly(m, e.x, e.y, 140, 0, Math.PI * 2, 32));
+  for (const n of G.npcs) if (n.ally && n.muzzle > 0) hole(n.x, n.y, 150, 0.9);
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.drawImage(lightCanvas, 0, 0, lw, lh, 0, 0, w * dpr, h * dpr);
   ctx.setTransform(dpr * z, 0, 0, dpr * z, dpr * ox, dpr * oy);
@@ -1692,6 +1720,22 @@ function drawGlow(ctx, dk, inView) {
     if (b.kind !== 'window' || b.shuttered) continue;
     const x = b.cx * TILE + 16, y = b.cy * TILE + 16;
     glow(x, y, b.boarded ? 22 : 38, '255,200,120', (b.boarded ? 0.15 : 0.3) * dk);
+  }
+  // The flashlight beam: a faint warm cone with dust drifting through it.
+  const fb = G.flashBeam;
+  if (fb && fb.poly && dk > 0.4) {
+    ctx.save();
+    ctx.beginPath(); ctx.moveTo(fb.x, fb.y); fb.poly.forEach(([x, y]) => ctx.lineTo(x, y)); ctx.closePath(); ctx.clip();
+    const g = ctx.createRadialGradient(fb.x, fb.y, 10, fb.x, fb.y, fb.r);
+    g.addColorStop(0, `rgba(255,236,190,${0.16 * dk})`); g.addColorStop(1, 'rgba(255,236,190,0)');
+    ctx.fillStyle = g; ctx.fillRect(fb.x - fb.r, fb.y - fb.r, fb.r * 2, fb.r * 2);
+    ctx.fillStyle = `rgba(255,245,220,${0.35 * dk})`;
+    for (let k = 0; k < 14; k++) {
+      const u = (k * 0.618 + G.time * 0.05) % 1, v = Math.sin(k * 12.9 + G.time * 0.7) * 0.5;
+      const dd = 30 + u * fb.r * 0.85, aa = fb.a + v * FLASH_ANGLE * 0.9;
+      ctx.beginPath(); ctx.arc(fb.x + Math.cos(aa) * dd, fb.y + Math.sin(aa) * dd, 0.9, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
   }
   ctx.restore();
 }

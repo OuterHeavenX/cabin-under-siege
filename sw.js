@@ -57,6 +57,7 @@ const ASSETS = [
   "./src/world/map.js",
   "./src/world/mapgen.js",
   "./src/world/render.js",
+  "./src/world/shadowcast.js",
 ];
 
 self.addEventListener('install', (e) => {
