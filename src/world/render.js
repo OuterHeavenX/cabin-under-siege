@@ -240,10 +240,10 @@ export function buildRoofCanvas(b) {
     const tw = g.measureText(label).width;
     if (tw < w - 8) {
       g.fillStyle = 'rgba(0,0,0,0.55)';
-      g.fillRect(w / 2 - tw / 2 - 6, h - 26, tw + 12, 18);
+      g.fillRect(w / 2 - tw / 2 - 6, h / 2 - 9, tw + 12, 18);
       g.fillStyle = '#f5ecd6';
       g.textAlign = 'center'; g.textBaseline = 'middle';
-      g.fillText(label, w / 2, h - 17);
+      g.fillText(label, w / 2, h / 2);
     }
   }
   return c;
@@ -801,9 +801,16 @@ function drawScreenFx(ctx, ox, oy, z) {
     const [sx, sy] = toScreen(wx, wy);
     const m = 34;
     if (sx > m && sx < w - m && sy > 70 && sy < h - m) return false;
-    const cx = w / 2, cy = h / 2;
-    const a = Math.atan2(sy - cy, sx - cx);
-    const ex = clamp(sx, m, w - m), ey = clamp(sy, 70, h - m);
+    let ex, ey, a;
+    if (document.body.classList.contains('touch')) {
+      const [px, py] = toScreen(p.x, p.y);
+      a = Math.atan2(sy - py, sx - px);
+      const r = Math.min(120, Math.min(w, h) * 0.3);
+      ex = px + Math.cos(a) * r; ey = py + Math.sin(a) * r;
+    } else {
+      a = Math.atan2(sy - h / 2, sx - w / 2);
+      ex = clamp(sx, m, w - m); ey = clamp(sy, 70, h - m);
+    }
     ctx.save(); ctx.translate(ex, ey); ctx.rotate(a);
     ctx.fillStyle = color; ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.moveTo(14, 0); ctx.lineTo(-8, -10); ctx.lineTo(-4, 0); ctx.lineTo(-8, 10); ctx.closePath(); ctx.fill(); ctx.stroke();
