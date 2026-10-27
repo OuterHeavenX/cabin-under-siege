@@ -412,7 +412,7 @@ export function sfx(name, opts = {}) {
       break;
     case 'dig': nz(out, t, { type: 'brown', dur: 0.14, peak: 0.6, lp: 600 }); for (let i = 0; i < 4; i++) nz(out, t + 0.05 + i * 0.02, { dur: 0.015, peak: 0.12, bp: 1800, q: 2 }); break;
     case 'splash': nz(out, t, { dur: 0.25, a: 0.01, peak: 0.5, bp: 1200, q: 0.7 }); nz(out, t + 0.03, { type: 'pink', dur: 0.5, peak: 0.25, lp: 2500, lpTo: 600 }); break;
-    case 'drip': modal(out, t, [[1800 + Math.random() * 1400, 1]], { q: 25, peak: 0.08 * (opts.vol ?? 1), dur: 0.05 }); break;
+    case 'drip': modal(out, t, [[1800 + Math.random() * 1400, 1]], { q: 25, peak: 0.3 * (opts.vol ?? 1), dur: 0.05 }); nz(out, t, { dur: 0.012, peak: 0.06 * (opts.vol ?? 1), hp: 2500 }); break;
     case 'thunder':
       nz(out, t, { type: 'brown', dur: 3.5, a: 0.08, peak: 1.3 * (opts.vol ?? 1), lp: 900, lpTo: 80 });
       for (let i = 0; i < 4; i++) nz(out, t + 0.1 + i * (0.3 + Math.random() * 0.4), { type: 'brown', dur: 0.9, a: 0.02, peak: 0.7 * (opts.vol ?? 1), lp: 500, lpTo: 120 });
@@ -824,7 +824,7 @@ export function updateAudio(dt) {
   fireBed.g.gain.setTargetAtTime(0.25 * fireLevel, now, 0.3);
   rainHiss.g.gain.setTargetAtTime(off ? 0 : rainLevel * (rainIndoor ? 0.03 : 0.16), now, 1.5);
   rainDrum.g.gain.setTargetAtTime(off ? 0 : rainLevel * (rainIndoor ? 0.22 : 0.08), now, 1.5);
-  if (rainLevel > 0.1 && !off && Math.random() < rainLevel * 0.25) sfx('drip', { vol: 0.4 + Math.random() * 0.5 });
+  if (rainLevel > 0.1 && !off && Math.random() < rainLevel * 0.25) sfx('drip', { vol: 0.1 + Math.random() * 0.15 });
   thunderT -= dt * rainLevel;
   if (thunderT <= 0) { thunderT = 25 + Math.random() * 50; if (rainLevel > 0.6 && !off) sfx('thunder', { vol: rainIndoor ? 0.6 : 1 }); }
   if (fireLevel > 0.02 && Math.random() < fireLevel * 0.5) sfx('fire', { vol: fireLevel, verb: 0.5 });
