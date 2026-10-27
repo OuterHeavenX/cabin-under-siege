@@ -6,7 +6,7 @@ import { buildCabinMap, buildTownMap, buildMillbrookMap, buildFarmMap } from './
 import { chapter, homeMapId, workMapId, atHome, LAST_CHAPTER } from './game/chapters.js';
 import { QUESTS, questWaypoint } from './game/quests.js';
 import { newHome } from './game/state.js';
-import { showChapterStart } from './ui/menus.js';
+import { showChapterStart, openDifficultyPicker, openEndlessPicker } from './ui/menus.js';
 import { buildGroundCanvas, buildRoofCanvas, render } from './world/render.js';
 import { initInput, consume, endFrame, resetInput, setTouchMode, input, suppressGhostClick } from './input.js';
 import { initAudio, setVolumes, updateAudio, setMusic, setAmbient, suspendAudio, resumeAudio, sfx, setListener, setFireLevel, audioDebug, renderOffline, musicBar, birdCall } from './audio.js';
@@ -35,6 +35,8 @@ import { addPickup, damageEnemy } from './game/combat.js';
 import { updateFire, startFire } from './game/fire.js';
 import { spawnEnemy, openingStrength } from './game/enemies.js';
 import { initActivityEvents } from './game/activities.js';
+import { lowQuality } from './game/difficulty.js';
+import { startEndless, updateEndless, unlockEndlessFor } from './game/endless.js';
 import { startSiege, makeRaidPlan, scheduleSiege, addSign, storyPlan } from './game/siege.js';
 import { buySkill } from './game/progression.js';
 import { damagePlayer } from './game/player.js';
@@ -59,7 +61,7 @@ function resize() {
   const vv = window.visualViewport;
   const w = Math.round(vv ? vv.width : window.innerWidth);
   const h = Math.round(vv ? vv.height : window.innerHeight);
-  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const dpr = lowQuality() ? 1 : Math.min(2, window.devicePixelRatio || 1);
   G.view = { w, h, dpr };
   canvas.width = Math.round(w * dpr);
   canvas.height = Math.round(h * dpr);
@@ -169,7 +171,8 @@ function updateMood(force) {
 
 /* ---------------- game update ---------------- */
 function update(dt) {
-  updateTime(dt);
+  if (G.endless) updateEndless(dt);
+  else updateTime(dt);
   updateThreatClock();
   if (G.sleeping) { G.clockText = `Day ${G.s.time.day} · ${fmtClock(G.s.time.minute)}`; return; }
   updatePlayer(dt);
@@ -185,8 +188,7 @@ function update(dt) {
   updateEffects(dt);
   updateNpcs(dt);
   updateJobs(dt);
-  updateStory(dt);
-  checkDiscovery();
+  if (!G.endless) { updateStory(dt); checkDiscovery(); }
 
   G.hitFlash = Math.max(0, G.hitFlash - dt);
   if (G.hurtDir) G.hurtDir.t -= dt;
@@ -266,9 +268,27 @@ function computeHudInfo(dt) {
 }
 
 /* ---------------- frame ---------------- */
+// Automatic quality: if the game runs well under 45 fps for a while, drop to low detail.
+const perf = { t: 0, frames: 0, slow: 0 };
+function watchPerf(raw) {
+  if (!G.running || G.paused || G.modal || G.autoLow || (G.settings.quality && G.settings.quality !== 'auto') || document.hidden) return;
+  perf.t += raw; perf.frames++;
+  if (perf.t < 2) return;
+  const fps = perf.frames / perf.t;
+  perf.t = 0; perf.frames = 0;
+  perf.slow = fps < 45 ? perf.slow + 1 : 0;
+  if (perf.slow >= 3) {
+    G.autoLow = true;
+    resize();
+    toast('Switched to low graphics for smoother play (Settings → Graphics).', 'info', 4);
+  }
+}
+
 function frame(ts) {
-  const dt = Math.min(0.05, Math.max(0, (ts - last) / 1000));
+  const raw = Math.max(0, (ts - last) / 1000);
+  const dt = Math.min(0.05, raw);
   last = ts;
+  if (raw < 0.5) watchPerf(raw);
   G.time += dt;
   try {
     if (G.running) {
@@ -338,6 +358,7 @@ function initEvents() {
   initEnemyEvents();
   initSiegeEvents();
   initActivityEvents();
+  G.events.on('qualityChanged', () => { G.autoLow = false; perf.slow = 0; resize(); });
   initTimeEvents();
   initHomeEvents();
   initStoryEvents();
@@ -410,6 +431,7 @@ function moveToChapter(n) {
   for (let i = 0; i < (old.traps || []).length; i++) addItem('bear_trap', 1, true);
   s.pastHomes[old.id || 'cabin'] = { leftOnDay: s.time.day };
   s.chapter = n;
+  unlockEndlessFor(n);
   s.home = newHome(n === 3 ? 'farm' : n === 2 ? 'house' : 'cabin');
   s.job = null;
   s.story.step = chapter().firstStep;
@@ -443,7 +465,7 @@ function startGame(isNew) {
   G.player = createPlayer();
   const d = derived();
   G.player.hp = Math.min(G.player.hp, d.maxHp);
-  loadMap(G.s.player.map, { x: G.s.player.x, y: G.s.player.y });
+  loadMap(G.s.player.map, G.endless ? G.maps[G.s.player.map].points.start : { x: G.s.player.x, y: G.s.player.y });
   document.getElementById('title').classList.add('hidden');
   document.getElementById('hud').classList.remove('hidden');
   G.running = true;
@@ -452,7 +474,7 @@ function startGame(isNew) {
   if (isNew) {
     saveGame('new', { force: true });
     newGameIntro();
-  } else {
+  } else if (!G.endless) {
     banner(`Welcome back. Day ${G.s.time.day}, ${fmtClock(G.s.time.minute)}.`, 'info', 3);
   }
   // If a siege time already passed while saved, give a moment before it triggers.
@@ -460,8 +482,11 @@ function startGame(isNew) {
   if (s && absOf(s) <= absNow()) { s.minute = (G.s.time.minute + 3) % 1440; s.day = G.s.time.day + (G.s.time.minute + 3 >= 1440 ? 1 : 0); }
 }
 
-function newGame() {
+function newGame(difficulty) {
+  if (!difficulty) { openDifficultyPicker((d) => newGame(d)); return; }
+  G.endless = null;
   G.s = newSave();
+  G.s.difficulty = difficulty;
   startGame(true);
 }
 
@@ -469,12 +494,16 @@ function continueGame() {
   const raw = readSaveRaw();
   const err = validateSave(raw);
   if (err) { toast(`Save could not be loaded: ${err}`, 'warn', 4); return; }
+  G.endless = null;
   G.s = migrate(raw);
+  unlockEndlessFor(G.s.chapter);
   startGame(false);
 }
 
 function quitToTitle() {
   G.running = false;
+  G.endless = null;
+  G.siegeActive = false; G.siege = null; G.enemies = [];
   G.player = null;
   closeAllModals();
   setTouchMode(input.touchMode);
@@ -490,7 +519,7 @@ function showTitle() {
   const ok = raw && !validateSave(raw);
   const cont = document.getElementById('t-continue');
   cont.classList.toggle('hidden', !ok);
-  if (ok) cont.innerHTML = `Continue <span class="sub">Day ${raw.time.day} · Level ${raw.stats.level}${raw.story && raw.story.chapterComplete ? ' · Ch.1 complete' : ''}</span>`;
+  if (ok) cont.innerHTML = `Continue <span class="sub">Day ${raw.time.day} · Level ${raw.stats.level} · Chapter ${raw.chapter || 1}</span>`;
 }
 
 function initTitle() {
@@ -503,6 +532,7 @@ function initTitle() {
       confirmBox(`Starting a new game will overwrite your existing save${desc}. This can't be undone. (Tip: export your save from Settings first.)`, 'Start over', () => { deleteSave(); newGame(); }, 'Keep my save');
     } else newGame();
   }));
+  document.getElementById('t-endless').addEventListener('click', go(() => openEndlessPicker((site) => startEndless(site, startGame))));
   document.getElementById('t-import').addEventListener('click', go(() => pickImport(() => showTitle())));
   document.getElementById('t-help').addEventListener('click', go(() => openHelp()));
   // Open on pointerdown: an iOS "click" can be dropped if the finger drifts or another finger is down.
@@ -525,7 +555,7 @@ function boot() {
   initDialogue();
   initReliableTaps();
   initEvents();
-  setMenuHooks({ quitToTitle, reloadFromSave: () => continueGame() });
+  setMenuHooks({ quitToTitle, reloadFromSave: () => continueGame(), restartEndless: (site) => startEndless(site, startGame) });
   initTitle();
   showTitle();
   if (G.settings.touchControls === 'on' || (G.settings.touchControls === 'auto' && matchMedia('(pointer: coarse)').matches)) setTouchMode(true);

@@ -1,3 +1,5 @@
 node_modules/
 test-output/
+dist/
+.wrangler/
 .DS_Store

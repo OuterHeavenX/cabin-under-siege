@@ -6,13 +6,15 @@ import { spawnEnemy, pickSpawnTypes } from './enemies.js';
 import { addXP, addJP, derived, relOf } from './progression.js';
 import { addItem, count } from './inventory.js';
 import { banner, toast, centerMessage, clearBanners } from '../ui/hud.js';
-import { showDefeat, showSiegeSummary } from '../ui/menus.js';
+import { showDefeat, showSiegeSummary, showEndlessResult } from '../ui/menus.js';
+import { endlessWaveCleared, endlessDefeat } from './endless.js';
 import { sfx, setMusic } from '../audio.js';
 import { saveGame } from './save.js';
 import { fmtClock } from '../util.js';
 import { chapter, homeMap, homeMapId, atHome } from './chapters.js';
 import { NPCS } from '../data/npcs.js';
 import { allyStartSiege, allyEndSiege } from './ally.js';
+import { diff } from './difficulty.js';
 
 export const absNow = () => G.s.time.day * 1440 + G.s.time.minute;
 export const absOf = (s) => s.day * 1440 + s.minute;
@@ -104,6 +106,7 @@ export function siegeTonight() {
 
 /* ---------------- daily processing (at dawn) ---------------- */
 export function dailyProcess() {
+  if (G.endless) return;
   const w = G.s.world;
   const day = G.s.time.day;
   if (w.lastDayProcessed === day) return;
@@ -117,7 +120,7 @@ export function dailyProcess() {
   if (free) {
     w.threat = clamp(w.threat + 3, 0, 100);
     if (!w.siege && day >= w.quietUntilDay) {
-      const p = 0.12 + w.threat / 160;
+      const p = (0.12 + w.threat / 160) * diff().raid;
       if (chance(p)) {
         const size = 2 + Math.floor(w.threat / 25) + Math.floor(G.s.stats.level / 3) + randInt(0, 1);
         scheduleSiege(makeRaidPlan(size), day, 21 * 60 + randInt(0, 240));
@@ -163,6 +166,7 @@ export function refreshSignProps() {
 
 /* ---------------- runtime ---------------- */
 export function updateThreatClock() {
+  if (G.endless) return;
   const w = G.s.world;
   const s = w.siege;
   // Sign props appear/disappear with the clock.
@@ -307,6 +311,7 @@ function endSiege() {
   const kind = sg.plan.kind;
   G.siegeActive = false;
   allyEndSiege();
+  if (kind === 'endless') { G.siege = null; addXP(20 + sg.total * 4, null); endlessWaveCleared(sg); return; }
   w.threat = clamp(w.threat - (kind === 'ambush' ? 8 : 20), 0, 100);
   w.lastSiegeDay = G.s.time.day;
   w.quietUntilDay = G.s.time.day + (kind === 'ambush' ? 1 : 2);
@@ -328,6 +333,7 @@ function endSiege() {
 
 /** Repeatable small ambush when arriving home at night with high Heat. */
 export function maybeAmbushOnArrival() {
+  if (G.endless) return;
   const w = G.s.world;
   if (!G.s.story.flags.firstSiegeDone || G.siegeActive || w.siege) return;
   if (!isNight() || w.threat < 30 || G.s.time.day < w.quietUntilDay) return;
@@ -340,9 +346,17 @@ export function maybeAmbushOnArrival() {
 export function handleDefeat() {
   if (G.transition && G.transition.kind === 'defeat') return;
   G.transition = { kind: 'defeat', phase: 'hold', fade: 0.65, t: 0 };
+  if (G.endless) {
+    const res = endlessDefeat();
+    allyEndSiege();
+    sfx('defeat');
+    setMusic('night');
+    showEndlessResult(res);
+    return;
+  }
   const w = G.s.world;
   const story = G.siege && G.siege.plan.kind === 'story';
-  const lost = Math.min(150, Math.floor(G.s.money * 0.2));
+  const lost = Math.min(150, Math.floor(G.s.money * diff().loss));
   sfx('defeat');
   setMusic('night');
   const onCabin = atHome();
@@ -355,6 +369,10 @@ export function handleDefeat() {
     ruth: [
       'Ruth heard the shots and came with her late husband\'s shotgun. The attackers scattered. She dragged you to her farmhouse and patched you up through the night.',
       'Ruth heard the shots and called the county sheriff. By the time the sirens came, the attackers were gone. She found you on the porch and took you in.',
+    ],
+    ingrid: [
+      'Ingrid came over the pasture on her tractor with the high beams on and a deer rifle across her knees. They ran. She hauled you into her kitchen and stitched you up herself.',
+      'Ingrid called the county — not Mott, the state patrol. Lights on the road scattered them. She found you by the gate and took you in.',
     ],
     marcus: [
       'Marcus came across the street with a revolver you\'ve never seen and a calm you didn\'t expect. Two shots in the air and they ran. He carried you to his couch.',

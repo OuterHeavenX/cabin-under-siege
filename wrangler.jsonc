@@ -1,0 +1,10 @@
+// Cloudflare Workers (static assets only — no Worker script).
+// Build with `npm run build`, deploy with `npx wrangler deploy`.
+{
+  "name": "cabin-under-siege",
+  "compatibility_date": "2026-10-13",
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "404-page"
+  }
+}

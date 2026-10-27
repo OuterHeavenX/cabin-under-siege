@@ -2,7 +2,9 @@
 // repair minigame, siege summary, defeat and chapter-end screens.
 import { G, hasSkill } from '../game/state.js';
 import { ITEMS, SHOPS, RECIPES, COOK_RECIPES } from '../data/items.js';
-import { cook, canCook, mods } from '../game/activities.js';
+import { cook, canCook } from '../game/activities.js';
+import { DIFFICULTY } from '../game/difficulty.js';
+import { endlessData, ENDLESS_SITES } from '../game/endless.js';
 import { ATTRIBUTES, MAX_ATTR, PATHS, SKILLS, xpForLevel } from '../data/skills.js';
 import { NPCS, relLevel } from '../data/npcs.js';
 import { HOMES } from '../data/homes.js';
@@ -189,6 +191,10 @@ function handleMenuClick(e, entry) {
 
 function handleSettingsInput(e, commit) {
   const t = e.target;
+  if (t.dataset.diff != null && G.s) {
+    if (commit && G.s.difficulty !== t.value) { G.s.difficulty = t.value; toast(`Difficulty: ${DIFFICULTY[t.value].name}. ${DIFFICULTY[t.value].desc}`, 'info', 4); }
+    return;
+  }
   if (!t.dataset.set) return;
   const k = t.dataset.set;
   if (t.type === 'range') G.settings[k] = Number(t.value) / 100;
@@ -200,6 +206,7 @@ function handleSettingsInput(e, commit) {
     else if (t.value === 'off') setTouchMode(false);
     else setTouchMode(matchMedia('(pointer: coarse)').matches);
   }
+  if (k === 'quality') G.events.emit('qualityChanged');
   saveSettings();
   if (commit && t.type === 'range') sfx('blip');
 }
@@ -350,6 +357,8 @@ function settingsTab() {
     <label>${chk('showDamageNumbers')} Show damage numbers</label>
     <label>Screen shake ${sel('screenShake', [['full', 'Full'], ['reduced', 'Reduced'], ['off', 'Off']])}</label>
     <label>Touch controls ${sel('touchControls', [['auto', 'Automatic'], ['on', 'Always on'], ['off', 'Off']])}</label>
+    <label>Graphics ${sel('quality', [['auto', `Automatic${G.autoLow ? ' (low)' : ''}`], ['high', 'High'], ['low', 'Low (older phones)']])}</label>
+    ${G.s ? `<label>Difficulty <select data-diff>${Object.entries(DIFFICULTY).map(([k, d]) => `<option value="${k}" ${(G.s.difficulty || 'normal') === k ? 'selected' : ''}>${d.name}</option>`).join('')}</select></label>` : ''}
   </div>
   <h3>Save</h3>
   <p class="small">The game autosaves when you sleep, travel, finish jobs, install defenses and survive attacks. Last save: <b>${saved}</b>.</p>
@@ -561,6 +570,48 @@ export function openCraft() {
     if (b) { craft(b.dataset.craft); render(); }
   });
   render();
+}
+
+/* ---------------- endless siege ---------------- */
+export function openEndlessPicker(onPick) {
+  const d = endlessData();
+  const rows = ENDLESS_SITES.map((s) => {
+    const open = d.unlocked.includes(s.id);
+    const b = d.best[s.id];
+    return `<button class="btn big diff-btn ${open ? '' : 'locked'}" data-site="${s.id}" ${open ? '' : 'disabled'}><b>${open ? '' : '🔒 '}${escapeHtml(s.name)} <span class="muted">· ${escapeHtml(s.place)}</span></b><span>${open ? (b ? `Best: ${b.waves} wave${b.waves === 1 ? '' : 's'} survived · ${b.kills} attackers down` : 'No record yet.') : `Reach Chapter ${s.chapter} in the story to unlock.`}</span></button>`;
+  }).join('');
+  const el = openModal('endless', `<h2>⚔ Endless Siege</h2><p class="small">Wave after wave, all night long. Supplies arrive between waves. Your story save is never touched.</p><div class="diff-list">${rows}</div>
+    <button class="btn" data-close>Back</button>`, { cls: 'small' });
+  el.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-site]');
+    if (!b || b.disabled) return;
+    closeModal();
+    onPick(b.dataset.site);
+  });
+}
+
+export function showEndlessResult(res) {
+  setTimeout(() => {
+    const el = openModal('endless-result', `<h2 class="defeat-title">The night won — this time</h2>
+      <div class="summary"><div><b>${res.survived}</b><span>waves survived</span></div><div><b>${res.kills}</b><span>attackers down</span></div></div>
+      <p class="small">${res.record ? '<span class="hl">New personal best at ' + escapeHtml(res.site.name) + '!</span>' : `Best at ${escapeHtml(res.site.name)}: ${res.best.waves} waves · ${res.best.kills} down.`}</p>
+      <div class="row-btns"><button class="btn big primary" data-again>Try again</button><button class="btn big" data-title>Title screen</button></div>`, { closable: false, cls: 'small defeat' });
+    el.querySelector('[data-again]').addEventListener('click', () => { closeModal(); G.transition = null; hooks.restartEndless && hooks.restartEndless(res.site.id); });
+    el.querySelector('[data-title]').addEventListener('click', () => { closeModal(); G.transition = null; hooks.quitToTitle && hooks.quitToTitle(); });
+  }, 1200);
+}
+
+/* ---------------- difficulty picker (new game) ---------------- */
+export function openDifficultyPicker(onPick) {
+  const el = openModal('difficulty', `<h2>Choose your difficulty</h2>
+    <div class="diff-list">${Object.entries(DIFFICULTY).map(([k, d]) => `<button class="btn big diff-btn ${k === 'normal' ? 'primary' : ''}" data-diff-pick="${k}"><b>${d.name}</b><span>${escapeHtml(d.desc)}</span></button>`).join('')}</div>
+    <p class="small muted">You can change this any time in Settings.</p>`, { cls: 'small' });
+  el.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-diff-pick]');
+    if (!b) return;
+    closeModal();
+    onPick(b.dataset.diffPick);
+  });
 }
 
 /* ---------------- stove ---------------- */

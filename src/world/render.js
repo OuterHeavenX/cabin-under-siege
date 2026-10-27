@@ -3,6 +3,7 @@
 import { G, isNight } from '../game/state.js';
 import { TILE } from '../config.js';
 import { GR, SO } from './map.js';
+import { lowQuality } from '../game/difficulty.js';
 import { hash2, dist, clamp } from '../util.js';
 import { activeLights, darkness, inFloodlight } from './lights.js';
 import { derived } from '../game/progression.js';
@@ -728,10 +729,11 @@ export function render(ctx) {
   ctx.globalAlpha = 1;
 
   // Canopies (sprites with a gentle wind sway; fade if something is underneath)
+  const lowQ = lowQuality();
   for (const tr of canopies) {
     const x = tr.cx * TILE + 16, y = tr.cy * TILE + 16;
     const hsh = hash2(tr.cx, tr.cy);
-    let sh = Math.sin(t * 1.3 + hsh * 6) * 1.2;
+    let sh = lowQ ? 0 : Math.sin(t * 1.3 + hsh * 6) * 1.2;
     if (tr.shake > 0) { sh += Math.sin(t * 60) * 2.5; tr.shake -= 1 / 60; }
     let under = dist(x, y, p.x, p.y) < 26;
     if (!under) for (const e of G.enemies) if (!e.dead && dist(x, y, e.x, e.y) < 24) { under = true; break; }
@@ -756,7 +758,7 @@ export function render(ctx) {
     ctx.globalAlpha = 1;
   }
 
-  drawSmoke(ctx, m, t);
+  if (!lowQuality()) drawSmoke(ctx, m, t);
 
   // Doors and windows (on walls, above roofs so they're always readable)
   for (const b of m.blockers.values()) {
@@ -770,8 +772,9 @@ export function render(ctx) {
   // Lighting
   const dk = darkness();
   if (dk > 0.02) drawLighting(ctx, dk, ox, oy, z);
-  if (dk > 0.15) drawGlow(ctx, dk, inView);
-  if (dk > 0.6) drawFireflies(ctx, t, dk, vx0, vy0, vx1, vy1);
+  const lq = lowQuality();
+  if (dk > 0.15 && !lq) drawGlow(ctx, dk, inView);
+  if (dk > 0.6 && !lq) drawFireflies(ctx, t, dk, vx0, vy0, vx1, vy1);
   // Morning gold / dusk amber grading
   const min = G.s.time.minute;
   if (min > 5.5 * 60 && min < 8.5 * 60) {
@@ -1126,9 +1129,11 @@ function drawScreenFx(ctx, ox, oy, z) {
     return true;
   };
   // Soft vignette
-  const vg = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.45, w / 2, h / 2, Math.max(w, h) * 0.75);
-  vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,0.28)');
-  ctx.fillStyle = vg; ctx.fillRect(0, 0, w, h);
+  if (!lowQuality()) {
+    const vg = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.45, w / 2, h / 2, Math.max(w, h) * 0.75);
+    vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,0.28)');
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, w, h);
+  }
   // Off-screen threats (known attackers)
   for (const e of G.enemies) {
     if (e.dead || e.gone) continue;

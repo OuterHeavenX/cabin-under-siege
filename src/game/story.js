@@ -48,6 +48,7 @@ export const STEPS = {
   ch3_meet_ingrid: { obj: 'Meet your neighbor at the dairy across the pasture.' },
   ch3_find_work: { obj: 'Find Tess Albright at the Grain Co-op in Kettle Crossing.' },
   ch3_job: { obj: 'Take and complete a job from the co-op board.' },
+  endless: { obj: 'Endless Siege: survive as many waves as you can.' },
   ch3_deputy: { obj: 'A sheriff\'s deputy is waiting at your farmhouse (daytime).' },
   ch3_fortify: { obj: 'Repair the farm gate (both halves) and install two defenses.' },
   ch3_siege: { obj: 'Vinnie Vescari is coming. Be home by 10 PM — and hold the farm.' },

@@ -28,6 +28,7 @@ export function readSaveRaw() {
 /** Can the player save right now? (Only when safe.) */
 export function canSaveNow() {
   if (!G.s || !G.player) return 'No game in progress.';
+  if (G.endless) return 'Endless Siege runs aren\'t saved — your story save is untouched.';
   if (G.siegeActive) return 'You can\'t save during an attack.';
   if (G.enemies.some((e) => !e.dead && !e.gone)) return 'You can\'t save with attackers nearby.';
   if (G.player.dead || G.transition) return 'You can\'t save right now.';
@@ -39,7 +40,7 @@ export function canSaveNow() {
  * reload never drops you into the middle of a fight.
  */
 export function saveGame(reason = 'auto', { force = false, quiet = true } = {}) {
-  if (!G.s) return false;
+  if (!G.s || G.endless) return false;
   const unsafe = canSaveNow();
   if (unsafe && !force) {
     if (!quiet) toast(unsafe, 'warn');

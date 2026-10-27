@@ -12,11 +12,13 @@ import { sfx } from '../audio.js';
 import { throwMolotov } from './fire.js';
 import { homeInterior, homeMapId } from './chapters.js';
 import { checkTrap } from './home.js';
+import { diff } from './difficulty.js';
 
 let nextId = 1;
 
 export function spawnEnemy(type, x, y, opts = {}) {
   const def = ENEMY_TYPES[type];
+  if (!opts.noDiff) opts = { ...opts, hpMult: (opts.hpMult || 1) * diff().hp };
   const e = {
     id: nextId++, type, def, x, y, radius: def.radius,
     hp: Math.round(def.hp * (opts.hpMult || 1)), maxHp: Math.round(def.hp * (opts.hpMult || 1)),
@@ -161,7 +163,7 @@ function doFire(e, p) {
     sfx('swing', { x: e.x, y: e.y });
     const d = dist(e.x, e.y, p.x, p.y);
     if (d < def.range + p.radius + e.radius + 10 && Math.abs(angleDiff(e.aimAngle, angleTo(e.x, e.y, p.x, p.y))) < 1.2) {
-      if (damagePlayer(def.damage, e.x, e.y, 'melee')) {
+      if (damagePlayer(def.damage * diff().dmg, e.x, e.y, 'melee')) {
         p.x += Math.cos(e.aimAngle) * 6; p.y += Math.sin(e.aimAngle) * 6;
       }
     }
@@ -173,7 +175,7 @@ function doFire(e, p) {
   } else if (def.weapon === 'eshotgun') {
     for (let i = 0; i < def.pellets; i++) {
       const a = e.aimAngle + ((i / (def.pellets - 1)) - 0.5) * 2 * def.spread;
-      spawnBullet({ x: e.x + Math.cos(a) * 16, y: e.y + Math.sin(a) * 16, angle: a, speed: 620, dmg: def.damage, owner: 'enemy', range: def.range + 40, source: e });
+      spawnBullet({ x: e.x + Math.cos(a) * 16, y: e.y + Math.sin(a) * 16, angle: a, speed: 620, dmg: def.damage * diff().dmg, owner: 'enemy', range: def.range + 40, source: e });
     }
     sfx('shotgun', { x: e.x, y: e.y });
     e.spotted = Math.max(e.spotted, 1.6);
@@ -183,7 +185,7 @@ function doFire(e, p) {
     if (inFloodlight(e.x, e.y)) spread *= 1.5; // glare
     if (G.player.dodgeT > 0) spread *= 1.3;
     const a = e.aimAngle + (Math.random() - 0.5) * 2 * spread;
-    spawnBullet({ x: e.x + Math.cos(a) * 14, y: e.y + Math.sin(a) * 14, angle: a, speed: def.weapon === 'srifle' ? 1150 : def.weapon === 'rifle' ? 820 : 640, dmg: def.damage, owner: 'enemy', range: def.range + 80, source: e });
+    spawnBullet({ x: e.x + Math.cos(a) * 14, y: e.y + Math.sin(a) * 14, angle: a, speed: def.weapon === 'srifle' ? 1150 : def.weapon === 'rifle' ? 820 : 640, dmg: def.damage * diff().dmg, owner: 'enemy', range: def.range + 80, source: e });
     sfx(def.weapon === 'rifle' || def.weapon === 'srifle' ? 'rifle' : 'enemyShot', { x: e.x, y: e.y });
     e.spotted = Math.max(e.spotted, 1.6); // muzzle flash reveals the shooter
     e.muzzle = 0.07;
@@ -260,7 +262,7 @@ function updateTruck(e, dt, p, m) {
   const pd = dist(e.x, e.y, p.x, p.y);
   if (pd < e.radius + p.radius + 2 && e.ramCd <= 0 && e.spd > 50 && !p.dead) {
     e.ramCd = 1.2;
-    if (damagePlayer(28, e.x, e.y, 'melee')) { p.x += Math.cos(e.angle) * 26; p.y += Math.sin(e.angle) * 26; m.pushOut(p, p.radius, 'player'); shake(6); }
+    if (damagePlayer(28 * diff().dmg, e.x, e.y, 'melee')) { p.x += Math.cos(e.angle) * 26; p.y += Math.sin(e.angle) * 26; m.pushOut(p, p.radius, 'player'); shake(6); }
   }
 }
 
@@ -278,7 +280,7 @@ function truckRam(e, t, m) {
   types.forEach((ty, i) => {
     const a = e.angle + Math.PI / 2 * (i % 2 ? 1 : -1);
     const x = e.x + Math.cos(a) * 34 - Math.cos(e.angle) * 10, y = e.y + Math.sin(a) * 34 - Math.sin(e.angle) * 10;
-    const q = spawnEnemy(ty, x, y, { hpMult: e.hpMultApplied });
+    const q = spawnEnemy(ty, x, y, { hpMult: e.hpMultApplied, noDiff: true });
     m.pushOut(q, q.radius, 'enemy');
     q.alerted = true;
     if (G.siege) G.siege.spawned++;

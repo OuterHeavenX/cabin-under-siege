@@ -7,10 +7,12 @@ You are Frank Lowe — formerly Frankie Corsetti of the Vescari crime family —
 to build an honest life in a cabin outside the small town of Pine Hollow. By day you
 work, meet people and fix up the place. Some nights, the family comes for you.
 
-This build (v0.2) contains **two complete, playable chapters**:
+This build (v0.3) contains **three complete, playable chapters** plus an arcade mode:
 
 1. **The Cabin** — Pine Hollow, a remote cabin and a small town.
 2. **Larch Street** — Millbrook, Ohio: a house on a quiet street, a neighbor with secrets, and Sal Benedetto.
+3. **The Wisconsin Farm** — Kettle Crossing: a whole farmstead, a crooked deputy, and Vinnie Vescari's ledger.
+4. **Endless Siege** — wave after wave at any home you've reached in the story.
 
 ### Audio
 
@@ -34,6 +36,32 @@ than using simple beeps:
 `audio/manifest.json` — each listed sound replaces the generated one (music files
 loop per mood). See [`audio/README.md`](audio/README.md) for the sound names and
 recommended free sources.
+
+### What's new in v0.3
+
+- **Ruth comes with you.** Once Ruth trusts you (♥3), she runs over with Harold's
+  shotgun to fight beside you in attacks at the cabin, and **once per attack pulls you
+  back up** instead of a defeat. When you leave Pine Hollow she asks to come along —
+  say yes and she follows you to every new home, with her own lines, a favor and a spot by the window.
+- **Chapter 3: The Wisconsin Farm** — Ingrid the dairy farmer, Bo at the feed store, Tess
+  at the grain co-op. A deputy visit you can **cooperate with, refuse, or bribe** (each
+  changes the final attack), a farm gate to repair, and a siege with a **ram truck** that
+  smashes the gate and drops off attackers, plus long-range **snipers**.
+- **Choices carry forward**: threatening the man in the grey coat, how you answer Marcus,
+  and the deputy all change later attacks or conversations.
+- **Farm life**: fishing minigame at any pond (Fishing Rod), pickable garden rows that
+  regrow, cooking at the stove (Fish Fry, Garden Stew, Hearty Supper → *Well Fed*),
+  new **Harvest** and **Fish Order** jobs.
+- **Weapon mods**: rifle scope, shotgun choke, pistol suppressor (suppressed shots don't
+  alert distant attackers or raise Heat).
+- **Reactive Heat**: gunfire where people live raises the family's Heat; quiet nights and
+  honest work lower it. The Home tab shows why it moved.
+- **NPCs remember** favors you did, your choices and last night's shooting.
+- **Difficulty**: Story / Normal / Hard, chosen at New Game, changeable in Settings.
+- **Endless Siege** from the title screen: escalating waves, resupply between waves,
+  personal bests per home. Homes unlock as you reach them in the story; it never touches your save.
+- **Graphics setting**: Automatic / High / Low. Automatic switches to low detail
+  (1× resolution, no glow/fireflies/smoke/sway/vignette) if a phone can't hold 45 fps.
 
 ### What's new in v0.2
 
@@ -227,7 +255,8 @@ Safari**. Please verify on a real device:
 
 ## Deployment
 
-It's a static site: deploy the repository root as-is (no build command).
+It's a static site with no bundler. `npm run build` just copies the playable files
+(`index.html`, `css/`, `src/`, `icons/`, `audio/`, `sw.js`, manifest, `_headers`) into `dist/`.
 
 ### GitHub
 
@@ -238,14 +267,23 @@ git push -u origin main
 
 GitHub Pages also works: *Settings → Pages → Deploy from a branch → `main` / root*.
 
-### Cloudflare Pages
+### Cloudflare (Workers static assets — recommended)
 
-1. Cloudflare dashboard → **Workers & Pages → Create → Pages → Connect to Git**, pick the repo.
-2. Build settings: **Framework preset: None**, **Build command: (leave empty)**,
-   **Build output directory: `/`**.
-3. Deploy. Every push to the production branch redeploys automatically.
+`wrangler.jsonc` is included (static assets only, no Worker script). Pick one:
 
-Or from the CLI: `npx wrangler pages deploy . --project-name cabin-under-siege`.
+**A. Connect the repo in the dashboard (no secrets needed)**
+1. Cloudflare dashboard → **Workers & Pages → Create → Import a repository**, pick this repo.
+2. **Build command:** `node tools/build.mjs` · **Deploy command:** `npx wrangler deploy`.
+3. Add the build variable `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1` (the test browser isn't needed to deploy).
+4. Deploy. Every push to the production branch redeploys; you get a `*.workers.dev` URL.
+
+**B. GitHub Actions** — `.github/workflows/deploy.yml` deploys on every push to `main`
+once you add repository secrets `CLOUDFLARE_API_TOKEN` (template *Edit Cloudflare Workers*)
+and `CLOUDFLARE_ACCOUNT_ID`. Without them the workflow just skips the deploy.
+
+**C. From your computer:** `npx wrangler login` then `npm run deploy`.
+
+Cloudflare Pages still works too: build command `node tools/build.mjs`, output directory `dist`.
 
 The included `_headers` file sets `no-cache` on `index.html` and `sw.js` so updates are
 picked up promptly. When you ship a new version, bump `CACHE` in `sw.js` (and
@@ -300,6 +338,8 @@ tools/                        Dev server, smoke test, icon generator
 
 - Not yet tested on a physical iPhone/iPad (see checklist above).
 - Three firearms plus melee; no weapon pickups from enemies.
+- Ruth's combat AI is simple: she holds a post by a window and fires at what she can see.
+- Endless Siege uses fixed starting gear and level.
 - Enemy AI uses grid A* and simple cover search — good for small sieges, not tuned for
   large crowds. Attackers occasionally bunch at doorways.
 - NPC schedules are simple (a few locations per day); townsfolk don't react to danger.
@@ -312,12 +352,9 @@ tools/                        Dev server, smoke test, icon generator
 
 ## Future ideas (not playable yet)
 
-- **Chapter 3+ homes**: the Wisconsin farm, a wealthy estate, and the final mansion
-  confrontation — each with new maps, defenses, characters and story (listed in the
+- **Chapters 4–5**: a wealthy estate and the final mansion confrontation (listed in the
   Journal as *planned*).
-- Weapon upgrades and attachments beyond the extended magazine.
-- More enemy types (vehicle assaults, dog handler, sniper).
-- More jobs (fishing, farm work, mechanic), deeper NPC routines and side quests.
+- More enemy types (dog handler, demolition crew), a mechanic job, deeper NPC routines.
 - More upgrades: cameras, a safe room, traps, reinforced shutters, a guard dog.
 - Weather, seasons, hunger/fatigue as optional survival settings.
 - Controller support, rebinding, and a colorblind palette option.

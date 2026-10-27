@@ -75,6 +75,9 @@ async function faceTo(page, x, y) { await ev(page, ([x, y]) => { if (window.__cu
   await page.goto(URL);
   await page.waitForSelector('#t-new');
   await page.click('#t-new');
+  await sleep(250);
+  check('New game asks for a difficulty (Story / Normal / Hard)', await page.isVisible('[data-diff-pick="story"]') && await page.isVisible('[data-diff-pick="hard"]'));
+  await page.click('[data-diff-pick="normal"]');
   await sleep(500);
   check('1. New game starts with intro + controls tip', await page.isVisible('#dialogue') && await page.isVisible('#hud'));
   await skipDialogues(page);
@@ -525,6 +528,7 @@ async function faceTo(page, x, y) { await ev(page, ([x, y]) => { if (window.__cu
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await page.click('#t-new');
+  await sleep(200); if (await page.isVisible('[data-diff-pick]')) await page.click('[data-diff-pick="normal"]');
   await sleep(300);
   await skipDialogues(page);
   // Skip the early story so nothing interrupts the checks.
@@ -720,6 +724,110 @@ async function faceTo(page, x, y) { await ev(page, ([x, y]) => { if (window.__cu
     return s.chapter === 1 && s.weaponMods.extMag && s.home.upgrades.alarm && s.story.step === 'leave_town' && s.player.mags.pistol === 6 && s.home.openings.win_e && window.__cus.G.map.id === 'cabin';
   });
   check('v2 Version-1 saves migrate and load', v1ok);
+
+  /* ---------------- v0.3: Ruth companion, Chapter 3, farm life ---------------- */
+  {
+    const C = (fn, a) => ev(page, fn, a);
+    await C(() => { const s = window.__cus.G.s; s.rel.ruth = 40; s.story.done = { 1: true }; s.time.minute = 11 * 60; });
+    await C(() => window.__cus.G.events.emit('requestMove')); await sleep(200);
+    await page.click('[data-yes]'); await sleep(300);
+    await skipDialogues(page, 0); await sleep(300);
+    await page.click('[data-go]').catch(() => {}); await sleep(300); await skipDialogues(page);
+    const r2 = await C(() => ({ joined: window.__cus.G.s.companion.ruth.joined, ch: window.__cus.G.s.chapter, ruthHere: window.__cus.G.npcs.some((n) => n.id === 'ruth') }));
+    check('v3 Ruth (trust ♥3) offers to come along and follows you to Millbrook', r2.joined && r2.ch === 2 && r2.ruthHere, JSON.stringify(r2));
+    await C(() => { const s = window.__cus.G.s; s.story.done[2] = true; });
+    await C(() => window.__cus.G.events.emit('requestMove')); await sleep(200);
+    await page.click('[data-yes]'); await sleep(300); await skipDialogues(page); await sleep(300);
+    await page.click('[data-go]').catch(() => {}); await sleep(300); await skipDialogues(page);
+    const r3 = await C(() => ({ ch: window.__cus.G.s.chapter, map: window.__cus.G.map.id, step: window.__cus.G.s.story.step, ruth: window.__cus.G.npcs.some((n) => n.id === 'ruth') }));
+    check('v3 Move to Chapter 3 (the Wisconsin farm) with Ruth', r3.ch === 3 && r3.map === 'farm' && r3.step === 'ch3_arrive' && r3.ruth, JSON.stringify(r3));
+    await page.screenshot({ path: OUT + 'v3-farm.png' });
+    await tp(page, 20.5, 25); await sleep(500); await skipDialogues(page);
+    check('Ch3: enter farmhouse -> meet Ingrid', (await step(page)) === 'ch3_meet_ingrid');
+    await C(() => { window.__cus.G.s.story.step = 'ch3_deputy'; window.__cus.G.s.time.minute = 12 * 60; }); await sleep(250);
+    await C(() => { const c = window.__cus; const d = c.G.npcs.find((n) => n.id === 'deputy'); c.G.player.x = d.x; c.G.player.y = d.y + 26; c.dbg.input.mouse.inside = false; c.G.player.angle = -Math.PI / 2; }); await sleep(200);
+    await pressE(page); await sleep(200); await skipDialogues(page, 1);
+    const dep = await C(() => ({ choice: window.__cus.G.s.choices.deputy, step: window.__cus.G.s.story.step }));
+    check('Ch3: deputy visit is a choice with consequences', dep.choice === 'refuse' && dep.step === 'ch3_fortify', JSON.stringify(dep));
+    await C(() => { const c = window.__cus; const o = c.G.s.home.openings; for (const k of ['gate_l', 'gate_r']) o[k].hp = o[k].baseHp; c.G.s.story.flags.fortified = 1; c.G.events.emit('defenseInstalled'); }); await sleep(300); await skipDialogues(page);
+    const plan = await C(() => window.__cus.G.s.world.siege && window.__cus.G.s.world.siege.plan.waves.map((w) => w.types));
+    check('Ch3: gate + defenses -> Vinnie\'s siege (truck, snipers; refusing the deputy adds a sniper)', plan && plan[0].includes('truck') && plan[1].filter((t) => t === 'sniper').length === 2, JSON.stringify(plan));
+    await C(() => { const c = window.__cus; c.G.player.x = 20.5 * 32; c.G.player.y = 25 * 32; c.G.player.invuln = 99999; c.G.s.time.minute = 21 * 60 + 58; });
+    for (let i = 0; i < 80 && !(await C(() => window.__cus.G.siegeActive)); i++) await sleep(150);
+    let rammed = false, ruthFought = false;
+    for (let i = 0; i < 70 && !rammed; i++) {
+      await sleep(300);
+      const st = await C(() => { const c = window.__cus; const o = c.G.s.home.openings; const r = c.G.npcs.find((n) => n.id === 'ruth'); return { gate: o.gate_l.hp + o.gate_r.hp, ruth: !!(r && r.ally) }; });
+      rammed = st.gate < 440; ruthFought = ruthFought || st.ruth;
+    }
+    check('Ch3: the ram truck smashes the farm gate and unloads attackers', rammed);
+    check('v3 Ruth fights beside you during the attack', ruthFought);
+    await C(() => { window.__cus.G.siege.t = 60; });
+    for (let i = 0; i < 120; i++) { await sleep(200); await C(() => { const c = window.__cus; for (const e of c.G.enemies) if (!e.dead && !e.gone) c.dbg.damageEnemy(e, 9999, 0, 'bullet'); }); if (!(await C(() => window.__cus.G.siegeActive))) break; }
+    await sleep(2200); await page.locator('#modal-root button', { hasText: 'Continue' }).click().catch(() => {}); await sleep(4300); await skipDialogues(page);
+    await C(() => { const pk = window.__cus.G.pickups.find((p) => p.kind === 'ledger'); if (pk) { window.__cus.G.player.x = pk.x; window.__cus.G.player.y = pk.y; } }); await sleep(900); await skipDialogues(page);
+    check('Ch3: Vinnie\'s ledger found and read', (await step(page)) === 'ch3_ingrid_truth');
+    await C(() => { const c = window.__cus; c.G.s.time.minute = 12 * 60; }); await sleep(300);
+    await C(() => { const c = window.__cus; const d = c.G.npcs.find((n) => n.id === 'ingrid'); c.G.player.x = d.x; c.G.player.y = d.y + 26; c.G.player.angle = -Math.PI / 2; }); await sleep(300);
+    await pressE(page); await sleep(300); await skipDialogues(page); await sleep(600);
+    check('Ch3: chapter 3 ending screen', await C(() => window.__cus.G.s.story.done[3] === true) && (await page.textContent('#modal-root')).includes('WISCONSIN'));
+    await page.screenshot({ path: OUT + 'v3-chapter3-end.png' });
+    await C(() => window.__cus.dbg.closeAll());
+    // Farm life
+    await C(() => { window.__cus.G.s.time.minute = 9 * 60; });
+    await tp(page, 10, 35); await sleep(200);
+    for (let i = 0; i < 4; i++) { await pressE(page); await C(() => { window.__cus.G.player.x += 32; }); await sleep(80); }
+    check('v3 Pick vegetables from the farm garden', await C(() => (window.__cus.G.s.inv.vegetables || 0) >= 4));
+    const pond = await C(() => { const m = window.__cus.G.map; for (let cy = 1; cy < m.h; cy++) for (let cx = 0; cx < m.w; cx++) if (m.getSolid(cx, cy) === 3 && m.getSolid(cx, cy - 1) === 0) return [cx + 0.5, cy - 0.5]; });
+    await C(() => window.__cus.dbg.addItem('fishing_rod', 1, true));
+    await tp(page, pond[0], pond[1]); await C(() => { window.__cus.G.player.angle = Math.PI / 2; }); await sleep(200);
+    const fish0 = await C(() => window.__cus.G.s.inv.fish || 0);
+    await pressE(page); await sleep(200);
+    for (let i = 0; i < 100; i++) { await sleep(60); if ((await page.textContent('.fg-msg')).startsWith('BITE')) break; }
+    await page.keyboard.press('KeyE'); await sleep(80);
+    for (let i = 0; i < 500 && await page.isVisible('.fg-water'); i++) {
+      const inZone = await C(() => { const z = document.querySelector('.fg-bar .rg-zone'), n = document.querySelector('.fg-bar .rg-needle'); if (!z || !n) return false; const l = parseFloat(z.style.left), w = parseFloat(z.style.width), p = parseFloat(n.style.left); return p > l + 1 && p < l + w - 1; });
+      if (inZone) { await page.keyboard.press('KeyE'); await sleep(60); } else await sleep(20);
+    }
+    check('v3 Fishing minigame lands a fish', (await C(() => window.__cus.G.s.inv.fish || 0)) > fish0);
+    await C(() => { const d = window.__cus.dbg; d.addItem('fish', 2, true); d.addItem('vegetables', 2, true); d.addItem('sandwich', 1, true); });
+    await tp(page, 24, 23.3); await C(() => { window.__cus.G.player.angle = -Math.PI / 2; }); await sleep(200);
+    await pressE(page); await sleep(250);
+    await page.click('[data-cook="hearty_meal"]'); await sleep(150);
+    await C(() => window.__cus.dbg.closeAll());
+    const hp0 = await C(() => window.__cus.dbg.derived().maxHp);
+    await C(() => { window.__cus.G.player.hp = 40; });
+    await page.keyboard.press('KeyI'); await sleep(200);
+    await page.click('[data-act="use"][data-id="hearty_meal"]'); await sleep(150);
+    check('v3 Cook at the stove; Hearty Supper makes you Well Fed (+max HP)', (await C(() => window.__cus.dbg.derived().maxHp)) > hp0);
+    await C(() => window.__cus.dbg.closeAll());
+    await C(() => window.__cus.dbg.addItem('suppressor', 1, true));
+    await page.keyboard.press('KeyI'); await sleep(200);
+    await page.click('[data-act="install"][data-id="suppressor"]'); await sleep(150);
+    await C(() => window.__cus.dbg.closeAll());
+    await C(() => { window.__cus.G.s.world.threat = 30; window.__cus.G.s.daily.c = {}; });
+    await tp(page, 60, 20); await sleep(150);
+    await page.mouse.move(900, 300); await page.mouse.down(); await sleep(60); await page.mouse.up(); await sleep(250);
+    const quiet = await C(() => window.__cus.G.s.world.threat);
+    await C(() => { window.__cus.G.s.weaponMods.suppressor = false; window.__cus.G.player.fireCd = 0; });
+    await page.mouse.down(); await sleep(60); await page.mouse.up(); await sleep(250);
+    const loud = await C(() => window.__cus.G.s.world.threat);
+    check('v3 Suppressor installs; loud gunfire near neighbors raises Heat, suppressed shots don\'t', quiet === 30 && loud > 30, `${quiet} -> ${loud}`);
+    await C(() => { window.__cus.G.s.weaponMods.suppressor = true; });
+    const jb = await C(() => { const p = window.__cus.G.map.props.find((p) => p.id === 'jobboard'); return [p.x / 32, p.y / 32]; });
+    await tp(page, jb[0], jb[1] + 0.9); await C(() => { window.__cus.G.player.angle = -Math.PI / 2; }); await sleep(200);
+    await pressE(page); await sleep(250);
+    const offers = await C(() => [...document.querySelectorAll('[data-accept]')].map((b) => b.dataset.accept));
+    check('v3 Farm job board offers harvest and fish orders', offers.includes('harvest') && offers.includes('fishing'), offers.join(','));
+    await C(() => window.__cus.dbg.closeAll());
+    await C(() => { window.__cus.G.s.rel.ingrid = 20; window.__cus.G.s.time.minute = 12 * 60; }); await sleep(200);
+    await talk('ingrid');
+    const fb = await page.isVisible('[data-npc="favor"]');
+    if (fb) { await page.click('[data-npc="favor"]'); await sleep(150); await skipDialogues(page, 0); }
+    check('v3 Chapter 3 neighbors offer favors (Ingrid\'s runaway calf)', fb && (await C(() => (window.__cus.G.s.quests.ingrid_calf || {}).state)) === 'active');
+    await C(() => window.__cus.dbg.closeAll());
+    await C(() => window.__cus.saveGame('t3', { force: true }));
+  }
   await ctx.close();
 }
 
@@ -742,6 +850,7 @@ async function faceTo(page, x, y) { await ev(page, ([x, y]) => { if (window.__cu
   await page.evaluate(() => localStorage.clear());
   await page.reload();
   await page.click('#t-new');
+  await sleep(200); if (await page.isVisible('[data-diff-pick]')) await page.click('[data-diff-pick="normal"]');
   await sleep(1200);
   const names = ['shot', 'shotgun', 'rifleShot', 'enemyShot', 'rifle', 'reload', 'shell', 'swap', 'hit', 'hurt', 'thud', 'ricochet', 'impact', 'glass', 'wood', 'chop', 'treefall', 'door', 'doorBreak', 'crash', 'explode', 'dig', 'splash', 'suppressed', 'hammer', 'trap', 'molotov', 'step', 'dodge', 'pickup', 'coin', 'heal', 'eat', 'car', 'phone', 'alarm', 'warning', 'ui', 'chime', 'jobDone', 'levelup', 'victory', 'defeat'];
   const lv = await page.evaluate(async (names) => {
@@ -760,6 +869,54 @@ async function faceTo(page, x, y) { await ev(page, ([x, y]) => { if (window.__cu
 }
 
 /* ================================================================== */
+/* v0.3: difficulty, Endless Siege, graphics quality                   */
+/* ================================================================== */
+{
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  const page = await ctx.newPage();
+  watch(page, 'endless');
+  await page.goto(URL);
+  await page.waitForSelector('#t-new');
+  await page.click('#t-new'); await sleep(250);
+  await page.click('[data-diff-pick="hard"]'); await sleep(500); await skipDialogues(page);
+  const hardHp = await ev(page, () => { const e = window.__cus.dbg.spawnEnemy('gunman', 100, 100); e.gone = true; return e.maxHp; });
+  check('v3 Hard difficulty: tougher attackers', (await ev(page, () => window.__cus.G.s.difficulty)) === 'hard' && hardHp > 85, `hp ${hardHp}`);
+  await ev(page, () => window.__cus.saveGame('t', { force: true }));
+  const before = await ev(page, () => localStorage.getItem('cabinUnderSiege.save'));
+  await ev(page, () => window.__cus.quitToTitle()); await sleep(300);
+  await page.click('#t-endless'); await sleep(300);
+  const sites = await ev(page, () => [...document.querySelectorAll('[data-site]')].map((b) => b.dataset.site + (b.disabled ? '-locked' : '')));
+  check('v3 Endless Siege: cabin open, later homes locked until reached in the story', sites.join(',') === 'cabin,house-locked,farm-locked', sites.join(','));
+  await page.click('[data-site="cabin"]'); await sleep(500);
+  await ev(page, () => { window.__cus.G.endless.breakT = 0.3; window.__cus.G.player.invuln = 99999; });
+  for (let w = 0; w < 2; w++) {
+    for (let i = 0; i < 60 && !(await ev(page, () => window.__cus.G.siegeActive)); i++) await sleep(150);
+    await ev(page, () => { window.__cus.G.siege.t = 60; });
+    for (let i = 0; i < 80; i++) { await sleep(200); await ev(page, () => { const c = window.__cus; for (const e of c.G.enemies) if (!e.dead && !e.gone) c.dbg.damageEnemy(e, 9999, 0, 'bullet'); }); if (!(await ev(page, () => window.__cus.G.siegeActive))) break; }
+    await ev(page, () => { window.__cus.G.endless.breakT = 0.3; });
+  }
+  const en = await ev(page, () => ({ wave: window.__cus.G.endless.wave, kills: window.__cus.G.endless.kills }));
+  check('v3 Endless Siege: waves escalate and resupply between waves', en.wave >= 2 && en.kills >= 7, JSON.stringify(en));
+  await page.screenshot({ path: OUT + 'v3-endless.png' });
+  for (let i = 0; i < 60 && !(await ev(page, () => window.__cus.G.siegeActive)); i++) await sleep(150);
+  await ev(page, () => { const p = window.__cus.G.player; p.invuln = 0; window.__cus.dbg.damagePlayer(9999, p.x + 10, p.y, 'melee'); });
+  await sleep(2400);
+  const res = await page.textContent('#modal-root');
+  check('v3 Endless Siege: defeat shows waves survived and records a personal best', res.includes('waves survived') && res.includes('personal best'));
+  await page.click('[data-title]'); await sleep(300);
+  check('v3 Endless Siege never touches the story save', (await ev(page, () => localStorage.getItem('cabinUnderSiege.save'))) === before);
+  // Graphics quality
+  await page.click('#t-continue'); await sleep(500);
+  await skipDialogues(page);
+  await ev(page, () => { window.__cus.dbg.closeAll(); window.__cus.dbg.openMenu('settings'); }); await sleep(250);
+  await page.selectOption('[data-set="quality"]', 'low'); await sleep(300);
+  const low = await ev(page, () => ({ dpr: window.__cus.G.view.dpr, q: window.__cus.G.settings.quality }));
+  await page.selectOption('[data-set="quality"]', 'auto'); await sleep(200);
+  check('v3 Low graphics setting for older phones', low.q === 'low' && low.dpr === 1, JSON.stringify(low));
+  await ctx.close();
+}
+
+/* ================================================================== */
 /* Mobile: iPhone landscape, multi-touch, rotation, backgrounding      */
 /* ================================================================== */
 {
@@ -772,6 +929,8 @@ async function faceTo(page, x, y) { await ev(page, ([x, y]) => { if (window.__cu
   await page.tap('#t-new');
   await sleep(300);
   if (await page.isVisible('[data-yes]')) await page.tap('[data-yes]');
+  await sleep(300);
+  if (await page.isVisible('[data-diff-pick]')) { await page.tap('[data-diff-pick="normal"]'); await sleep(400); }
   await sleep(400);
   await skipDialogues(page);
   check('14a. Touch controls visible on phone', await page.isVisible('#btn-fire') && await page.isVisible('#aim-zone'));

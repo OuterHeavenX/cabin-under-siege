@@ -358,3 +358,6 @@ body.touch .prompt kbd { display: none; }
 /* Larger invisible tap area around the ✕ close button */
 .close-btn::after { content: ""; position: absolute; inset: -10px -10px -12px -12px; }
 .item-desc .bad { color: #ff8a80; }
+.diff-list { display: grid; gap: 10px; margin: 12px 0; }
+.diff-btn { display: flex; flex-direction: column; align-items: flex-start; text-align: left; gap: 4px; white-space: normal; }
+.diff-btn span { font-size: 12px; font-weight: 400; opacity: 0.85; }

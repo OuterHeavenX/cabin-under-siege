@@ -27,4 +27,5 @@ export const DEFAULT_SETTINGS = {
   fireWhileAiming: true,
   autoSprint: true,
   showDamageNumbers: true,
+  quality: 'auto', // 'auto' | 'high' | 'low'
 };

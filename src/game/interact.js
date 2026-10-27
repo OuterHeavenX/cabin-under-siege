@@ -76,6 +76,7 @@ function candidates() {
 
 function propAction(pr) {
   const s = G.s;
+  if (G.endless && ['bed', 'car', 'exit', 'jobboard', 'phone', 'mailbox', 'phonepole'].includes(pr.kind)) return null;
   switch (pr.kind) {
     case 'bed': return { label: 'Use bed (sleep / save)', short: 'REST', action: () => openBedMenu() };
     case 'workbench': return { label: 'Use workbench (craft)', short: 'CRAFT', action: () => openCraft() };

@@ -46,3 +46,6 @@ file's license — CC0 needs no credit; CC-BY needs credit in this README).
 | `pickup`, `coin`, `heal`, `eat` | Picking up items / cash, bandaging, eating |
 | `car`, `phone`, `alarm`, `warning` | Driving, phone ringing, tripwire alarm, attack warning |
 | `ui`, `blip`, `chime`, `jobDone`, `levelup`, `victory`, `defeat`, `miss` | Interface and reward sounds |
+| `suppressed` | You fire the handgun with the suppressor fitted |
+| `crash`, `explode` | The ram truck hits a gate / is destroyed |
+| `dig`, `splash` | Picking vegetables, casting / a fish biting |
