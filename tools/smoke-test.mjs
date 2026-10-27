@@ -868,15 +868,16 @@ if (want('v2')) {
     for (let i = 0; i < 4; i++) { await pressE(page); await C(() => { window.__cus.G.player.x += 32; }); await sleep(80); }
     check('v3 Pick vegetables from the farm garden', await C(() => (window.__cus.G.s.inv.vegetables || 0) >= 4));
     const pond = await C(() => { const m = window.__cus.G.map; for (let cy = 1; cy < m.h; cy++) for (let cx = 0; cx < m.w; cx++) if (m.getSolid(cx, cy) === 3 && m.getSolid(cx, cy - 1) === 0) return [cx + 0.5, cy - 0.5]; });
-    await C(() => window.__cus.dbg.addItem('fishing_rod', 1, true));
+    await C(() => { const c = window.__cus; c.dbg.addItem('fishing_rod', 1, true); c.G.s.world.siege = null; c.G.enemies = []; c.G.siegeActive = false; });
     await tp(page, pond[0], pond[1]); await C(() => { window.__cus.G.player.angle = Math.PI / 2; }); await sleep(200);
     const fish0 = await C(() => window.__cus.G.s.inv.fish || 0);
     await pressE(page); await sleep(200);
     for (let i = 0; i < 100; i++) { await sleep(60); if ((await page.textContent('.fg-msg')).startsWith('BITE')) break; }
     await page.keyboard.press('KeyE'); await sleep(80);
-    for (let i = 0; i < 500 && await page.isVisible('.fg-water'); i++) {
-      const inZone = await C(() => { const z = document.querySelector('.fg-bar .rg-zone'), n = document.querySelector('.fg-bar .rg-needle'); if (!z || !n) return false; const l = parseFloat(z.style.left), w = parseFloat(z.style.width), p = parseFloat(n.style.left); return p > l + 1 && p < l + w - 1; });
-      if (inZone) { await page.keyboard.press('KeyE'); await sleep(60); } else await sleep(20);
+    for (let i = 0; i < 1500 && await page.isVisible('.fg-water'); i++) {
+      // The fish can get away (three misses) and the line is recast: strike again on the next bite.
+      const st = await C(() => { const m = document.querySelector('.fg-msg'); if (m && m.textContent.startsWith('BITE')) return 'bite'; const bar = document.querySelector('.fg-bar'); if (!bar || bar.classList.contains('hidden')) return 'wait'; const z = bar.querySelector('.rg-zone'), n = bar.querySelector('.rg-needle'); const l = parseFloat(z.style.left), w = parseFloat(z.style.width), p = parseFloat(n.style.left); return p > l + 1 && p < l + w - 1 ? 'zone' : 'reel'; });
+      if (st === 'bite' || st === 'zone') { await page.keyboard.press('KeyE'); await sleep(60); } else await sleep(20);
     }
     check('v3 Fishing minigame lands a fish', (await C(() => window.__cus.G.s.inv.fish || 0)) > fish0);
     await C(() => { const d = window.__cus.dbg; d.addItem('fish', 2, true); d.addItem('vegetables', 2, true); d.addItem('sandwich', 1, true); });
