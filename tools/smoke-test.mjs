@@ -952,7 +952,7 @@ if (want('audio')) {
   const dB = (v) => 20 * Math.log10(v + 1e-9);
   const bad = Object.entries(lv).filter(([, v]) => !isFinite(v.peak) || dB(v.peak) < -40 || v.peak > 1.0);
   check('Audio: every sound and music theme renders (none silent, none clipping)', bad.length === 0, bad.map(([k, v]) => `${k} ${dB(v.peak).toFixed(1)}dB`).join(', '));
-  check('Audio: gunfire is the loudest effect', ['shot', 'shotgun', 'rifleShot'].every((k) => dB(lv[k].peak) > dB(lv.step.peak) + 15 && dB(lv[k].peak) > dB(lv.ui.peak) + 8));
+  check('Audio: gunfire is the loudest effect', ['shot', 'shotgun', 'rifleShot'].every((k) => dB(lv[k].peak) > dB(lv.step.peak) + 15 && dB(lv[k].peak) > dB(lv.ui.peak) + 8), ['shot', 'shotgun', 'rifleShot', 'step', 'ui'].map((k) => `${k} ${dB(lv[k].peak).toFixed(1)}`).join(', '));
   const dbgA = await ev(page, () => window.__cus.dbg.audioDebug());
   check('Audio: recorded file in audio/manifest.json replaces the generated sound', dbgA && dbgA.samples === 1, JSON.stringify(dbgA));
   await ctx.close();

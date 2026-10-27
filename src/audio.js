@@ -451,7 +451,7 @@ export function sfx(name, opts = {}) {
     case 'warning': // cinematic low swell + distant engine
       strings(out, t, [40, 47], 2.4, 0.18); carSound(out, t + 0.2, 0.35); break;
     // UI and reward stings: musical, using the guitar / piano instruments.
-    case 'ui': pianoNote(out, t, 84, 0.08, 0.6); break;
+    case 'ui': pianoNote(out, t, 84, 0.055, 0.6); break;
     case 'blip': pianoNote(out, t, 88, 0.08, 0.5); break;
     case 'chime': [72, 76, 79].forEach((m, i) => pianoNote(out, t + i * 0.09, m, 0.1, 1.4)); break;
     case 'jobDone': [67, 71, 74, 79].forEach((m, i) => guitarNote(out, t + i * 0.08, m, 0.11)); break;
