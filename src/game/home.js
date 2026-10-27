@@ -34,9 +34,9 @@ export function initHomeEvents() {
     sfx('wood');
     toast('Your cover was destroyed!', 'warn', 2);
   });
-  G.events.on('door_broken', (d) => { if (!d.rec.npc) { sfx('doorBreak'); toast(`${d.label} has been broken down!`, 'danger', 3); } });
+  G.events.on('door_broken', (d) => { if (!d.rec.npc) { sfx('doorBreak', { x: d.cx * 32 + 16, y: d.cy * 32 + 16 }); toast(`${d.label} has been broken down!`, 'danger', 3); } });
   G.events.on('boards_broken', (w) => { if (!w.rec.npc) toast(`Boards on the ${w.label} are gone!`, 'danger', 2.5); });
-  G.events.on('glass_break', (w) => { sfx('glass', { vol: 0.8 }); });
+  G.events.on('glass_break', (w) => { sfx('glass', { x: w.cx * 32 + 16, y: w.cy * 32 + 16 }); });
 }
 
 /** Repair needs for a door/window: {cost, label} or null if nothing to fix. */

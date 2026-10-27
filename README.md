@@ -12,6 +12,29 @@ This build (v0.2) contains **two complete, playable chapters**:
 1. **The Cabin** — Pine Hollow, a remote cabin and a small town.
 2. **Larch Street** — Millbrook, Ohio: a house on a quiet street, a neighbor with secrets, and Sal Benedetto.
 
+### Audio
+
+Sound is generated in the browser, but modelled on how real sounds are made rather
+than using simple beeps:
+
+- **Gunfire** is layered: supersonic crack, powder blast, low thump, rolling tail, plus
+  the mechanism (pistol slide, shotgun pump, rifle bolt).
+- **Impacts** use modal resonators (metal clicks, wood knocks, glass shatter with
+  dozens of ringing fragments, a creaking door hinge, an old phone's double bell).
+- **Footsteps** change with the ground: grass, dirt, gravel, wood floors, pavement.
+- **Space**: every world sound is placed in stereo and muffled with distance, and goes
+  through generated reverbs: an open outdoor space, or a small room when you're inside.
+- **Ambience**: gusting wind, rustling leaves, several bird calls by day, layered
+  crickets and owls at night, distant traffic in town, crackling fire near flames.
+- **Music** is played on generated instruments: a plucked-string (Karplus-Strong)
+  fingerpicked guitar and upright bass by day, an additive piano with soft strings at
+  night, and acoustic-style drums, bass and low strings during attacks.
+
+**Real recordings:** put licensed audio files in `audio/` and list them in
+`audio/manifest.json` — each listed sound replaces the generated one (music files
+loop per mood). See [`audio/README.md`](audio/README.md) for the sound names and
+recommended free sources.
+
 ### What's new in v0.2
 
 - **Weapons**: pump shotgun (7-pellet spread, shell-by-shell reload you can interrupt) and hunting rifle (long range, punches through the first attacker), with their own ammo. Switch with 1/2/3, Tab, the mouse wheel or the touch **SWAP** button.
@@ -47,8 +70,9 @@ directly from disk (`file://`) won't work because browsers block ES modules ther
 - **Vanilla JavaScript + Canvas 2D**, no framework. A custom ~5k-line engine gives exact
   control over multi-touch, lighting and performance on iPhone, keeps the download tiny,
   and means there is nothing to build — the repo *is* the deployable site.
-- **All art is procedural** (drawn in code); **all audio is synthesized** with Web Audio.
-  No third-party or unlicensed assets.
+- **All art is procedural** (drawn in code). **Audio is physically modelled** with Web
+  Audio (see *Audio* below), and any sound can be replaced by a real recording by
+  dropping a file into `audio/`. No third-party or unlicensed assets ship with the game.
 - **Offline**: a service worker caches the game after the first visit (HTTPS only).
   The game also works as a home-screen web app (manifest included).
 
@@ -279,7 +303,7 @@ tools/                        Dev server, smoke test, icon generator
 - Enemy AI uses grid A* and simple cover search — good for small sieges, not tuned for
   large crowds. Attackers occasionally bunch at doorways.
 - NPC schedules are simple (a few locations per day); townsfolk don't react to danger.
-- Music is synthesized in the browser (no recorded instruments).
+- Audio is generated in the browser; for studio-quality sound, add recordings to `audio/` (see above).
 - The phone call, warnings and story are text only (no voice).
 - Save data lives in this browser's `localStorage`; clearing site data deletes it — use
   Export to back it up.

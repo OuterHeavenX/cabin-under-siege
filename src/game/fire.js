@@ -10,12 +10,12 @@ import { sfx } from '../audio.js';
 export function throwMolotov(from, tx, ty) {
   const d = dist(from.x, from.y, tx, ty);
   G.lobs.push({ sx: from.x, sy: from.y, tx, ty, t: 0, dur: 0.45 + d / 600 });
-  sfx('swing');
+  sfx('swing', { x: from.x, y: from.y });
 }
 
 export function startFire(x, y, r = 38, life = 6.5) {
   G.fires.push({ x, y, r, life, max: life, tick: 0 });
-  sfx('molotov');
+  sfx('molotov', { x, y });
   spawnParticles(x, y, '#ffb347', 14, 160, 0.5, 3);
 }
 
@@ -44,7 +44,6 @@ export function updateFire(dt) {
       else if (b.kind === 'window') b.damage(7);
       else if (b.kind === 'cover') b.damage(10);
     }
-    if (Math.random() < 0.35 && dist(p.x, p.y, f.x, f.y) < 400) sfx('fire', { vol: 1 - dist(p.x, p.y, f.x, f.y) / 400 });
   }
   G.fires = G.fires.filter((f) => f.life > 0);
 }

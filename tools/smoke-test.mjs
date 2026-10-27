@@ -724,6 +724,42 @@ async function faceTo(page, x, y) { await ev(page, ([x, y]) => { if (window.__cu
 }
 
 /* ================================================================== */
+/* Audio: every sound renders at a sane level; recorded files override  */
+/* ================================================================== */
+{
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  const page = await ctx.newPage();
+  watch(page, 'audio');
+  // Serve a tiny test recording through a routed manifest (repo files untouched).
+  const sr = 22050, n = Math.floor(sr / 4);
+  const wav = Buffer.alloc(44 + n * 2);
+  wav.write('RIFF', 0); wav.writeUInt32LE(36 + n * 2, 4); wav.write('WAVEfmt ', 8); wav.writeUInt32LE(16, 16); wav.writeUInt16LE(1, 20); wav.writeUInt16LE(1, 22);
+  wav.writeUInt32LE(sr, 24); wav.writeUInt32LE(sr * 2, 28); wav.writeUInt16LE(2, 32); wav.writeUInt16LE(16, 34); wav.write('data', 36); wav.writeUInt32LE(n * 2, 40);
+  for (let i = 0; i < n; i++) wav.writeInt16LE(Math.round(Math.sin(i / 8) * 9000 * (1 - i / n)), 44 + i * 2);
+  await page.route('**/audio/manifest.json', (r) => r.fulfill({ contentType: 'application/json', body: JSON.stringify({ sfx: { shot: ['test-shot.wav'] }, music: {} }) }));
+  await page.route('**/audio/test-shot.wav', (r) => r.fulfill({ contentType: 'audio/wav', body: wav }));
+  await page.goto(URL);
+  await page.evaluate(() => localStorage.clear());
+  await page.reload();
+  await page.click('#t-new');
+  await sleep(1200);
+  const names = ['shot', 'shotgun', 'rifleShot', 'enemyShot', 'rifle', 'reload', 'shell', 'swap', 'hit', 'hurt', 'thud', 'ricochet', 'impact', 'glass', 'wood', 'chop', 'treefall', 'door', 'doorBreak', 'hammer', 'trap', 'molotov', 'step', 'dodge', 'pickup', 'coin', 'heal', 'eat', 'car', 'phone', 'alarm', 'warning', 'ui', 'chime', 'jobDone', 'levelup', 'victory', 'defeat'];
+  const lv = await page.evaluate(async (names) => {
+    const d = window.__cus.dbg; const out = {};
+    for (const n of names) out[n] = await d.renderOffline(() => d.sfx(n), 2);
+    for (const m of ['day', 'night', 'tense']) out['music:' + m] = await d.renderOffline(() => d.musicBar(m), 3);
+    return out;
+  }, names);
+  const dB = (v) => 20 * Math.log10(v + 1e-9);
+  const bad = Object.entries(lv).filter(([, v]) => !isFinite(v.peak) || dB(v.peak) < -40 || v.peak > 1.0);
+  check('Audio: every sound and music theme renders (none silent, none clipping)', bad.length === 0, bad.map(([k, v]) => `${k} ${dB(v.peak).toFixed(1)}dB`).join(', '));
+  check('Audio: gunfire is the loudest effect', ['shot', 'shotgun', 'rifleShot'].every((k) => dB(lv[k].peak) > dB(lv.step.peak) + 15 && dB(lv[k].peak) > dB(lv.ui.peak) + 8));
+  const dbgA = await ev(page, () => window.__cus.dbg.audioDebug());
+  check('Audio: recorded file in audio/manifest.json replaces the generated sound', dbgA && dbgA.samples === 1, JSON.stringify(dbgA));
+  await ctx.close();
+}
+
+/* ================================================================== */
 /* Mobile: iPhone landscape, multi-touch, rotation, backgrounding      */
 /* ================================================================== */
 {

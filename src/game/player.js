@@ -11,6 +11,12 @@ import { toast } from '../ui/hud.js';
 import { isNight } from './state.js';
 import { WEAPONS, WEAPON_ORDER } from '../data/weapons.js';
 
+const SURFACE = { 0: 'grass', 1: 'dirt', 2: 'hard', 3: 'wood', 4: 'wood', 5: 'grass', 6: 'gravel', 7: 'hard', 8: 'dirt', 9: 'hard', 10: 'hard' };
+function surfaceAt(map, x, y) {
+  const cx = Math.floor(x / TILE), cy = Math.floor(y / TILE);
+  return map.inBounds(cx, cy) ? SURFACE[map.ground[map.idx(cx, cy)]] || 'grass' : 'grass';
+}
+
 export function createPlayer() {
   const sp = G.s.player;
   return {
@@ -77,7 +83,7 @@ export function updatePlayer(dt) {
     if (moving) {
       map.moveCircle(p, p.vx * dt, p.vy * dt, 'player');
       p.walkPhase += dt * (sprint ? 14 : 10);
-      if (Math.floor(p.walkPhase / Math.PI) !== Math.floor((p.walkPhase - dt * 10) / Math.PI)) sfx('step', { vol: sprint ? 1 : 0.6 });
+      if (Math.floor(p.walkPhase / Math.PI) !== Math.floor((p.walkPhase - dt * 10) / Math.PI)) sfx('step', { vol: sprint ? 1 : 0.6, surface: surfaceAt(map, p.x, p.y) });
     }
   }
   if (sprint) p.stamina -= 18 * d.staminaMult * dt;
@@ -274,7 +280,7 @@ function dodge(p, d, mv) {
   p.dodgeT = d.dodgeTime;
   p.invuln = Math.max(p.invuln, d.dodgeIframes);
   p.stamina -= d.dodgeCost;
-  sfx('dodge');
+  sfx('dodge', { surface: surfaceAt(G.map, p.x, p.y) });
   if (inCombat()) addJP('shadow', 1, 'dodge', 6);
 }
 

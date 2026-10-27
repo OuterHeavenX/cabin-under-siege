@@ -157,7 +157,7 @@ function startAim(e, p) {
 function doFire(e, p) {
   const def = e.def;
   if (def.weapon === 'bat') {
-    sfx('swing');
+    sfx('swing', { x: e.x, y: e.y });
     const d = dist(e.x, e.y, p.x, p.y);
     if (d < def.range + p.radius + e.radius + 10 && Math.abs(angleDiff(e.aimAngle, angleTo(e.x, e.y, p.x, p.y))) < 1.2) {
       if (damagePlayer(def.damage, e.x, e.y, 'melee')) {
@@ -174,7 +174,7 @@ function doFire(e, p) {
       const a = e.aimAngle + ((i / (def.pellets - 1)) - 0.5) * 2 * def.spread;
       spawnBullet({ x: e.x + Math.cos(a) * 16, y: e.y + Math.sin(a) * 16, angle: a, speed: 620, dmg: def.damage, owner: 'enemy', range: def.range + 40, source: e });
     }
-    sfx('shotgun', { vol: Math.max(0.3, 1 - dist(e.x, e.y, p.x, p.y) / 700) });
+    sfx('shotgun', { x: e.x, y: e.y });
     e.spotted = Math.max(e.spotted, 1.6);
     e.muzzle = 0.09;
   } else {
@@ -184,7 +184,7 @@ function doFire(e, p) {
     const a = e.aimAngle + (Math.random() - 0.5) * 2 * spread;
     spawnBullet({ x: e.x + Math.cos(a) * 14, y: e.y + Math.sin(a) * 14, angle: a, speed: def.weapon === 'rifle' ? 820 : 640, dmg: def.damage, owner: 'enemy', range: def.range + 80, source: e });
     const pd = dist(e.x, e.y, p.x, p.y);
-    sfx(def.weapon === 'rifle' ? 'rifle' : 'enemyShot', { vol: Math.max(0.3, 1 - pd / 700) });
+    sfx(def.weapon === 'rifle' ? 'rifle' : 'enemyShot', { x: e.x, y: e.y });
     e.spotted = Math.max(e.spotted, 1.6); // muzzle flash reveals the shooter
     e.muzzle = 0.07;
   }
@@ -297,7 +297,7 @@ export function updateEnemies(dt) {
           b.damage(e.def.breachDamage);
           e.breachCd = e.type === 'enforcer' ? 1.0 : 1.3;
           const bd = dist(p.x, p.y, b.cx * TILE, b.cy * TILE);
-          sfx(b.kind === 'window' && !b.rec.boards ? 'glass' : 'wood', { vol: Math.max(0.3, 1 - bd / 600) });
+          sfx(b.kind === 'window' && !b.rec.boards && !b.rec.shutters ? 'glass' : b.kind === 'window' && b.rec.shutters ? 'hammer' : 'wood', { x: b.cx * TILE + 16, y: b.cy * TILE + 16 });
           spawnParticles(b.cx * TILE + 16, b.cy * TILE + 16, '#a0784a', 5, 90);
           if (bd < 200) shake(2);
           G.events.emit('breachHit', b);

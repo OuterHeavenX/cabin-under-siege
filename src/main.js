@@ -9,7 +9,7 @@ import { newHome } from './game/state.js';
 import { showChapterStart } from './ui/menus.js';
 import { buildGroundCanvas, buildRoofCanvas, render } from './world/render.js';
 import { initInput, consume, endFrame, resetInput, setTouchMode, input, suppressGhostClick } from './input.js';
-import { initAudio, setVolumes, updateAudio, setMusic, setAmbient, suspendAudio, resumeAudio, sfx } from './audio.js';
+import { initAudio, setVolumes, updateAudio, setMusic, setAmbient, suspendAudio, resumeAudio, sfx, setListener, setFireLevel, audioDebug, renderOffline, musicBar, birdCall } from './audio.js';
 import { initHud, updateHud, toast, banner } from './ui/hud.js';
 import { initDialogue, updateDialogue, playDialogue } from './ui/dialogue.js';
 import { openMenu, closeModal, topModal, setMenuHooks, openHelp, confirmBox, pickImport, modalOpen, closeAllModals } from './ui/menus.js';
@@ -279,6 +279,11 @@ function frame(ts) {
         hudInfo.target = G.modal ? null : G.interactTarget;
         updateHud(dt, hudInfo);
         updateMood(false);
+        const p = G.player;
+        setListener(p.x, p.y, !!G.map.buildingAt(p.x, p.y));
+        let fl = 0, fp = 0;
+        for (const f of G.fires) { const d = dist(f.x, f.y, p.x, p.y); const l = Math.max(0, 1 - d / 420) * Math.min(1, f.life / 1.5); if (l > fl) { fl = l; fp = Math.max(-1, Math.min(1, (f.x - p.x) / 300)); } }
+        setFireLevel(G.paused || G.modal ? 0 : fl, fp);
       }
       render(ctx);
     }
@@ -501,7 +506,7 @@ function boot() {
   // Test/debug handle (harmless in production; used by the automated smoke test).
   window.__cus = {
     G, newGame, continueGame, travel, loadMap, saveGame, quitToTitle,
-    dbg: { input, openingStrength, homeMapId, openMenu, startFire, damageEnemy, spawnEnemy, startSiege, makeRaidPlan, scheduleSiege, addSign, addItem, addXP, addJP, buySkill, derived, damagePlayer, count },
+    dbg: { birdCall, renderOffline, musicBar, sfx, audioDebug, input, openingStrength, homeMapId, openMenu, startFire, damageEnemy, spawnEnemy, startSiege, makeRaidPlan, scheduleSiege, addSign, addItem, addXP, addJP, buySkill, derived, damagePlayer, count },
   };
 }
 

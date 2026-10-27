@@ -50,7 +50,7 @@ export function damageEnemy(e, dmg, angle, src, knock = 90) {
   if (!e.alerted) G.events.emit('enemyAlert', e, 'hurt');
   spawnParticles(e.x, e.y, '#b0302a', 5, 110);
   addFloater(e.x + rand(-6, 6), e.y - 20, `${Math.round(dmg)}`, '#ffd166');
-  sfx('hit', { vol: 0.8 });
+  sfx('hit', { x: e.x, y: e.y, vol: 0.9 });
   G.events.emit('enemyHit', e, src);
   if (e.hp <= 0) {
     e.hp = 0;
@@ -88,7 +88,7 @@ export function updateBullets(dt) {
           b.dead = true;
           spawnParticles(b.x - sx, b.y - sy, '#d8c7a0', 4, 80, 0.25, 2);
           const pd = G.player ? dist(b.x, b.y, G.player.x, G.player.y) : 999;
-          if (pd < 360) sfx('ricochet', { vol: 1 - pd / 360 });
+          if (pd < 500 && Math.random() < 0.6) sfx(Math.random() < 0.5 ? 'ricochet' : 'impact', { x: b.x, y: b.y });
           break;
         }
       }
