@@ -457,59 +457,234 @@ export function buildRoofCanvas(b) {
 /* ------------------------------------------------------------------ */
 /* People                                                              */
 /* ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ */
+/* Characters: 3/4-view figures with walking legs, swinging arms,      */
+/* clothes per person and the weapon held toward the aim.              */
+/* ------------------------------------------------------------------ */
+const LOOKS = {
+  frank: { style: 'coat', pants: '#2a2a30', shoes: '#141414', stubble: true },
+  ruth: { style: 'cardigan', pants: '#5a4a3a', female: true, glasses: true, bun: true },
+  dee: { style: 'apron', pants: '#3a3550', female: true, curls: true },
+  gus: { style: 'work', pants: '#3b3b2e', bulk: 1.15, beard: true },
+  marcus: { style: 'cardigan', pants: '#3a3a40', glasses: true, bald: true },
+  rosa: { style: 'work', pants: '#2b2b38', female: true, long: true },
+  pete: { style: 'work', pants: '#2e3f55', hatKind: 'cap', hatCol: '#2f5878', beard: true, bulk: 1.1 },
+  ingrid: { style: 'flannel', pants: '#3e4a5e', female: true, braid: true },
+  bo: { style: 'overalls', pants: '#3b4f6e', beard: true, bulk: 1.15 },
+  tess: { style: 'flannel', pants: '#2e2e36', female: true },
+  eleanor: { style: 'dress', female: true, pearls: true },
+  theo: { style: 'work', pants: '#3a3a44', glasses: true },
+  walt: { style: 'flannel', pants: '#3a3a2e', hatKind: 'cap', hatCol: '#3c4a2c' },
+  stranger: { style: 'coat', pants: '#2a2a2e', hatKind: 'fedora', hatCol: '#2b2d31' },
+  deputy: { style: 'uniform', pants: '#4a4030', hatKind: 'trooper', hatCol: '#6b5a3a' },
+  reyes: { style: 'suit', pants: '#1d2230', female: true, bun: true },
+  scout: { style: 'work', pants: '#2a2c33', hatKind: 'beanie', hatCol: '#3d3d46' },
+  gunman: { style: 'coat', pants: '#1f2228', hatKind: 'fedora', hatCol: '#1f2328' },
+  enforcer: { style: 'work', pants: '#232020', bulk: 1.3, bald: true },
+  arsonist: { style: 'work', pants: '#3a2a1a', hatKind: 'beanie', hatCol: '#7a4a1a' },
+  sniper: { style: 'flannel', pants: '#2f3a25', hatKind: 'cap', hatCol: '#3d4a2f' },
+  handler: { style: 'coat', pants: '#2e281e', hatKind: 'cap', hatCol: '#4a3a24' },
+  lieutenant: { style: 'suit', pants: '#121216', bulk: 1.2, hatKind: 'fedora', hatCol: '#0e0e12' },
+};
+
 function drawPerson(ctx, e, o) {
-  const { x, y } = e;
-  const a = o.angle;
+  const look = o.look || LOOKS[e.type] || LOOKS[e.id] || (e === G.player ? LOOKS.frank : {});
   const r = o.r || 10;
-  const bob = Math.sin(o.walk || 0) * 2;
-  // shadow
-  ctx.fillStyle = 'rgba(0,0,0,0.3)';
-  ctx.beginPath(); ctx.ellipse(x + 2, y + 4, r + 2, r * 0.7, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.save();
-  ctx.translate(x, y);
-  ctx.rotate(a);
-  // feet
-  ctx.fillStyle = '#1e1e1e';
-  ctx.beginPath(); ctx.ellipse(bob * 1.5, -r * 0.45, 4, 3, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.beginPath(); ctx.ellipse(-bob * 1.5, r * 0.45, 4, 3, 0, 0, Math.PI * 2); ctx.fill();
-  // weapon
-  if (o.weapon === 'pistol') { ctx.fillStyle = '#222'; ctx.fillRect(r - 2, -2.5, 12, 5); ctx.fillStyle = o.skin; ctx.beginPath(); ctx.arc(r - 1, 0, 3.4, 0, Math.PI * 2); ctx.fill(); }
-  else if (o.weapon === 'molotov') { ctx.fillStyle = '#4a7a3a'; ctx.fillRect(r - 2, -3, 8, 6); ctx.fillStyle = '#ffb347'; ctx.beginPath(); ctx.arc(r + 8, 0, 2.5 + Math.random(), 0, Math.PI * 2); ctx.fill(); }
-  else if (o.weapon === 'shotgun' || o.weapon === 'eshotgun') { ctx.fillStyle = '#4a3220'; ctx.fillRect(r - 6, -3, 14, 6); ctx.fillStyle = '#2a2a2a'; ctx.fillRect(r + 6, -2.5, 12, 5); ctx.fillStyle = o.skin; ctx.beginPath(); ctx.arc(r + 4, 2, 3, 0, Math.PI * 2); ctx.fill(); }
-  else if (o.weapon === 'rifle') { ctx.fillStyle = '#3b2a1a'; ctx.fillRect(r - 6, -2.5, 24, 5); ctx.fillStyle = '#222'; ctx.fillRect(r + 10, -1.5, 10, 3); }
-  else if (o.weapon === 'bat') {
-    const swing = o.swing ? -0.9 * o.swing : 0;
-    ctx.save(); ctx.rotate(0.6 + swing); ctx.fillStyle = '#8a6a3d'; ctx.fillRect(r - 4, -3, 22, 6); ctx.restore();
-  } else if (o.weapon === 'axe') {
-    ctx.save(); ctx.rotate(o.swing ? -1.2 * o.swing + 0.5 : 0.3); ctx.fillStyle = '#7a5a36'; ctx.fillRect(r - 2, -2, 18, 4); ctx.fillStyle = '#bfc5cc'; ctx.fillRect(r + 12, -6, 6, 9); ctx.restore();
-  }
-  // body
-  const bg = ctx.createRadialGradient(-r * 0.25, -r * 0.35, 1, 0, 0, r * 1.1);
-  bg.addColorStop(0, shade(o.body, 1.35)); bg.addColorStop(1, shade(o.body, 0.8));
-  ctx.fillStyle = bg;
-  ctx.beginPath(); ctx.ellipse(0, 0, r * 0.75, r * 1.05, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineWidth = 1.2; ctx.stroke();
-  if (o.trim) { ctx.fillStyle = o.trim; ctx.fillRect(-3, -r * 1.0, 6, 4); }
-  // head
-  ctx.fillStyle = o.skin;
-  ctx.beginPath(); ctx.arc(1, 0, r * 0.5, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 1; ctx.stroke();
-  ctx.fillStyle = o.hair;
-  ctx.beginPath(); ctx.arc(-1, 0, r * 0.5, Math.PI * 0.5, Math.PI * 1.5); ctx.fill();
-  if (o.hat) { ctx.fillStyle = o.hat; ctx.beginPath(); ctx.arc(0, 0, r * 0.62, 0, Math.PI * 2); ctx.fill(); ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.arc(0, 0, r * 0.38, 0, Math.PI * 2); ctx.fill(); }
-  ctx.restore();
-  // team ring (shape + colour, not colour alone)
+  const s = (r / 10) * (look.bulk ? 1 + (look.bulk - 1) * 0.5 : 1);
+  const a = o.angle;
+  const fx = Math.cos(a), fy = Math.sin(a);
+  const facingBack = fy < -0.35, facingFront = fy > 0.35;
+  const flip = fx < 0 ? -1 : 1;
+  const walk = o.walk || 0;
+  const moving = Math.abs(Math.sin(walk)) > 0.01;
+  const jitter = o.flash > 0 ? (Math.random() - 0.5) * 2.5 : 0;
+  const x = e.x + jitter, y = e.y;
+  const gy = y + 9 * s; // ground under the feet
+  const bob = moving ? Math.abs(Math.sin(walk)) * 1.2 * s : 0;
+  const body = o.body, dark = shade(body, 0.6), light = shade(body, 1.3);
+  const pants = look.pants || shade(body, 0.55);
+
+  // Ground ring (team colour + shape) and shadow
+  ctx.fillStyle = 'rgba(0,0,0,0.32)';
+  ctx.beginPath(); ctx.ellipse(x + 1.5, gy, 9 * s, 3.6 * s, 0, 0, Math.PI * 2); ctx.fill();
   if (o.ring) {
-    ctx.strokeStyle = o.ring;
-    ctx.lineWidth = o.ringW || 2;
+    ctx.strokeStyle = o.ring; ctx.lineWidth = o.ringW || 2;
     if (o.dashed) ctx.setLineDash([4, 3]);
-    ctx.beginPath(); ctx.arc(x, y, r + 4, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(x, gy - 1, (r + 4) * 1.05, (r + 4) * 0.48, 0, 0, Math.PI * 2); ctx.stroke();
     ctx.setLineDash([]);
   }
-  if (o.flash > 0) {
-    ctx.fillStyle = `rgba(255,255,255,${o.flash * 4})`;
-    ctx.beginPath(); ctx.arc(x, y, r + 1, 0, Math.PI * 2); ctx.fill();
+
+  ctx.save();
+  if (o.downed) { ctx.translate(x, gy); ctx.rotate(1.45 * flip); ctx.translate(-x, -gy); }
+  ctx.translate(x, gy - bob);
+  ctx.scale(s, s);
+
+  // Legs (stride from the walk phase)
+  const st = moving ? Math.sin(walk) : 0;
+  const legW = look.style === 'dress' ? 0 : 3.6;
+  const legs = (front) => {
+    const k = front ? 1 : -1;
+    const lift = Math.max(0, st * k) * 2.2;
+    const lx = (front ? 2.2 : -2.2) + (facingFront || facingBack ? 0 : st * k * 2.4 * flip);
+    ctx.fillStyle = pants; ctx.fillRect(lx - legW / 2, -10, legW, 10 - lift);
+    ctx.fillStyle = look.shoes || '#1a1414'; ctx.beginPath(); ctx.ellipse(lx + (facingFront || facingBack ? 0 : 1 * flip), -lift - 0.5, 2.6, 1.6, 0, 0, Math.PI * 2); ctx.fill();
+  };
+  if (legW) { legs(false); legs(true); }
+
+  // Arms + weapon (behind the body when facing away)
+  const drawArms = () => {
+    const sx = 0, sy = -16;
+    const dx = fx, dy = fy * 0.7;
+    const recoil = (o.muzzle > 0 ? 2.5 : 0);
+    const reach = 8 - recoil;
+    const hx = sx + dx * reach, hy = sy + 6 + dy * reach;
+    ctx.strokeStyle = shade(body, 0.85); ctx.lineWidth = 3.2; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(sx - 3.5 * flip, sy + 1); ctx.lineTo(hx - 1 * flip, hy + 1); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(sx + 3.5 * flip, sy + 1); ctx.lineTo(hx, hy); ctx.stroke();
+    ctx.fillStyle = o.skin; ctx.beginPath(); ctx.arc(hx, hy, 1.9, 0, Math.PI * 2); ctx.fill();
+    drawHeldWeapon(ctx, o, hx, hy, Math.atan2(dy, dx), flip);
+  };
+  const armed = !!o.weapon;
+  if (armed && facingBack) drawArms();
+
+  // Torso
+  const tw = 6.8, top = -21, hip = look.style === 'coat' ? -6 : look.style === 'dress' ? -1 : -9;
+  const tg = ctx.createLinearGradient(-tw, top, tw, hip);
+  tg.addColorStop(0, light); tg.addColorStop(1, dark);
+  ctx.fillStyle = tg;
+  ctx.beginPath();
+  ctx.moveTo(-tw + 1, top); ctx.lineTo(tw - 1, top);
+  ctx.quadraticCurveTo(tw + 0.5, top + 1, tw, top + 4);
+  ctx.lineTo(look.style === 'dress' ? tw + 2.5 : tw - 0.5, hip);
+  ctx.lineTo(look.style === 'dress' ? -tw - 2.5 : -tw + 0.5, hip);
+  ctx.lineTo(-tw, top + 4); ctx.quadraticCurveTo(-tw - 0.5, top + 1, -tw + 1, top);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineWidth = 0.9; ctx.stroke();
+  // Clothing details (front only where it matters)
+  if (!facingBack) torsoDetails(ctx, look, o, tw, top, hip);
+  else { ctx.fillStyle = 'rgba(0,0,0,0.15)'; ctx.fillRect(-0.5, top + 2, 1, hip - top - 3); }
+  if (o.trim) { ctx.fillStyle = o.trim; ctx.fillRect(-tw + 0.5, top + 5, 2.4, 3); } // armband
+  if (!armed) { // relaxed arms swing while walking
+    ctx.strokeStyle = shade(body, 0.85); ctx.lineWidth = 3; ctx.lineCap = 'round';
+    for (const k of [-1, 1]) { const sw = st * k * 2; ctx.beginPath(); ctx.moveTo(k * (tw - 0.8), top + 2); ctx.lineTo(k * (tw + 0.2) + sw * flip * 0.5, top + 11); ctx.stroke(); ctx.fillStyle = o.skin; ctx.beginPath(); ctx.arc(k * (tw + 0.2) + sw * flip * 0.5, top + 12, 1.6, 0, Math.PI * 2); ctx.fill(); }
   }
+
+  // Head
+  const hy = top - 5.5;
+  ctx.fillStyle = o.skin; ctx.fillRect(-1.8, top - 2, 3.6, 2.5); // neck
+  ctx.beginPath(); ctx.arc(0, hy, 5.4, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 0.8; ctx.stroke();
+  drawHair(ctx, look, o, hy, facingBack, facingFront, flip);
+  if (!facingBack) drawFace(ctx, look, o, hy, facingFront, flip);
+  drawHat(ctx, look, o, hy, flip);
+  // rim light
+  ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.beginPath(); ctx.arc(-1.8, hy - 2, 2.2, 0, Math.PI * 2); ctx.fill();
+
+  if (armed && !facingBack) drawArms();
+  ctx.restore();
+
+  if (o.flash > 0) {
+    ctx.save(); ctx.globalAlpha = Math.min(0.7, o.flash * 4); ctx.fillStyle = '#fff';
+    ctx.beginPath(); ctx.ellipse(x, y - 4 * s, 7 * s, 14 * s, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  }
+}
+
+function torsoDetails(ctx, look, o, tw, top, hip) {
+  switch (look.style) {
+    case 'coat':
+      ctx.fillStyle = '#d8d2c4'; ctx.beginPath(); ctx.moveTo(-2.4, top); ctx.lineTo(0, top + 5); ctx.lineTo(2.4, top); ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 0.8; ctx.beginPath(); ctx.moveTo(-2.4, top); ctx.lineTo(-1, hip); ctx.moveTo(2.4, top); ctx.lineTo(1, hip); ctx.stroke();
+      ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(-tw + 0.5, top + 9, tw * 2 - 1, 1.2); // belt
+      break;
+    case 'suit':
+      ctx.fillStyle = '#e8e4da'; ctx.beginPath(); ctx.moveTo(-2.6, top); ctx.lineTo(0, top + 6); ctx.lineTo(2.6, top); ctx.fill();
+      ctx.fillStyle = look.tie || '#7a0e12'; ctx.fillRect(-0.7, top + 1, 1.4, 6);
+      break;
+    case 'cardigan':
+      ctx.fillStyle = '#ece4d4'; ctx.fillRect(-1.6, top, 3.2, hip - top);
+      ctx.fillStyle = '#d0c4b0'; for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.arc(0, top + 3 + i * 3.5, 0.7, 0, Math.PI * 2); ctx.fill(); }
+      break;
+    case 'apron': ctx.fillStyle = '#eee6d4'; ctx.fillRect(-4.5, top + 4, 9, hip - top - 3); break;
+    case 'overalls': ctx.fillStyle = look.pants; ctx.fillRect(-4.6, top + 6, 9.2, hip - top - 5); ctx.fillRect(-4, top, 1.6, 7); ctx.fillRect(2.4, top, 1.6, 7); break;
+    case 'flannel':
+      ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = 1;
+      for (let i = -2; i <= 2; i++) { ctx.beginPath(); ctx.moveTo(i * 2.8, top + 1); ctx.lineTo(i * 2.8, hip); ctx.stroke(); }
+      for (let yy = top + 3; yy < hip; yy += 3.5) { ctx.beginPath(); ctx.moveTo(-tw + 1, yy); ctx.lineTo(tw - 1, yy); ctx.stroke(); }
+      break;
+    case 'uniform':
+      ctx.fillStyle = '#d4af37'; ctx.beginPath(); ctx.arc(-3, top + 4, 1.5, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(-tw + 0.5, top + 9, tw * 2 - 1, 1.4);
+      break;
+    case 'dress':
+      if (look.pearls) { ctx.fillStyle = '#f1ece0'; for (let i = -2; i <= 2; i++) { ctx.beginPath(); ctx.arc(i * 1.3, top + 1.5 + Math.abs(i) * -0.3, 0.7, 0, Math.PI * 2); ctx.fill(); } }
+      break;
+    default: // work shirt: collar
+      ctx.fillStyle = 'rgba(0,0,0,0.2)'; ctx.beginPath(); ctx.moveTo(-2.4, top); ctx.lineTo(0, top + 3); ctx.lineTo(2.4, top); ctx.fill();
+  }
+}
+
+function drawHair(ctx, look, o, hy, back, front, flip) {
+  if (look.bald) {
+    ctx.fillStyle = o.hair; ctx.beginPath(); ctx.arc(0, hy + 0.5, 5.5, Math.PI * 0.85, Math.PI * 1.15); ctx.fill();
+    ctx.beginPath(); ctx.arc(0, hy + 0.5, 5.5, -Math.PI * 0.15, Math.PI * 0.15); ctx.fill();
+    return;
+  }
+  ctx.fillStyle = o.hair;
+  if (back) { ctx.beginPath(); ctx.arc(0, hy, 5.6, 0, Math.PI * 2); ctx.fill(); }
+  else {
+    ctx.beginPath(); ctx.arc(0, hy - 0.6, 5.6, Math.PI, 0); ctx.fill(); // crown
+    if (!front) { ctx.beginPath(); ctx.arc(-1.5 * flip, hy, 4.8, Math.PI * 0.5, Math.PI * 1.5, flip < 0); ctx.fill(); }
+  }
+  if (look.bun) { ctx.beginPath(); ctx.arc(back ? 0 : -3 * flip, hy - 5, 2.4, 0, Math.PI * 2); ctx.fill(); }
+  if (look.long || look.curls) { ctx.fillRect(-5.6, hy - 1, 2.2, look.long ? 9 : 6); ctx.fillRect(3.4, hy - 1, 2.2, look.long ? 9 : 6); }
+  if (look.curls) for (let i = 0; i < 6; i++) { ctx.beginPath(); ctx.arc(-4.5 + i * 1.8, hy - 4.8 + (i % 2), 1.6, 0, Math.PI * 2); ctx.fill(); }
+  if (look.braid) { for (let i = 0; i < 4; i++) { ctx.beginPath(); ctx.arc((back ? 0 : -3.5 * flip), hy + 3 + i * 2.4, 1.6, 0, Math.PI * 2); ctx.fill(); } }
+}
+
+function drawFace(ctx, look, o, hy, front, flip) {
+  ctx.fillStyle = '#1a1210';
+  if (front) {
+    ctx.fillRect(-2.4, hy - 0.4, 1.2, 1.3); ctx.fillRect(1.2, hy - 0.4, 1.2, 1.3);
+    ctx.fillStyle = 'rgba(80,30,25,0.6)'; ctx.fillRect(-1.2, hy + 2.6, 2.4, 0.7);
+  } else {
+    ctx.fillRect(2.2 * flip - 0.6, hy - 0.5, 1.2, 1.3);
+    ctx.fillStyle = shade(o.skin, 0.85); ctx.beginPath(); ctx.arc(5 * flip, hy + 0.8, 1.2, 0, Math.PI * 2); ctx.fill(); // nose
+  }
+  if (look.glasses) { ctx.strokeStyle = 'rgba(20,20,20,0.85)'; ctx.lineWidth = 0.7; if (front) { ctx.strokeRect(-3, hy - 1, 2.4, 2); ctx.strokeRect(0.6, hy - 1, 2.4, 2); } else ctx.strokeRect(1.4 * flip - 1.2, hy - 1, 2.6, 2); }
+  if (look.beard) { ctx.fillStyle = shade(o.hair, 0.9); ctx.beginPath(); ctx.arc(front ? 0 : 1.5 * flip, hy + 2.6, 3.6, 0, Math.PI); ctx.fill(); }
+  else if (look.stubble) { ctx.fillStyle = 'rgba(30,20,20,0.3)'; ctx.beginPath(); ctx.arc(front ? 0 : 1.5 * flip, hy + 2.2, 3.4, 0, Math.PI); ctx.fill(); }
+}
+
+function drawHat(ctx, look, o, hy, flip) {
+  const k = look.hatKind || (o.hat ? 'beanie' : null);
+  if (!k) return;
+  const col = look.hatCol || o.hat || '#222';
+  ctx.fillStyle = col;
+  if (k === 'fedora' || k === 'trooper') {
+    ctx.beginPath(); ctx.ellipse(0, hy - 3.2, k === 'trooper' ? 8.4 : 7.6, 2, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(-4.6, hy - 3); ctx.lineTo(-4, hy - 8.4); ctx.quadraticCurveTo(0, hy - (k === 'trooper' ? 11 : 9.6), 4, hy - 8.4); ctx.lineTo(4.6, hy - 3); ctx.fill();
+    ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(-4.4, hy - 4.8, 8.8, 1.3);
+  } else if (k === 'cap') {
+    ctx.beginPath(); ctx.arc(0, hy - 1.8, 5.6, Math.PI, 0); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(3.6 * flip, hy - 1.8, 3.6, 1.2, 0, 0, Math.PI * 2); ctx.fill();
+  } else { // beanie
+    ctx.beginPath(); ctx.arc(0, hy - 1.2, 5.8, Math.PI, 0); ctx.fill();
+    ctx.fillStyle = shade(col, 1.25); ctx.fillRect(-5.8, hy - 1.8, 11.6, 1.6);
+  }
+}
+
+function drawHeldWeapon(ctx, o, hx, hy, ang, flip) {
+  ctx.save();
+  ctx.translate(hx, hy); ctx.rotate(ang);
+  if (Math.cos(ang) < 0) ctx.scale(1, -1);
+  const w = o.weapon;
+  if (w === 'pistol') { ctx.fillStyle = '#1c1c1c'; ctx.fillRect(-1, -1.6, 8, 3); ctx.fillRect(-1, -0.4, 2.2, 3.4); }
+  else if (w === 'shotgun' || w === 'eshotgun') { ctx.fillStyle = '#5a3a22'; ctx.fillRect(-7, -1.2, 7, 3.2); ctx.fillStyle = '#262626'; ctx.fillRect(0, -1.6, 13, 2.4); ctx.fillStyle = '#4a3220'; ctx.fillRect(4, 0.6, 5, 1.6); }
+  else if (w === 'rifle') { ctx.fillStyle = '#4a3220'; ctx.fillRect(-8, -1, 12, 3); ctx.fillStyle = '#222'; ctx.fillRect(3, -1.4, 13, 2); ctx.fillStyle = '#111'; ctx.fillRect(1, -3.4, 6, 1.6); }
+  else if (w === 'molotov') { ctx.fillStyle = '#3f6e32'; ctx.fillRect(0, -1.6, 5, 3.2); ctx.fillStyle = '#ffb347'; ctx.beginPath(); ctx.arc(6.5, 0, 1.6 + Math.random() * 0.8, 0, Math.PI * 2); ctx.fill(); }
+  else if (w === 'bat') { ctx.rotate(-0.9 + (o.swing ? -1.6 * o.swing : 0)); ctx.fillStyle = '#8a6a3d'; ctx.fillRect(0, -1.2, 15, 2.6); }
+  else if (w === 'axe') { ctx.rotate(o.swing ? -1.4 * o.swing + 0.6 : -0.6); ctx.fillStyle = '#7a5a36'; ctx.fillRect(0, -0.9, 13, 1.9); ctx.fillStyle = '#c4cad1'; ctx.fillRect(9.5, -4, 4, 6); }
+  ctx.restore();
 }
 
 function shade(hex, f) {
@@ -733,7 +908,7 @@ export function render(ctx) {
       const blink = p.invuln > 0 && p.dodgeT <= 0 && Math.floor(t * 20) % 2 === 0;
       if (blink) ctx.globalAlpha = 0.55;
       drawPerson(ctx, p, {
-        angle: p.angle, r: 10, walk: p.walkPhase, body: '#3a6b52', skin: '#e0b18e', hair: '#3b2a1e',
+        angle: p.angle, r: 10, walk: p.walkPhase, body: '#3a3a42', skin: '#e0b18e', hair: '#2a2220', muzzle: p.muzzle,
         weapon: p.chopAnim > 0 ? 'axe' : p.weapon === 'rifle' ? 'rifle' : p.weapon === 'shotgun' ? 'shotgun' : 'pistol', swing: p.chopAnim > 0 ? p.chopAnim * 4 : 0, ring: '#ffffff', ringW: 2.5,
       });
       ctx.globalAlpha = 1;
@@ -748,7 +923,7 @@ export function render(ctx) {
       // NPC
       const d = e.def;
       if (e.ally && e.downed) ctx.globalAlpha = 0.55;
-      drawPerson(ctx, e, { angle: e.downed ? e.angle + 1.4 : e.angle, r: 10, walk: e.downed ? 0 : e.walkPhase, body: d.body, skin: d.skin, hair: d.hair,
+      drawPerson(ctx, e, { angle: e.angle, downed: e.downed, muzzle: e.muzzle, r: 10, walk: e.downed ? 0 : e.walkPhase, body: d.body, skin: d.skin, hair: d.hair,
         ring: e.ally ? '#6fdc7a' : e.stranger ? '#b9a4e0' : e.deputy || e.reyes ? '#d4af37' : '#5bc0de', ringW: e.ally ? 3 : 2, dashed: !e.named, weapon: e.ally ? 'shotgun' : null, flash: e.hitT > 0 ? e.hitT : 0 });
       ctx.globalAlpha = 1;
       if (e.ally) {
@@ -1010,18 +1185,16 @@ function drawEnemy(ctx, e, t) {
   if (e.def.vehicle) { drawTruck(ctx, e); return; }
   const look = ENEMY_LOOK[e.type] || ENEMY_LOOK.gunman;
   if (e.dead) {
-    ctx.globalAlpha = Math.max(0, 1 - e.deadT / 25);
-    ctx.fillStyle = 'rgba(90,20,20,0.5)'; ctx.beginPath(); ctx.ellipse(e.x, e.y + 3, e.radius + 6, e.radius, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.save(); ctx.translate(e.x, e.y); ctx.rotate(e.angle + Math.PI / 2);
-    ctx.fillStyle = e.def.color; ctx.beginPath(); ctx.ellipse(0, 0, e.radius * 0.8, e.radius * 1.2, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = look.skin; ctx.beginPath(); ctx.arc(0, -e.radius, e.radius * 0.45, 0, Math.PI * 2); ctx.fill();
-    ctx.restore();
+    const fade = Math.max(0, 1 - e.deadT / 25);
+    ctx.globalAlpha = fade * 0.75;
+    ctx.fillStyle = 'rgba(90,10,10,0.6)'; ctx.beginPath(); ctx.ellipse(e.x, e.y + 8, e.radius + 7, e.radius * 0.6, 0, 0, Math.PI * 2); ctx.fill();
+    drawPerson(ctx, e, { angle: e.angle, downed: true, r: e.radius, walk: 0, body: e.def.color, trim: e.def.trim, skin: look.skin, hair: look.hair, hat: look.hat });
     ctx.globalAlpha = 1;
     return;
   }
   drawPerson(ctx, e, {
     angle: e.angle, r: e.radius, walk: e.walkPhase, body: e.def.color, trim: e.def.trim, skin: look.skin, hair: look.hair, hat: look.hat,
-    weapon: e.def.weapon === 'srifle' ? 'rifle' : e.def.weapon, swing: e.aimT > 0 && e.def.weapon === 'bat' ? 1 - e.aimT / e.def.telegraph : 0,
+    muzzle: e.muzzle, weapon: e.def.weapon === 'srifle' ? 'rifle' : e.def.weapon, swing: e.aimT > 0 && e.def.weapon === 'bat' ? 1 - e.aimT / e.def.telegraph : 0,
     ring: e.retreating ? '#f0c040' : '#ff3b30', ringW: e.def.boss ? 4 : 2.5, dashed: e.retreating, flash: e.hitT > 0 ? e.hitT : 0,
   });
   if (e.def.boss) { ctx.strokeStyle = '#d4af37'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(e.x, e.y, e.radius + 8, 0, Math.PI * 2); ctx.stroke(); }
