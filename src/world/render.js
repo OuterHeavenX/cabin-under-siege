@@ -410,45 +410,137 @@ function treeSprite(kind, v) {
   return c;
 }
 
+export const ROOF_RISE = 18; // roofs sit this many pixels above the footprint
+const ROOF_PAD = 14;
+
+const FACADES = {
+  cabin: ['logs', '#7a5232'], ruth_house: ['siding', '#e8e2d4'], store: ['brick', '#8a4a3a'], diner: ['siding', '#b5523a'],
+  chapel: ['stone', '#8d8a84'], henderson: ['siding', '#a8b89a'], miller: ['siding', '#b8aac8'], dee_house: ['siding', '#d9b88a'],
+  gus_house: ['siding', '#8a9aa8'], lumber_office: ['logs', '#8a6a3a'],
+  house: ['siding', '#a8b8c8'], farmhouse: ['siding', '#ece6d8'], barn: ['boards', '#8f2f24'], ingrid_house: ['siding', '#e2dcc8'],
+  coop: ['boards', '#a8884a'], feedstore: ['brick', '#7a4636'], sheriff: ['brick', '#6a6a72'], cafe: ['siding', '#c8a070'],
+  manor: ['stone', '#9a958a'], greenhouse: ['glass', '#a8d8d0'], gatehouse: ['stone', '#8a8478'], boathouse: ['logs', '#6a5038'],
+  marina: ['siding', '#e8e2d4'], yacht: ['siding', '#f2efe6'],
+};
+
+function facadeOf(b) {
+  const f = FACADES[b.id];
+  if (f) return { style: f[0], color: f[1] };
+  const pal = ['#b8a58a', '#a8b4a0', '#c9b89a', '#9aa4ac', '#b89a8a'];
+  let h = 0; for (const ch of b.id || 'x') h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return { style: 'siding', color: pal[h % pal.length] };
+}
+
+function shadeHex(hex, f) {
+  if (!hex.startsWith('#')) return hex;
+  const n = parseInt(hex.slice(1), 16);
+  const c = (v) => Math.max(0, Math.min(255, Math.round(v * f)));
+  return `rgb(${c((n >> 16) & 255)},${c((n >> 8) & 255)},${c(n & 255)})`;
+}
+
 export function buildRoofCanvas(b) {
+  const w = b.w * TILE, h = b.h * TILE, R = ROOF_RISE;
   const c = document.createElement('canvas');
-  c.width = b.w * TILE + 8; c.height = b.h * TILE + 8;
+  c.width = w + ROOF_PAD; c.height = h + R + ROOF_PAD;
   const g = c.getContext('2d');
-  const w = b.w * TILE, h = b.h * TILE;
-  g.fillStyle = 'rgba(0,0,0,0.35)';
-  g.fillRect(6, 8, w, h);
-  g.fillStyle = b.roof;
-  g.fillRect(0, 0, w, h);
-  // shingles
-  g.strokeStyle = 'rgba(0,0,0,0.22)';
-  g.lineWidth = 1;
-  for (let y = 6; y < h; y += 8) {
-    g.beginPath(); g.moveTo(0, y + 0.5); g.lineTo(w, y + 0.5); g.stroke();
-    for (let x = ((y / 8) % 2) * 6; x < w; x += 12) { g.beginPath(); g.moveTo(x + 0.5, y); g.lineTo(x + 0.5, y - 8); g.stroke(); }
+  const fac = facadeOf(b);
+  const roofH = R + h - TILE; // roof covers every row but the front wall, lifted by R
+  const glass = fac.style === 'glass';
+
+  // Shadow cast down and to the right
+  g.fillStyle = 'rgba(0,0,0,0.32)';
+  g.beginPath(); g.moveTo(10, R + 12); g.lineTo(w + 12, R + 12); g.lineTo(w + 12, R + h + 12); g.lineTo(12, R + h + 12); g.closePath(); g.fill();
+
+  // Front wall (facade), one tile tall
+  const fy = roofH, fh = R + h - roofH;
+  g.fillStyle = fac.color; g.fillRect(0, fy, w, fh);
+  if (fac.style === 'logs') {
+    for (let yy = fy + 2; yy < fy + fh; yy += 6) { g.fillStyle = shadeHex(fac.color, 0.72); g.fillRect(0, yy + 4, w, 1.5); g.fillStyle = shadeHex(fac.color, 1.15); g.fillRect(0, yy, w, 1.2); }
+    g.fillStyle = shadeHex(fac.color, 0.6); for (const xx of [0, w - 5]) g.fillRect(xx, fy, 5, fh);
+  } else if (fac.style === 'brick') {
+    for (let r = 0, yy = fy; yy < fy + fh; r++, yy += 5) for (let xx = (r % 2) * 6; xx < w; xx += 12) { g.fillStyle = (xx + r) % 3 ? shadeHex(fac.color, 1.06) : shadeHex(fac.color, 0.9); g.fillRect(xx + 0.5, yy + 0.5, 11, 4); }
+  } else if (fac.style === 'stone') {
+    for (let r = 0, yy = fy; yy < fy + fh; r++, yy += 8) for (let xx = (r % 2) * 9; xx < w; xx += 18) { g.fillStyle = hash2(xx, r) > 0.5 ? shadeHex(fac.color, 1.1) : shadeHex(fac.color, 0.9); g.fillRect(xx + 1, yy + 1, 16, 6.5); }
+  } else if (fac.style === 'boards') {
+    for (let xx = 0; xx < w; xx += 6) { g.fillStyle = shadeHex(fac.color, xx % 12 ? 1 : 0.85); g.fillRect(xx, fy, 5, fh); }
+  } else if (glass) {
+    g.fillStyle = 'rgba(200,240,235,0.45)'; g.fillRect(0, fy, w, fh);
+    g.strokeStyle = 'rgba(255,255,255,0.6)'; g.lineWidth = 1.5; for (let xx = 0; xx <= w; xx += 16) { g.beginPath(); g.moveTo(xx, fy); g.lineTo(xx, fy + fh); g.stroke(); }
+  } else { // clapboard siding
+    for (let yy = fy + 3; yy < fy + fh; yy += 5) { g.fillStyle = 'rgba(0,0,0,0.13)'; g.fillRect(0, yy, w, 1); g.fillStyle = 'rgba(255,255,255,0.1)'; g.fillRect(0, yy + 1, w, 1); }
+    g.fillStyle = shadeHex(fac.color, 0.85); g.fillRect(0, fy, 3, fh); g.fillRect(w - 3, fy, 3, fh);
   }
-  // sun-lit slope / shaded slope
-  const grd = w >= h ? g.createLinearGradient(0, 0, 0, h) : g.createLinearGradient(0, 0, w, 0);
-  grd.addColorStop(0, 'rgba(255,255,255,0.10)'); grd.addColorStop(0.48, 'rgba(255,255,255,0.02)');
-  grd.addColorStop(0.52, 'rgba(0,0,0,0.12)'); grd.addColorStop(1, 'rgba(0,0,0,0.26)');
-  g.fillStyle = grd; g.fillRect(0, 0, w, h);
-  g.fillStyle = 'rgba(255,255,255,0.16)';
-  if (w >= h) g.fillRect(0, h / 2 - 2, w, 3); else g.fillRect(w / 2 - 2, 0, 3, h);
-  // eaves
-  g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(0, h - 4, w, 4);
-  g.strokeStyle = 'rgba(0,0,0,0.5)'; g.lineWidth = 2; g.strokeRect(1, 1, w - 2, h - 2);
-  if (b.isHome) { // chimney
-    g.fillStyle = '#6e6e6e'; g.fillRect(w - 50, 10, 16, 16); g.fillStyle = '#2b2b2b'; g.fillRect(w - 47, 13, 10, 10);
+  // foundation and the shadow under the eave
+  g.fillStyle = 'rgba(40,36,32,0.85)'; g.fillRect(0, fy + fh - 4, w, 4);
+  const eg = g.createLinearGradient(0, fy, 0, fy + 9);
+  eg.addColorStop(0, 'rgba(0,0,0,0.45)'); eg.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = eg; g.fillRect(0, fy, w, 9);
+
+  // Roof: hip roof along the long axis, lit from the upper left
+  const long = w >= roofH;
+  const hip = long ? Math.min(roofH / 2, w / 4) : Math.min(w / 2, roofH / 4);
+  const base = b.roof;
+  const slopes = long ? [
+    { pts: [[0, 0], [w, 0], [w - hip, roofH / 2], [hip, roofH / 2]], f: 1.18 }, // back slope (lit)
+    { pts: [[hip, roofH / 2], [w - hip, roofH / 2], [w, roofH], [0, roofH]], f: 0.82 }, // front slope
+    { pts: [[0, 0], [hip, roofH / 2], [0, roofH]], f: 1.05 }, // left hip
+    { pts: [[w, 0], [w - hip, roofH / 2], [w, roofH]], f: 0.68 }, // right hip
+  ] : [
+    { pts: [[0, 0], [w / 2, hip], [w / 2, roofH - hip], [0, roofH]], f: 1.15 },
+    { pts: [[w, 0], [w / 2, hip], [w / 2, roofH - hip], [w, roofH]], f: 0.75 },
+    { pts: [[0, 0], [w, 0], [w / 2, hip]], f: 1.05 },
+    { pts: [[0, roofH], [w, roofH], [w / 2, roofH - hip]], f: 0.85 },
+  ];
+  for (const sl of slopes) {
+    g.save();
+    g.beginPath(); sl.pts.forEach(([x, y], k) => (k ? g.lineTo(x, y) : g.moveTo(x, y))); g.closePath();
+    g.fillStyle = glass ? `rgba(190,235,230,${0.35 + (sl.f - 0.7) * 0.4})` : shadeHex(base, sl.f); g.fill();
+    g.clip();
+    if (!glass) {
+      // shingle rows
+      for (let yy = 2, r = 0; yy < roofH + 4; yy += 6, r++) {
+        g.fillStyle = 'rgba(0,0,0,0.16)'; g.fillRect(0, yy, w, 1);
+        for (let xx = (r % 2) * 5; xx < w; xx += 10) { g.fillStyle = hash2(xx + b.x * 7, r + b.y * 3) > 0.82 ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.03)'; g.fillRect(xx, yy - 5, 9, 5); g.fillStyle = 'rgba(0,0,0,0.12)'; g.fillRect(xx, yy - 5, 1, 5); }
+      }
+    } else {
+      g.strokeStyle = 'rgba(255,255,255,0.5)'; g.lineWidth = 1; for (let xx = 0; xx < w; xx += 16) { g.beginPath(); g.moveTo(xx, 0); g.lineTo(xx, roofH); g.stroke(); }
+    }
+    g.restore();
   }
+  // ridge and hip lines
+  g.strokeStyle = glass ? 'rgba(255,255,255,0.7)' : shadeHex(base, 0.5); g.lineWidth = 2; g.lineCap = 'round';
+  g.beginPath();
+  if (long) { g.moveTo(hip, roofH / 2); g.lineTo(w - hip, roofH / 2); g.moveTo(0, 0); g.lineTo(hip, roofH / 2); g.lineTo(0, roofH); g.moveTo(w, 0); g.lineTo(w - hip, roofH / 2); g.lineTo(w, roofH); }
+  else { g.moveTo(w / 2, hip); g.lineTo(w / 2, roofH - hip); g.moveTo(0, 0); g.lineTo(w / 2, hip); g.lineTo(w, 0); g.moveTo(0, roofH); g.lineTo(w / 2, roofH - hip); g.lineTo(w, roofH); }
+  g.stroke();
+  if (!glass) { g.strokeStyle = shadeHex(base, 1.4); g.lineWidth = 1; g.beginPath(); if (long) { g.moveTo(hip, roofH / 2 - 1); g.lineTo(w - hip, roofH / 2 - 1); } else { g.moveTo(w / 2 - 1, hip); g.lineTo(w / 2 - 1, roofH - hip); } g.stroke(); }
+  // eave edge
+  g.fillStyle = shadeHex(base, 0.45); g.fillRect(0, roofH - 2, w, 3);
+  g.strokeStyle = 'rgba(0,0,0,0.55)'; g.lineWidth = 1.5; g.strokeRect(0.75, 0.75, w - 1.5, roofH - 1.5);
+
+  // Chimney on homes (a little box with a lit top and a shaded side)
+  if (b.isHome || b.id === 'diner' || b.id === 'gatehouse' || b.id === 'ruth_house' || b.id === 'ingrid_house') {
+    const cx = w - 46, cy = Math.max(4, roofH / 2 - 22);
+    g.fillStyle = 'rgba(0,0,0,0.35)'; g.fillRect(cx + 4, cy + 22, 16, 6);
+    g.fillStyle = '#7a4a3a'; g.fillRect(cx, cy + 6, 16, 18);
+    g.fillStyle = '#5a3428'; g.fillRect(cx + 12, cy + 6, 4, 18);
+    for (let k = 0; k < 3; k++) { g.fillStyle = 'rgba(0,0,0,0.2)'; g.fillRect(cx, cy + 10 + k * 5, 12, 1); }
+    g.fillStyle = '#9a6a52'; g.fillRect(cx - 1, cy + 2, 18, 5);
+    g.fillStyle = '#1a1414'; g.fillRect(cx + 2, cy + 3, 12, 3);
+    b.chimney = { x: cx + 8, y: cy + 3 - R };
+  }
+
   if (b.name && !b.isHome) {
     const label = b.name.toUpperCase();
-    g.font = 'bold 13px system-ui, sans-serif';
+    g.font = 'bold 12px system-ui, sans-serif';
     const tw = g.measureText(label).width;
     if (tw < w - 8) {
+      const ly = long ? roofH * 0.7 : roofH / 2;
       g.fillStyle = 'rgba(0,0,0,0.55)';
-      g.fillRect(w / 2 - tw / 2 - 6, h / 2 - 9, tw + 12, 18);
+      g.fillRect(w / 2 - tw / 2 - 6, ly - 9, tw + 12, 18);
       g.fillStyle = '#f5ecd6';
       g.textAlign = 'center'; g.textBaseline = 'middle';
-      g.fillText(label, w / 2, h / 2);
+      g.fillText(label, w / 2, ly);
     }
   }
   return c;
@@ -994,7 +1086,7 @@ export function render(ctx) {
     let alpha = 1;
     if (G.enemies.some((e) => !e.dead && m.buildingAt(e.x, e.y) === b) || G.npcs.some((n) => n.present && n.named && m.buildingAt(n.x, n.y) === b && dist(n.x, n.y, p.x, p.y) < 90)) alpha = 0.5;
     ctx.globalAlpha = alpha;
-    ctx.drawImage(b.roofCanvas, bx, by);
+    ctx.drawImage(b.roofCanvas, bx, by - ROOF_RISE);
     ctx.globalAlpha = 1;
   }
 
@@ -1005,8 +1097,15 @@ export function render(ctx) {
     if (b.kind === 'cover') continue;
     const x = b.cx * TILE, y = b.cy * TILE;
     if (!inView(x, y)) continue;
-    if (b.kind === 'door') drawDoor(ctx, b, x, y);
-    else drawWindow(ctx, b, x, y);
+    const bd = m.buildingAt(x + 16, y + 16);
+    const outside = bd && bd !== inside;
+    const front = outside && !b.vertical && b.cy === bd.y + bd.h - 1;
+    if (front) { if (b.kind === 'door') drawFrontDoor(ctx, b, x, y); else drawFrontWindow(ctx, b, x, y); }
+    else {
+      // Back and side walls rise with the roof, so their doors and windows do too.
+      const yy = outside ? y - ROOF_RISE : y;
+      if (b.kind === 'door') drawDoor(ctx, b, x, yy); else drawWindow(ctx, b, x, yy);
+    }
   }
 
   drawWorldWeather(ctx, vx0, vy0, vx1, vy1, G.frameDt || 1 / 60);
@@ -1110,6 +1209,61 @@ function drawDoor(ctx, b, x, y) {
   }
   ctx.restore();
   if (!b.rec.npc && (b.condition < 0.99)) bar(ctx, x + 2, y - 6, 28, 4, b.condition, b.condition < 0.35 ? '#e74c3c' : '#e0a542');
+}
+
+/** Doors and windows seen face-on in a building's front wall. */
+function drawFrontDoor(ctx, b, x, y) {
+  const sh = b.hitT > 0 ? (Math.random() - 0.5) * 3 : 0;
+  ctx.save(); ctx.translate(x + sh, y);
+  ctx.fillStyle = '#2a1e14'; ctx.fillRect(3, 0, TILE - 6, TILE - 3); // frame
+  if (b.broken) {
+    ctx.fillStyle = '#0e0a08'; ctx.fillRect(6, 2, TILE - 12, TILE - 6);
+    ctx.fillStyle = '#6b4a2b'; ctx.save(); ctx.translate(16, 18); ctx.rotate(0.5); ctx.fillRect(-11, -2, 22, 4); ctx.restore();
+    ctx.fillStyle = '#4a3220'; ctx.beginPath(); ctx.moveTo(6, 2); ctx.lineTo(12, 2); ctx.lineTo(7, 12); ctx.fill();
+  } else if (b.rec.open) {
+    ctx.fillStyle = isNight() ? '#f2c66d' : '#120d0a'; ctx.fillRect(6, 2, TILE - 12, TILE - 6);
+    ctx.fillStyle = '#7b5532'; ctx.fillRect(6, 2, 4, TILE - 6);
+  } else {
+    ctx.fillStyle = b.rec.reinforced ? '#5d4a3a' : '#7b5532'; ctx.fillRect(6, 2, TILE - 12, TILE - 6);
+    ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.fillRect(9, 5, TILE - 18, 9); ctx.fillRect(9, 17, TILE - 18, 8);
+    ctx.fillStyle = 'rgba(255,255,255,0.08)'; ctx.fillRect(9, 5, TILE - 18, 1.5);
+    ctx.fillStyle = '#d9b84a'; ctx.beginPath(); ctx.arc(TILE - 10, 16, 1.6, 0, Math.PI * 2); ctx.fill();
+    if (b.rec.reinforced) { ctx.fillStyle = '#9aa0a6'; ctx.fillRect(5, 7, TILE - 10, 3); ctx.fillRect(5, TILE - 11, TILE - 10, 3); }
+    if (b.condition < 0.66) { ctx.strokeStyle = '#1a1009'; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(9, 4); ctx.lineTo(13, 13); ctx.lineTo(10, 22); ctx.stroke(); }
+    if (b.condition < 0.33) { ctx.beginPath(); ctx.moveTo(23, 5); ctx.lineTo(18, 15); ctx.lineTo(22, 26); ctx.stroke(); }
+  }
+  ctx.fillStyle = '#5e5650'; ctx.fillRect(1, TILE - 4, TILE - 2, 4); // step
+  ctx.restore();
+  if (!b.rec.npc && b.condition < 0.99) bar(ctx, x + 2, y - 6, 28, 4, b.condition, b.condition < 0.35 ? '#e74c3c' : '#e0a542');
+}
+
+function drawFrontWindow(ctx, b, x, y) {
+  const sh = b.hitT > 0 ? (Math.random() - 0.5) * 3 : 0;
+  const night = isNight();
+  ctx.save(); ctx.translate(x + sh, y);
+  ctx.fillStyle = '#efe9dc'; ctx.fillRect(3, 4, TILE - 6, TILE - 12); // frame
+  if (b.rec.glass > 0) {
+    const gg = ctx.createLinearGradient(0, 6, 0, TILE - 10);
+    if (night) { gg.addColorStop(0, '#ffe39a'); gg.addColorStop(1, '#e8a64a'); } else { gg.addColorStop(0, '#cfe6f2'); gg.addColorStop(1, '#7fa8c0'); }
+    ctx.fillStyle = gg; ctx.fillRect(6, 7, TILE - 12, TILE - 18);
+    ctx.fillStyle = '#efe9dc'; ctx.fillRect(15, 7, 2, TILE - 18); ctx.fillRect(6, 13, TILE - 12, 2);
+    if (!night) { ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.beginPath(); ctx.moveTo(7, 8); ctx.lineTo(11, 8); ctx.lineTo(7, 12); ctx.fill(); }
+  } else {
+    ctx.fillStyle = '#0d0b0a'; ctx.fillRect(6, 7, TILE - 12, TILE - 18);
+    ctx.fillStyle = 'rgba(200,230,255,0.65)'; ctx.beginPath(); ctx.moveTo(6, 7); ctx.lineTo(12, 7); ctx.lineTo(7, 14); ctx.fill(); ctx.beginPath(); ctx.moveTo(26, 21); ctx.lineTo(26, 14); ctx.lineTo(21, 21); ctx.fill();
+  }
+  if (b.shuttered) {
+    ctx.fillStyle = '#7d858c'; ctx.fillRect(4, 5, TILE - 8, TILE - 14);
+    ctx.fillStyle = '#5b6268'; for (let k = 0; k < 4; k++) ctx.fillRect(4, 7 + k * 4, TILE - 8, 1.5);
+    ctx.fillStyle = '#c9cdd2'; ctx.fillRect(5, 6, 2, 2); ctx.fillRect(TILE - 7, TILE - 12, 2, 2);
+  } else if (b.boarded) {
+    ctx.fillStyle = '#9b7a4c'; ctx.strokeStyle = '#5a3f22'; ctx.lineWidth = 1;
+    const n = Math.max(1, Math.ceil((b.rec.boardHp / b.boardMax) * 3));
+    for (let i = 0; i < n; i++) { ctx.save(); ctx.translate(16, 13); ctx.rotate((i - 1) * 0.32); ctx.fillRect(-14, -2.5 + (i - 1) * 3, 28, 5); ctx.strokeRect(-14, -2.5 + (i - 1) * 3, 28, 5); ctx.restore(); }
+  }
+  ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(3, TILE - 8, TILE - 6, 2); // sill shadow
+  ctx.restore();
+  if (!b.rec.npc && b.condition < 0.99) bar(ctx, x + 2, y - 6, 28, 4, b.condition, b.condition < 0.35 ? '#e74c3c' : '#e0a542');
 }
 
 function drawWindow(ctx, b, x, y) {
@@ -1503,7 +1657,7 @@ function drawSmoke(ctx, m, t) {
   const hb = m.homeInfo && m.buildings.find((b) => b.id === m.homeInfo.building);
   if (hb && m.buildingAt(G.player.x, G.player.y) !== hb) {
     smokeT -= 1 / 60;
-    if (smokeT <= 0) { smokeT = 0.35; spawnSmokePuff(hb.x * TILE + hb.w * TILE - 42, hb.y * TILE + 16, 1); }
+    if (smokeT <= 0) { smokeT = 0.35; const ch = hb.chimney || { x: hb.w * TILE - 42, y: 16 }; spawnSmokePuff(hb.x * TILE + ch.x, hb.y * TILE + ch.y, 1); }
   }
   const insideHome = hb && m.buildingAt(G.player.x, G.player.y) === hb;
   for (const sm of G.smoke || []) {
