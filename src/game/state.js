@@ -40,7 +40,9 @@ const win = () => ({ kind: 'window', glass: 20, boards: false, boardHp: 0, shutt
 export function newHome(id) {
   const gate = () => ({ kind: 'door', hp: 70, baseHp: 220, reinforced: false, open: false, gate: true });
   const iron = () => ({ kind: 'door', hp: 90, baseHp: 280, reinforced: false, open: false, gate: true });
-  const openings = id === 'estate'
+  const openings = id === 'watchhouse'
+    ? { front_door: door(), back_door: door(), win_s1: win(), win_s2: win(), win_w: win(), win_e: win(), win_n: win() }
+    : id === 'estate'
     ? { gate_l: iron(), gate_r: iron(), garden_gate: { kind: 'door', hp: 160, baseHp: 160, reinforced: false, open: false, gate: true },
       front_l: door(), front_r: door(), terrace_door: door(), west_door: door(), east_door: door(),
       win_n1: win(), win_n2: win(), win_n3: win(), win_n4: win(), win_s1: win(), win_s2: win(), win_w: win(), win_e: win() }
@@ -77,7 +79,7 @@ export function newSave() {
     home: newHome('cabin'),
     pastHomes: {},
     story: { step: 'arrive', flags: {}, chapterComplete: false, done: {} },
-    rel: { ruth: 0, dee: 0, gus: 0, marcus: 0, rosa: 0, pete: 0, ingrid: 0, bo: 0, tess: 0, eleanor: 0, theo: 0, walt: 0 },
+    rel: { ruth: 0, dee: 0, gus: 0, marcus: 0, rosa: 0, pete: 0, ingrid: 0, bo: 0, tess: 0, eleanor: 0, theo: 0, walt: 0, dom: 0, angie: 0, mickey: 0 },
     quests: {},
     errands: {},
     unlocks: {},
@@ -91,7 +93,7 @@ export function newSave() {
       lastSiegeDay: -10,
       quietUntilDay: 0,
       signs: {},
-      chopped: { cabin: {}, town: {}, millbrook: {}, farm: {}, estate: {} },
+      chopped: { cabin: {}, town: {}, millbrook: {}, farm: {}, estate: {}, shorthills: {}, mansion: {} },
       picked: {},
       heatLog: [],
       discovered: [],

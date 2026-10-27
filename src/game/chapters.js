@@ -24,9 +24,14 @@ export const CHAPTERS = {
     neighbor: 'eleanor', shopkeeper: 'theo', jobContact: 'walt', jobPlace: 'the Point Yacht Club', storeName: "Park's Marina",
     hardwareName: "Park's Marina", firstStep: 'ch4_arrive',
   },
+  5: {
+    id: 5, name: 'The Mansion', place: 'Short Hills', homeMap: 'shorthills', workMap: 'shorthills', maps: ['shorthills', 'mansion'],
+    neighbor: 'dom', shopkeeper: 'angie', jobContact: 'mickey', jobPlace: "Doyle's Towing", storeName: "Marchetti's",
+    hardwareName: "Marchetti's", firstStep: 'ch5_arrive', choresNeeded: 3,
+  },
 };
 
-export const LAST_CHAPTER = 4;
+export const LAST_CHAPTER = 5;
 
 export const chapter = () => CHAPTERS[(G.s && G.s.chapter) || 1] || CHAPTERS[1];
 export const homeMapId = () => chapter().homeMap;

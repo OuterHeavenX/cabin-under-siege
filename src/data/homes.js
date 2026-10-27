@@ -10,6 +10,6 @@ export const HOMES = [
     blurb: 'A whole farmstead: a fenced yard, a gate that can be rammed, a barn and open fields for snipers.' },
   { id: 'estate', chapter: 4, name: 'The Estate', place: 'Port Whitcombe, Lake Champlain', playable: true,
     blurb: 'A lakeside manor behind a stone wall: an iron gate, formal gardens, and a dock they can land boats on.' },
-  { id: 'mansion', chapter: 5, name: 'The Mansion', place: 'TBD', playable: false,
-    blurb: 'Planned: the final confrontation with the family.' },
+  { id: 'mansion', chapter: 5, name: 'The Mansion', place: 'Short Hills, New Jersey', playable: true,
+    blurb: 'A gatekeeper\'s house on the ridge across the ravine from Leo Vescari\'s mansion. The end of the road.' },
 ];

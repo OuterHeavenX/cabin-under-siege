@@ -330,7 +330,7 @@ function journalTab() {
   }).join('');
   const favors = activeQuests().map((q) => `<div class="objective-box favor"><b>🙋 ${escapeHtml(q.title)}</b> <span class="muted">for ${escapeHtml(NPCS[q.npc].name)}</span><br>${escapeHtml(questHint(q))}</div>`).join('');
   const chores = Object.entries(ERRANDS).filter(([id, e]) => e.chore && e.chapter === G.s.chapter && errandState(id));
-  const choreBox = chores.length ? `<div class="objective-box chores"><b>🏠 Settling in</b> <span class="muted">(${chores.filter(([id]) => errandDone(id)).length}/${chores.length} — four are enough)</span>${chores.map(([id, e]) => `<div class="chore ${errandDone(id) ? 'done' : ''}">${errandDone(id) ? '☑' : '☐'} <b>${escapeHtml(e.title)}</b> — ${escapeHtml(errandDone(id) ? e.desc : stageLabel(id))}</div>`).join('')}</div>` : '';
+  const choreBox = chores.length ? `<div class="objective-box chores"><b>🏠 Settling in</b> <span class="muted">(${chores.filter(([id]) => errandDone(id)).length}/${chores.length} — ${chapter().choresNeeded || 4} are enough)</span>${chores.map(([id, e]) => `<div class="chore ${errandDone(id) ? 'done' : ''}">${errandDone(id) ? '☑' : '☐'} <b>${escapeHtml(e.title)}</b> — ${escapeHtml(errandDone(id) ? e.desc : stageLabel(id))}</div>`).join('')}</div>` : '';
   const errands = activeErrands().filter((e) => !e.chore).map((e) => `<div class="objective-box favor"><b>${e.story ? '🔎' : '🤝'} ${escapeHtml(e.title)}</b>${e.giver && !e.story ? ` <span class="muted">for ${escapeHtml(errandGiverName(e.giver))}</span>` : ''}<br>${escapeHtml(stageLabel(e.id))}</div>`).join('');
   const doneFavors = Object.entries(G.s.quests || {}).filter(([id, st]) => st.state === 'done' && QUESTS[id]).map(([id]) => QUESTS[id].title);
   const homes = HOMES.map((h) => {
@@ -776,7 +776,7 @@ const CHAPTER_END = {
     title: 'THE ESTATE',
     body: 'Nico Vescari came over the water with everything his father could buy, and the manor is still standing. His ring is in your pocket.',
     hook: 'Leo Vescari has stopped sending people. "Short Hills. My house. Come and finish this like family."',
-    next: 'Chapter 5 (the mansion) is planned for a future update. Keep playing: work the yacht club, fish the lake, help Eleanor, and hold the estate against the raids that keep coming.',
+    next: 'Chapter 5 is ready: keep playing here as long as you like, then use your car at the manor to drive home to New Jersey.',
   },
   2: {
     title: 'LARCH STREET',
@@ -796,12 +796,66 @@ export function showChapterEnd(n = 1) {
 }
 
 export function showChapterStart(n, onGo) {
-  const titles = { 2: ['LARCH STREET', 'Millbrook, Ohio — six hundred miles from Pine Hollow.'], 3: ['THE WISCONSIN FARM', 'Kettle Crossing, Wisconsin — two hundred acres and a broken gate.'], 4: ['THE ESTATE', 'Port Whitcombe, Lake Champlain — a stone wall, an iron gate, and open water.'] };
+  const titles = { 2: ['LARCH STREET', 'Millbrook, Ohio — six hundred miles from Pine Hollow.'], 3: ['THE WISCONSIN FARM', 'Kettle Crossing, Wisconsin — two hundred acres and a broken gate.'], 4: ['THE ESTATE', 'Port Whitcombe, Lake Champlain — a stone wall, an iron gate, and open water.'], 5: ['THE MANSION', 'Short Hills, New Jersey — home. Leo Vescari is a mile up the ridge.'] };
   const [t, sub] = titles[n] || ['', ''];
   const el = openModal('chapterStart', `<div class="chapter-card"><div class="ch-num">CHAPTER ${n}</div><h2>${t}</h2><p class="muted">${escapeHtml(sub)}</p>
     <p class="small">Your level, skills, money, weapons and gear come with you. Installed lights, alarms and cameras are packed back into your inventory; boards, braces and shutters stay behind.</p>
     <button class="btn big primary" data-go>Begin</button></div>`, { closable: false, cls: 'small chapter' });
   el.querySelector('[data-go]').addEventListener('click', () => { closeModal(); onGo(); });
+}
+
+const ENDINGS = {
+  justice: {
+    title: 'THE LONG ARM',
+    body: 'Leo Vescari sat in his own leather chair and waited with you until the sirens came up the drive. Agent Reyes read him his rights on the front steps, under the lights he paid for. The trial took eleven months. The ledger did the talking. Leo will die in a federal prison in Colorado, an old man nobody visits.',
+    you: 'You testified. You kept your name. And for the first time since you were nineteen, you sleep with the door unlocked.',
+  },
+  walk: {
+    title: 'THE EMPTY HOUSE',
+    body: 'You walked out of the study, down the marble stairs and out the iron gate, and nobody stopped you. Without his sons, his captains or his money, Leo was just a man in a big house. Within a year the house was for sale. Within two, nobody in Newark said his name.',
+    you: 'You never fired the last shot. Some nights you wonder if you should have. Most nights you sleep fine.',
+  },
+  blood: {
+    title: 'FATHER AND SON',
+    body: 'One shot, very loud in the quiet room. The family that raised you ended where it started — with a Corsetti and a gun. By morning the mansion was empty and the story was already moving through North Jersey: Frankie came home.',
+    you: 'Nobody ever came for you again. Nobody ever looked at you the same way, either.',
+  },
+  crown: {
+    title: 'THE HEAD OF THE TABLE',
+    body: 'Leo left Short Hills that night in the back of Mickey\'s tow truck with a one-way ticket to Palermo. Dante\'s men called you "Mr. Corsetti" by breakfast. The Vescari family was gone. The Corsetti family had a seat at every table from Newark to the shore.',
+    you: 'You ran from this life across five states and three years. It turns out you were only ever running in a circle.',
+  },
+};
+
+/** Where the people Frank met ended up. */
+function epilogue(kind) {
+  const r = (id) => relLevel((G.s.rel || {})[id] || 0);
+  const a = G.s.allies || [];
+  const out = [];
+  const ruthCame = G.s.companion && G.s.companion.ruth && G.s.companion.ruth.joined;
+  out.push(ruthCame ? 'Ruth Calloway parked Harold\'s camper behind the watch house and never moved it again. She and Father Dom play cards on Thursdays. She cheats.' : r('ruth') >= 3 ? 'Ruth Calloway still sends a pie every Christmas. Harold\'s shotgun hangs over her fireplace again.' : 'Ruth Calloway still lives at the end of the Pine Hollow road. She never did learn your real name.');
+  out.push(r('marcus') >= 3 || a.includes('marcus') ? 'Marcus Bell retired from fixing things and started fishing full time. He calls every Sunday.' : 'Marcus Bell still works Larch Street. He checks the news from Jersey sometimes.');
+  if (a.includes('ingrid') || r('ingrid') >= 2) out.push('Ingrid rebuilt the barn the Vescaris burned. The new one has a red door.');
+  if (a.includes('walt') || r('eleanor') >= 2) out.push('Eleanor Whitcombe finally sold the manor and moved into the boathouse with Walt\'s dog. She says she\'s never been happier.');
+  out.push(r('dom') >= 2 ? 'Father Dom lit a candle at St. Rose for every name in Leo\'s ledger.' : 'St. Rose\'s bell still rings at six. Father Dom still asks about you.');
+  if (a.includes('mickey') || r('mickey') >= 2) out.push(kind === 'crown' ? 'Mickey Doyle drives for the family now. He doesn\'t love it.' : 'Mickey Doyle bought a second tow truck and painted "FRANKIE" on the door.');
+  if (r('angie') >= 2) out.push('Angie Marchetti keeps your coffee on the house. Forever, she says.');
+  if (G.s.companion && G.s.companion.dog && G.s.companion.dog.owned) out.push('Duke got old and grey on a porch in New Jersey, which is exactly what a good dog deserves.');
+  return out;
+}
+
+export function showEnding(kind = 'walk') {
+  const e = ENDINGS[kind] || ENDINGS.walk;
+  const st = G.s.stats || {};
+  const el = openModal('ending', `<div class="chapter-card ending"><div class="ch-num">THE END</div><h2>${e.title}</h2>
+    <p>${escapeHtml(e.body)}</p>
+    <p class="hl">${escapeHtml(e.you)}</p>
+    <ul class="small epilogue">${epilogue(kind).map((l) => `<li>${escapeHtml(l)}</li>`).join('')}</ul>
+    <p class="small muted">Day ${G.s.time.day} · level ${st.level || 1} · ${(G.s.world && G.s.world.sieges) || 0} night${(G.s.world && G.s.world.sieges) === 1 ? '' : 's'} under siege survived · ending: ${e.title.toLowerCase()}</p>
+    <p class="small muted">CABIN UNDER SIEGE — thank you for playing. Your save stays open: keep living in Short Hills, finish the town's errands, or try Endless Siege from the title screen. Start a new game to see the other endings.</p>
+    <button class="btn big primary" data-close>Continue playing</button></div>`, { cls: 'small chapter' });
+  sfx('victory');
+  return el;
 }
 
 export { input };

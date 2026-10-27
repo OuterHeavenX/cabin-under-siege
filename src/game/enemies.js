@@ -14,6 +14,7 @@ import { homeInterior, homeMapId } from './chapters.js';
 import { checkTrap } from './home.js';
 import { diff } from './difficulty.js';
 import { weatherMods } from './weather.js';
+import { guardGoal, updateGuard } from './assault.js';
 
 let nextId = 1;
 
@@ -133,6 +134,7 @@ function goalCellFor(e, p) {
     return ex ? { cx: Math.floor(ex.x / TILE), cy: Math.floor(ex.y / TILE) } : null;
   }
   if (!e.alerted) {
+    if (e.guard) { const pt = guardGoal(e); return { cx: Math.floor(pt.x / TILE), cy: Math.floor(pt.y / TILE) }; }
     const g = entryGoal();
     if (g) return g;
   }
@@ -347,7 +349,7 @@ export function updateEnemies(dt) {
       else if (pd < 50) alertEnemy(e);
       // Searching attackers eventually start hunting (no endless stalemates).
       e.searchT = (e.searchT || 0) + dt;
-      if (e.searchT > 22 && !e.dead) alertEnemy(e);
+      if (e.searchT > 22 && !e.dead && !e.guard) alertEnemy(e);
     }
     // Player spotting unalerted attackers -> Shadow JP
     if (!e.spottedOnce && !e.alerted && canSee && pd < d.seeRadius + 40) {
@@ -416,7 +418,10 @@ export function updateEnemies(dt) {
     }
 
     e.fireCd -= dt;
-    if (!e.alerted) { followPath(e, dt, e.def.speed * 0.8); continue; }
+    if (!e.alerted) {
+      if (e.guard) { if (!updateGuard(e, dt)) followPath(e, dt, e.def.speed * 0.45); continue; }
+      followPath(e, dt, e.def.speed * 0.8); continue;
+    }
 
     // --- Alerted behaviours ---
     const [minD, maxD] = e.def.preferDist;

@@ -7,13 +7,15 @@ You are Frank Lowe — formerly Frankie Corsetti of the Vescari crime family —
 to build an honest life in a cabin outside the small town of Pine Hollow. By day you
 work, meet people and fix up the place. Some nights, the family comes for you.
 
-This build (v0.4) contains **four complete, playable chapters** plus an arcade mode:
+This build (v0.6) contains **the complete story — five playable chapters with four endings** — plus an arcade mode:
 
 1. **The Cabin** — Pine Hollow, a remote cabin and a small town.
 2. **Larch Street** — Millbrook, Ohio: a house on a quiet street, a neighbor with secrets, and Sal Benedetto.
 3. **The Wisconsin Farm** — Kettle Crossing: a whole farmstead, a crooked deputy, and Vinnie Vescari's ledger.
 4. **The Estate** — Port Whitcombe, Lake Champlain: a walled manor, an FBI agent who wants the ledger, and Nico Vescari coming over the water.
-5. **Endless Siege** — wave after wave at any home you've reached in the story.
+5. **The Mansion** — Short Hills, New Jersey: home again, a mile from Leo Vescari's walled house. The finale.
+
+Plus **Endless Siege** — wave after wave at any home you've reached in the story.
 
 ### Audio
 
@@ -37,6 +39,30 @@ than using simple beeps:
 `audio/manifest.json` — each listed sound replaces the generated one (music files
 loop per mood). See [`audio/README.md`](audio/README.md) for the sound names and
 recommended free sources.
+
+### What's new in v0.6 — Chapter 5, the finale
+
+- **Short Hills, New Jersey**: Frank comes home to an old watch house on the ridge. Millburn Avenue
+  has Marchetti's deli (Angie, whose brother Joey the family killed), St. Rose church (Father Dom,
+  who baptised Frankie), Doyle's Towing (Mickey, the job board), a bocce court and three new
+  neighbors with errands of their own. Across the ravine: the lights of Leo's study.
+- **Three acts**: settle in (3 of 4 chores) → win back the avenue (tow-yard jobs + neighbors'
+  errands) → watch the compound from three overlooks → **call in every favor** on the watch-house
+  phone. Who answers depends on the whole game: Ruth (if she came along), Marcus, Ingrid, Walt and
+  Eleanor, Mickey, Angie, and Agent Reyes if you gave her the ledger.
+- **Leo strikes first**: Carlo Bruno's attack on the watch house from four sides — the road, the
+  north lane, snipers on the ravine path and the boss from the south woods. Carlo carries the
+  mansion's floor plans.
+- **The assault**: drive up the ridge after 9 PM. The Vescari house is a walled estate with
+  guards standing posts and walking patrols. Stay unseen and they stay put; get spotted and the
+  **alarm** wakes the whole house and (unless Mickey's tow trucks block the road) sends
+  reinforcements. Each ally changes the night: Ingrid's truck rams the front gate, Walt's flares
+  pull two guards to the water, Marcus marks every guard for 90 seconds, Ruth waits in the car and
+  pulls you out once. Dante Ruggiero carries the key to Leo's study.
+- **Four endings**, chosen in Leo's study: *The Long Arm* (only if Agent Reyes is on your side),
+  *The Empty House*, *Father and Son*, and *The Head of the Table*. An epilogue tells where
+  everyone you met ended up, based on how you treated them. You can keep playing afterwards.
+- Endless Siege adds the **Watch House** site.
 
 ### What's new in v0.5 — the world gets depth
 
@@ -285,7 +311,7 @@ validation/migration, simultaneous two-finger touch (joystick + aim) in an iPhon
 landscape viewport, rotation to portrait and back, and pausing when backgrounded. It fails
 on any console error. Screenshots go to `test-output/`.
 
-Current result: **all checks pass** (see the count printed at the end of `npm test`). Run one part with `ONLY=desktop|v2|audio|v3|v4|mobile npm test` (comma-separate several). The v0.4 block covers portraits, rain, cutscenes and skipping, lasting damage, Duke, the safe room, dog handlers, loot drops and the full Chapter 4 story; the v0.3 block covers Ruth's move, Chapter 3, farm life, difficulty and Endless Siege. The v0.2 block covers buying/switching/firing the shotgun and rifle, rifle pierce, favors, shutters, traps, cameras, arsonist fire, the lieutenant's rally, weakest-point targeting, the move to Chapter 2, the full Chapter 2 story and siege, saving in Chapter 2 and migrating a version-1 save.
+Current result: **all checks pass** (see the count printed at the end of `npm test`). Run one part with `ONLY=desktop|v2|audio|v3|v4|v5|mobile npm test` (comma-separate several). The v5 block plays Chapter 5 end to end: the move to Short Hills, chores, Mickey's jobs, recon, the ally phone calls, Carlo's siege, the floor plans, the night-only drive, guards holding posts, the locked study, Ruth's rescue, Dante's key and the justice ending. The v0.4 block covers portraits, rain, cutscenes and skipping, lasting damage, Duke, the safe room, dog handlers, loot drops and the full Chapter 4 story; the v0.3 block covers Ruth's move, Chapter 3, farm life, difficulty and Endless Siege. The v0.2 block covers buying/switching/firing the shotgun and rifle, rifle pierce, favors, shutters, traps, cameras, arsonist fire, the lieutenant's rally, weakest-point targeting, the move to Chapter 2, the full Chapter 2 story and siege, saving in Chapter 2 and migrating a version-1 save.
 
 ### iPhone / iPad checklist (real device testing still needed)
 
@@ -407,8 +433,7 @@ tools/                        Dev server, smoke test, icon generator
 
 ## Future ideas (not playable yet)
 
-- **Chapter 5**: the final confrontation at Leo Vescari's mansion in Short Hills (listed in
-  the Journal as *planned*).
+- A New Game+ that carries your ending into a harder second run.
 - More enemy types (dog handler, demolition crew), a mechanic job, deeper NPC routines.
 - More upgrades: cameras, a safe room, traps, reinforced shutters, a guard dog.
 - Weather, seasons, hunger/fatigue as optional survival settings.

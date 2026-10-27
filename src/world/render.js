@@ -352,6 +352,19 @@ function drawDecor(g, d) {
       g.fillStyle = '#3e5a2a'; for (let k = 0; k < 7; k++) { g.beginPath(); g.arc(x + 6 + k * 13, y + 4 + (k % 2) * 4, 7, 0, Math.PI * 2); g.fill(); }
       g.fillStyle = '#1a1410'; g.fillRect(x + w / 2 - 14, y + h - 12, 28, 6);
       break;
+    case 'irongate':
+      if (d.rammed) {
+        // Twisted bars on the gravel where Ingrid's truck came through
+        g.strokeStyle = '#1b1b1d'; g.lineWidth = 3;
+        for (let i = 0; i < 5; i++) { g.beginPath(); g.moveTo(x + 4 + i * 12, y + 20 + (i % 2) * 6); g.lineTo(x + 10 + i * 11, y + 44 + (i % 3) * 5); g.stroke(); }
+        break;
+      }
+      g.fillStyle = '#141416'; g.fillRect(x, y + 4, w, h - 8);
+      g.fillStyle = '#2a2a2e';
+      for (let bx = x + 3; bx < x + w - 2; bx += 6) g.fillRect(bx, y - 4, 3, h + 2);
+      g.fillStyle = '#c9a227'; g.fillRect(x + w / 2 - 5, y + h / 2 - 5, 10, 10);
+      for (let bx = x + 3; bx < x + w - 2; bx += 6) { g.beginPath(); g.moveTo(bx - 1, y - 4); g.lineTo(bx + 1.5, y - 9); g.lineTo(bx + 4, y - 4); g.fill(); }
+      break;
     case 'statue':
       g.fillStyle = 'rgba(0,0,0,0.3)'; g.beginPath(); g.ellipse(x + 19, y + 22, 12, 7, 0, 0, Math.PI * 2); g.fill();
       g.fillStyle = '#8d8a84'; g.fillRect(x + 6, y + 18, 20, 10);
@@ -578,6 +591,11 @@ const LOOKS = {
   sniper: { style: 'flannel', pants: '#2f3a25', hatKind: 'cap', hatCol: '#3d4a2f' },
   handler: { style: 'coat', pants: '#2e281e', hatKind: 'cap', hatCol: '#4a3a24' },
   lieutenant: { style: 'suit', pants: '#121216', bulk: 1.2, hatKind: 'fedora', hatCol: '#0e0e12' },
+  dom: { style: 'suit', pants: '#141418', tie: '#f4f2ee', glasses: true, bald: true },
+  angie: { style: 'apron', pants: '#2b2b38', female: true, curls: true },
+  mickey: { style: 'work', pants: '#2e3a30', bulk: 1.1 },
+  leo: { style: 'suit', pants: '#111114', tie: '#8b0000' },
+  guard: { style: 'suit', pants: '#16161a', tie: '#2a2a2a' },
 };
 
 function drawPerson(ctx, e, o) {
@@ -977,7 +995,7 @@ export function render(ctx) {
     if (pk.kind === 'cash') { ctx.fillStyle = '#3fae5a'; ctx.fillRect(pk.x - 7, pk.y - 5 + bob, 14, 8); ctx.fillStyle = '#c9f2d0'; ctx.fillRect(pk.x - 2, pk.y - 3 + bob, 4, 4); }
     else if (pk.kind === 'ammo') { ctx.fillStyle = '#c9a43a'; ctx.fillRect(pk.x - 6, pk.y - 5 + bob, 12, 9); ctx.fillStyle = '#5a4a1a'; ctx.fillRect(pk.x - 6, pk.y - 5 + bob, 12, 3); }
     else if (pk.kind === 'bandage') { ctx.fillStyle = '#f2f2f2'; ctx.fillRect(pk.x - 6, pk.y - 6 + bob, 12, 12); ctx.fillStyle = '#d63b3b'; ctx.fillRect(pk.x - 1.5, pk.y - 4 + bob, 3, 8); ctx.fillRect(pk.x - 4, pk.y - 1.5 + bob, 8, 3); }
-    else if (pk.kind === 'note' || pk.kind === 'burner' || pk.kind === 'ledger' || pk.kind === 'signet') { ctx.fillStyle = pk.kind === 'burner' ? '#222' : pk.kind === 'ledger' ? '#6b3e1f' : pk.kind === 'signet' ? '#d4af37' : '#f6eed8'; ctx.fillRect(pk.x - 6, pk.y - 8 + bob, 12, 14); ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(pk.x, pk.y + bob, 13 + Math.sin(t * 6) * 2, 0, Math.PI * 2); ctx.stroke(); }
+    else if (pk.kind === 'note' || pk.kind === 'burner' || pk.kind === 'ledger' || pk.kind === 'signet' || pk.kind === 'blueprint' || pk.kind === 'study_key') { ctx.fillStyle = pk.kind === 'burner' ? '#222' : pk.kind === 'ledger' ? '#6b3e1f' : pk.kind === 'signet' || pk.kind === 'study_key' ? '#d4af37' : pk.kind === 'blueprint' ? '#3a6ea5' : '#f6eed8'; ctx.fillRect(pk.x - 6, pk.y - 8 + bob, 12, 14); ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(pk.x, pk.y + bob, 13 + Math.sin(t * 6) * 2, 0, Math.PI * 2); ctx.stroke(); }
     else if (pk.kind === 'item') {
       ctx.fillStyle = '#2a1414'; ctx.strokeStyle = '#e0474a'; ctx.lineWidth = 1.5;
       ctx.fillRect(pk.x - 9, pk.y - 9 + bob, 18, 16); ctx.strokeRect(pk.x - 9, pk.y - 9 + bob, 18, 16);

@@ -976,7 +976,7 @@ if (want('v3')) {
   await ev(page, () => window.__cus.quitToTitle()); await sleep(300);
   await page.click('#t-endless'); await sleep(300);
   const sites = await ev(page, () => [...document.querySelectorAll('[data-site]')].map((b) => b.dataset.site + (b.disabled ? '-locked' : '')));
-  check('v3 Endless Siege: cabin open, later homes locked until reached in the story', sites.join(',') === 'cabin,house-locked,farm-locked,estate-locked', sites.join(','));
+  check('v3 Endless Siege: cabin open, later homes locked until reached in the story', sites.join(',') === 'cabin,house-locked,farm-locked,estate-locked,watchhouse-locked', sites.join(','));
   await page.click('[data-site="cabin"]'); await sleep(500);
   await ev(page, () => { window.__cus.G.endless.breakT = 0.3; window.__cus.G.player.invuln = 99999; });
   for (let w = 0; w < 2; w++) {
@@ -1091,6 +1091,85 @@ if (want('v4')) {
   await talk4('eleanor'); await sleep(600);
   check('Ch4: chapter 4 ending screen', await C(() => window.__cus.G.s.story.done[4] === true) && (await page.textContent('#modal-root')).includes('THE ESTATE'));
   await page.screenshot({ path: OUT + 'v4-chapter4-end.png' });
+  await ctx.close();
+}
+
+/* ================================================================== */
+/* Chapter 5: Short Hills and the Vescari mansion                       */
+/* ================================================================== */
+if (want('v5')) {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  const page = await ctx.newPage();
+  watch(page, 'v5');
+  await page.goto(URL);
+  await page.waitForSelector('#t-new');
+  await page.click('#t-new'); await sleep(250);
+  await page.click('[data-diff-pick="normal"]'); await sleep(600);
+  await skipDialogues(page);
+  const C = (fn, a) => ev(page, fn, a);
+  await C(() => { const c = window.__cus; c.G.s.companion.ruth.joined = true; c.G.s.chapter = 4; c.G.s.story.done = { 1: true, 2: true, 3: true, 4: true }; c.G.s.rel.ingrid = 60; c.G.s.rel.walt = 60; c.G.s.choices.reyes = 'copy'; c.G.s.choices.marcusHelp = true; c.dbg.moveToChapter(5); });
+  await sleep(400); await page.click('[data-go]').catch(() => {}); await sleep(400); await skipDialogues(page);
+  const r5 = await C(() => ({ ch: window.__cus.G.s.chapter, map: window.__cus.G.map.id, step: window.__cus.G.s.story.step, home: window.__cus.G.s.home.id, ruth: window.__cus.G.npcs.some((n) => n.id === 'ruth') }));
+  check('v5 Move to Chapter 5 (Short Hills) — Ruth comes along', r5.ch === 5 && r5.map === 'shorthills' && r5.step === 'ch5_arrive' && r5.home === 'watchhouse' && r5.ruth, JSON.stringify(r5));
+  await page.screenshot({ path: OUT + 'v5-shorthills.png' });
+  await tp(page, 49, 10); await sleep(700); await skipDialogues(page);
+  check('Ch5: step into the watch house', (await step(page)) === 'ch5_meet_dom', await step(page));
+  const talk = async (id, pick = 0) => { await C((id) => { const c = window.__cus; const d = c.G.npcs.find((n) => n.id === id); c.G.player.x = d.x; c.G.player.y = d.y + 24; c.dbg.input.mouse.inside = false; c.G.player.angle = -Math.PI / 2; }, id); await sleep(250); await pressE(page); await sleep(250); await skipDialogues(page, pick); };
+  await C(() => { window.__cus.G.s.time.minute = 10 * 60; }); await sleep(300);
+  await talk('dom');
+  check('Ch5: Father Dom sets you up with chores', (await step(page)) === 'ch5_settle', await step(page));
+  for (const id of ['ch5_lane', 'ch5_gen', 'ch5_pantry']) { await C((id) => { const c = window.__cus; c.G.s.errands[id] = { state: 'done' }; c.G.events.emit('errandDone', id); }, id); await sleep(150); await skipDialogues(page); }
+  check('Ch5: three chores -> find work', (await step(page)) === 'ch5_find_work', await step(page));
+  await talk('mickey');
+  check('Ch5: Mickey Doyle hires you', (await step(page)) === 'ch5_trust', await step(page));
+  for (let i = 0; i < 3; i++) { await C(() => { const c = window.__cus; c.G.s.jobsDone = (c.G.s.jobsDone || 0) + 1; c.G.events.emit('jobDone', 'tow'); }); await sleep(120); await skipDialogues(page); }
+  for (const id of ['ferraro_rosary', 'vito_bocce']) { await C((id) => { const c = window.__cus; c.G.s.errands[id] = { state: 'done' }; c.G.events.emit('errandDone', id); }, id); await sleep(150); await skipDialogues(page); }
+  check('Ch5: the avenue trusts you -> recon', (await step(page)) === 'ch5_recon', await step(page));
+  await C(() => { const c = window.__cus; c.G.s.errands.recon = { state: 'done' }; c.G.events.emit('errandDone', 'recon'); }); await sleep(200); await skipDialogues(page);
+  check('Ch5: recon -> call in your favors', (await step(page)) === 'ch5_allies', await step(page));
+  await C(() => { const c = window.__cus; c.G.s.rel.mickey = 30; const ph = c.G.map.props.find((p) => p.id === 'phone'); c.G.player.x = ph.x; c.G.player.y = ph.y + 20; c.dbg.input.mouse.inside = false; c.G.player.angle = -Math.PI / 2; });
+  await sleep(250); await pressE(page); await sleep(300); await skipDialogues(page);
+  const al = await C(() => window.__cus.G.s.allies || []);
+  check('Ch5: the phone calls bring allies (Ruth, Marcus, Ingrid, Walt, Mickey, Reyes)', (await step(page)) === 'ch5_siege' && ['ruth', 'marcus', 'ingrid', 'walt', 'mickey', 'reyes'].every((a) => al.includes(a)), JSON.stringify(al));
+  // Leo strikes first: the siege at the watch house
+  await C(() => { const c = window.__cus; c.G.player.x = 49 * 32; c.G.player.y = 10 * 32; c.G.player.invuln = 99999; c.G.s.time.minute = 21 * 60 + 58; });
+  for (let i = 0; i < 80 && !(await C(() => window.__cus.G.siegeActive)); i++) await sleep(150);
+  await skipDialogues(page);
+  check('Ch5: Carlo Bruno attacks the watch house', await C(() => window.__cus.G.siegeActive && window.__cus.G.siege.plan.bossName === 'Carlo Bruno'));
+  await C(() => { window.__cus.G.siege.t = 49; }); await sleep(800);
+  for (let i = 0; i < 200; i++) { await sleep(200); await C(() => { const c = window.__cus; if (c.G.cutscene) c.dbg.skipCutscene(); for (const e of c.G.enemies) if (!e.dead && !e.gone) c.dbg.damageEnemy(e, 9999, 0, 'bullet'); }); if (!(await C(() => window.__cus.G.siegeActive))) break; }
+  await sleep(2200); await page.locator('#modal-root button', { hasText: 'Continue' }).click().catch(() => {}); await sleep(4300); await skipDialogues(page);
+  await C(() => { const pk = window.__cus.G.pickups.find((p) => p.kind === 'blueprint'); if (pk) { window.__cus.G.player.x = pk.x; window.__cus.G.player.y = pk.y; } }); await sleep(900); await skipDialogues(page);
+  check('Ch5: Carlo\'s floor plans -> the assault', (await step(page)) === 'ch5_assault', await step(page));
+  // Daylight: the car refuses; after dark it drives up the ridge.
+  await C(() => { const c = window.__cus; c.G.s.time.minute = 13 * 60; const car = c.G.map.props.find((p) => p.kind === 'car'); c.G.player.x = car.x; c.G.player.y = car.y + 30; c.G.player.angle = -Math.PI / 2; }); await sleep(300);
+  const dayLabel = await C(() => window.__cus.G.interactTarget && window.__cus.G.interactTarget.label);
+  check('Ch5: no assault in daylight', /Wait for dark/.test(dayLabel || ''), dayLabel);
+  await C(() => { window.__cus.G.s.time.minute = 22 * 60; window.__cus.G.player.invuln = 0; }); await sleep(300);
+  await pressE(page); await sleep(3500); await skipDialogues(page);
+  const m5 = await C(() => { const c = window.__cus; return { map: c.G.map.id, assault: !!c.G.assault, guards: c.G.enemies.filter((e) => e.guard && !e.dead).length, gate: !!c.G.map.gateRammed, dante: c.G.enemies.some((e) => e.name === 'Dante Ruggiero') }; });
+  check('Ch5: the mansion — guards on post, Ingrid rams the gate, Walt draws off two', m5.map === 'mansion' && m5.assault && m5.gate && m5.dante && m5.guards === 12, JSON.stringify(m5));
+  await page.screenshot({ path: OUT + 'v5-mansion.png' });
+  // Guards stay on post until they see you.
+  await C(() => { const c = window.__cus; c.G.player.x = 3 * 32; c.G.player.y = 40 * 32; }); await sleep(1500);
+  check('Ch5: guards hold their posts while you stay unseen', await C(() => !window.__cus.G.assault.alarm));
+  // The study is locked without Dante's key.
+  await C(() => { const c = window.__cus; c.G.player.invuln = 99999; c.G.player.x = 34.5 * 32; c.G.player.y = 27.6 * 32; c.dbg.input.mouse.inside = false; c.G.player.angle = -Math.PI / 2; for (const e of c.G.enemies) if (e.name !== 'Dante Ruggiero') { e.dead = true; } }); await sleep(250);
+  await pressE(page); await sleep(300);
+  check('Ch5: Leo\'s study is locked', await C(() => { const m = window.__cus.G.map; return m.blockers.get(m.idx(34, 26)).rec.locked; }));
+  // Ruth's second chance
+  const rev = await C(() => { const c = window.__cus; c.G.player.invuln = 0; c.G.player.hp = 5; c.dbg.damagePlayer(50, c.G.player.x + 50, c.G.player.y, 'bullet'); return { dead: c.G.player.dead, hp: c.G.player.hp }; });
+  check('Ch5: Ruth runs in from the car once', !rev.dead && rev.hp > 0, JSON.stringify(rev));
+  await C(() => { const c = window.__cus; c.G.player.invuln = 99999; const d = c.G.enemies.find((e) => e.name === 'Dante Ruggiero'); c.dbg.damageEnemy(d, 99999, 0, 'bullet'); }); await sleep(400);
+  await C(() => { const pk = window.__cus.G.pickups.find((p) => p.kind === 'study_key'); if (pk) { window.__cus.G.player.x = pk.x; window.__cus.G.player.y = pk.y; } }); await sleep(700);
+  await C(() => { const c = window.__cus; c.G.player.x = 34.5 * 32; c.G.player.y = 27.6 * 32; c.G.player.angle = -Math.PI / 2; }); await sleep(250);
+  await pressE(page); await sleep(300);
+  check('Ch5: Dante\'s key opens the study', await C(() => { const m = window.__cus.G.map; const r = m.blockers.get(m.idx(34, 26)).rec; return !r.locked && r.open && window.__cus.G.s.inv.study_key >= 1; }));
+  await talk('leo', 0);
+  await sleep(800);
+  const end = await C(() => ({ done: window.__cus.G.s.story.done[5], ending: window.__cus.G.s.ending, step: window.__cus.G.s.story.step }));
+  check('Ch5: Leo\'s study — the justice ending (Reyes)', end.done === true && end.ending === 'justice' && end.step === 'ch5_free' && (await page.textContent('#modal-root')).includes('THE LONG ARM'), JSON.stringify(end));
+  await page.screenshot({ path: OUT + 'v5-ending.png' });
   await ctx.close();
 }
 

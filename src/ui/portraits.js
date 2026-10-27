@@ -27,6 +27,11 @@ const PEOPLE = {
   sal: { skin: '#d8a882', hair: '#2a2a2a', style: 'balding', grey: 0.5, clothes: 'suit', cloth: '#30302e', shirt: '#e0dccf', tie: '#5a1a1a', glasses: true, brow: 'sly', age: 0.65 },
   vinnie: { skin: '#d6a47e', hair: '#1a1410', style: 'slick', clothes: 'suit', cloth: '#3a1414', shirt: '#151515', tie: null, mustache: true, brow: 'sly', age: 0.4, scar: true },
   leo: { skin: '#d9ad8c', hair: '#e0e0e0', style: 'slick', clothes: 'suit', cloth: '#111114', shirt: '#f0ece2', tie: '#8b0000', brow: 'stern', age: 0.85, jaw: 1.05, rose: true },
+  dom: { skin: '#e2b494', hair: '#d8d8d8', style: 'balding', clothes: 'suit', cloth: '#16161a', shirt: '#16161a', tie: null, collar: true, glasses: true, brow: 'kind', age: 0.85 },
+  angie: { skin: '#d8a882', hair: '#2b1a12', style: 'curly', clothes: 'apron', cloth: '#8a2a2a', brow: 'stern', age: 0.45, earrings: true, lips: '#9a2a33', female: true },
+  mickey: { skin: '#e8b898', hair: '#9a6a4a', style: 'short', grey: 0.3, clothes: 'work', cloth: '#2f4a3a', mustache: true, brow: 'stern', age: 0.6, jaw: 1.15 },
+  dante: { skin: '#cf9a74', hair: '#202020', style: 'slick', grey: 0.4, clothes: 'suit', cloth: '#1a1a1e', shirt: '#d8d2c4', tie: '#2a2a2a', glasses: true, brow: 'stern', age: 0.6 },
+  carlo: { skin: '#c88f6a', hair: '#151515', style: 'buzz', clothes: 'coat', cloth: '#2a2420', shirt: '#cfc8b8', beard: 'short', brow: 'stern', age: 0.45, jaw: 1.3 },
   nico: { skin: '#dcae88', hair: '#141010', style: 'slick', clothes: 'suit', cloth: '#18181c', shirt: '#2a0c0c', tie: null, stubble: true, brow: 'sly', age: 0.25, scar: false },
 };
 
@@ -36,7 +41,8 @@ const ALIASES = {
   'Marcus Bell': 'marcus', 'Rosa Delgado': 'rosa', 'Pete Kowalski': 'pete', 'Ingrid Haugen': 'ingrid', 'Bo Lindqvist': 'bo', 'Tess Albright': 'tess',
   'Man in a Grey Coat': 'stranger', 'Deputy Carl Mott': 'deputy', 'Leo Vescari': 'leo', 'Big Carmine': 'carmine', 'Sal Benedetto': 'sal',
   'Vinnie Vescari': 'vinnie', 'Nico Vescari': 'nico', 'Eleanor Whitcombe': 'eleanor', 'Theo Park': 'theo', 'Walt Bishop': 'walt',
-  'Agent Dana Reyes': 'reyes', 'Special Agent Dana Reyes': 'reyes', 'Voice': 'stranger',
+  'Agent Dana Reyes': 'reyes', 'Father Dominic Russo': 'dom', 'Father Dom': 'dom', 'Angela "Angie" Marchetti': 'angie', 'Angie Marchetti': 'angie', 'Angie': 'angie',
+  'Mickey Doyle': 'mickey', 'Dante Ruggiero': 'dante', 'Carlo Bruno': 'carlo', 'Special Agent Dana Reyes': 'reyes', 'Voice': 'stranger',
 };
 
 export function portraitId(who) {
@@ -217,6 +223,7 @@ function drawClothes(g, p, cx, S) {
   switch (p.clothes) {
     case 'suit': case 'coat':
       v(p.shirt || '#ddd', 0.1, 0.22);
+      if (p.collar) { g.fillStyle = '#f4f2ee'; g.fillRect(cx - 6, top - S * 0.035, 12, 7); }
       if (p.tie) { g.fillStyle = p.tie; g.beginPath(); g.moveTo(cx - 5, top); g.lineTo(cx + 5, top); g.lineTo(cx + 7, S); g.lineTo(cx - 7, S); g.closePath(); g.fill(); }
       g.strokeStyle = shade(p.cloth, -0.6); g.lineWidth = 2.5;
       g.beginPath(); g.moveTo(cx - S * 0.12, top - S * 0.03); g.lineTo(cx - S * 0.05, S); g.moveTo(cx + S * 0.12, top - S * 0.03); g.lineTo(cx + S * 0.05, S); g.stroke();

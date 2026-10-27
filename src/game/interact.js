@@ -18,6 +18,7 @@ import { addJP, addXP } from './progression.js';
 import { addThreat } from './siege.js';
 import { sfx } from '../audio.js';
 import { inCombat } from './player.js';
+import { tryStudyDoor, endAssault } from './assault.js';
 
 let travelFn = null;
 export function setTravel(fn) { travelFn = fn; }
@@ -127,6 +128,7 @@ function carAction() {
   if (G.s.chapter === 1 && G.map.id === 'cabin' && drive && drive.state === 'active') {
     return { label: 'A fallen pine blocks the driveway — chop it, or walk the east road to town', short: 'CAR', action: () => toast('The pine across the driveway has to go before the car can. (Or walk: the road east leads to Pine Hollow.)', 'warn', 3.5) };
   }
+  if (G.s.chapter === 5) return mansionCar();
   const opts = [];
   if (ch.maps.length > 1) {
     const toWork = G.map.id === ch.homeMap;
@@ -137,6 +139,27 @@ function carAction() {
   if (!opts.length) return { label: 'Your car (everything here is within walking distance)', short: 'CAR', action: () => toast(`Everything in ${ch.place} is within walking distance.`, 'info') };
   if (opts.length === 1) return { label: opts[0].label, short: 'DRIVE', action: opts[0].action, prio: canLeave ? 3 : 0 };
   return { label: 'Your car: 2 options', short: 'DRIVE', action: () => openActions('Your Car', opts), prio: 3 };
+}
+
+/** Chapter 5: the only drive that matters is up the ridge. */
+function mansionCar() {
+  const st = G.s.story;
+  const h = Math.floor(G.s.time.minute / 60);
+  const dark = h >= 21 || h < 4;
+  if (G.map.id === 'mansion') {
+    if (G.assault && G.assault.alarm && G.enemies.some((e) => !e.dead && !e.gone && e.alerted)) return { label: 'Not with the whole house shooting at you', short: 'CAR', action: () => toast('They\'d shoot out the tires. Deal with them first.', 'danger') };
+    return { label: 'Drive back to the watch house (20 min)', short: 'DRIVE', prio: 2, action: () => {
+      endAssault();
+      for (const e of G.enemies) { e.gone = true; e.alerted = false; }
+      travelFn && travelFn('shorthills', 'car');
+    } };
+  }
+  if (st.step === 'ch5_assault') {
+    if (!dark) return { label: 'Wait for dark (after 9 PM) to drive up to the Vescari house', short: 'CAR', action: () => toast('Not in daylight. Sleep or wait until after 9 PM.', 'warn', 3) };
+    return { label: 'Drive up the ridge to the Vescari mansion', short: 'DRIVE', prio: 3, action: () => travelFn && travelFn('mansion', 'car') };
+  }
+  if ((st.done || {})[5]) return { label: 'Your car. Short Hills is home now.', short: 'CAR', action: () => toast('No more running. Short Hills is home.', 'info') };
+  return { label: 'Your car (everything in Short Hills is within walking distance)', short: 'CAR', action: () => toast('Everything in Short Hills is within walking distance. The ridge can wait.', 'info') };
 }
 
 function blockerAction(b) {
@@ -169,6 +192,7 @@ function blockerAction(b) {
 
 function toggleDoor(b) {
   if (b.broken) return;
+  if (b.rec.locked && tryStudyDoor(b)) return;
   if (b.rec.open) {
     // Don't close a door on top of someone.
     const cx = b.cx * TILE + 16, cy = b.cy * TILE + 16;

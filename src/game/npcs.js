@@ -40,6 +40,7 @@ export function spawnNpcs() {
     const followsYou = id === 'ruth' && G.s.chapter > 1 && ruthJoined() && m.id === homeMapId();
     if (def.map !== m.id && !followsYou) continue;
     if (id === 'ruth' && G.s.chapter > 1 && !followsYou) continue;
+    if (id === 'leo' && (G.s.story.done || {})[5] && G.s.ending !== 'walk') continue; // the study is empty now
     const spot = scheduleSpot(def, minute);
     const p = m.points[spot.pt];
     G.npcs.push({ id, def, named: true, x: p.x, y: p.y, radius: 10, angle: Math.PI / 2, spot: spot.pt, path: null, walkPhase: 0, idleT: 0 });

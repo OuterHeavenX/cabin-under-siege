@@ -30,6 +30,7 @@ export function canSaveNow() {
   if (!G.s || !G.player) return 'No game in progress.';
   if (G.endless) return 'Endless Siege runs aren\'t saved — your story save is untouched.';
   if (G.siegeActive) return 'You can\'t save during an attack.';
+  if (G.assault) return 'You can\'t save inside the Vescari house.';
   if (G.enemies.some((e) => !e.dead && !e.gone)) return 'You can\'t save with attackers nearby.';
   if (G.player.dead || G.transition) return 'You can\'t save right now.';
   return null;
@@ -111,7 +112,7 @@ export function migrate(data) {
     else d.inv[k] = Math.min(ITEMS[k].cap, Math.floor(d.inv[k]));
   }
   d.skills = Array.isArray(d.skills) ? [...new Set(d.skills.filter((s) => SKILLS[s]))] : [];
-  const mapsByChapter = { 1: ['cabin', 'town'], 2: ['millbrook'], 3: ['farm'], 4: ['estate'] };
+  const mapsByChapter = { 1: ['cabin', 'town'], 2: ['millbrook'], 3: ['farm'], 4: ['estate'], 5: ['shorthills', 'mansion'] };
   if (!mapsByChapter[d.chapter]) d.chapter = 1;
   if (!mapsByChapter[d.chapter].includes(d.player.map)) d.player.map = mapsByChapter[d.chapter][0];
   if (!Array.isArray(d.home.traps)) d.home.traps = [];

@@ -898,3 +898,214 @@ export function buildEstateMap(home) {
   };
   return m;
 }
+
+/* ------------------------------------------------------------------ */
+/* Chapter 5: Short Hills — Millburn Avenue and the watch house        */
+/* ------------------------------------------------------------------ */
+export function buildShortHillsMap(home) {
+  const W = 72, H = 50;
+  const m = new GameMap('shorthills', W, H, 'Short Hills');
+  const rnd = seeded(7300);
+  m.stone = new Set();
+  // Millburn Avenue runs east-west; a lane climbs to the watch house; Old Short Hills Road on the north edge.
+  m.fillGround(0, 16, 58, 2, GR.ROAD);
+  m.fillGround(0, 15, 40, 1, GR.SIDEWALK); m.fillGround(0, 18, 40, 1, GR.SIDEWALK);
+  m.fillGround(0, 2, W, 2, GR.ROAD);
+  m.fillGround(36, 4, 2, 12, GR.ROAD);
+  // The ravine on the east edge: rocks below an iron railing, Leo's house somewhere beyond.
+  for (let cy = 0; cy < H; cy++) {
+    for (let cx = 63; cx < W; cx++) { m.setGround(cx, cy, GR.DIRT); if (cx > 64 && rnd() < 0.5) m.setSolid(cx, cy, SO.ROCK); }
+    if (cy > 4) m.setSolid(62, cy, SO.FENCE);
+  }
+
+  // The watch house (home): front door faces the lane.
+  building(m, { id: 'watchhouse', name: 'The Watch House', x: 44, y: 6, w: 10, h: 8, roof: '#3a3436', isHome: true });
+  const o = home.openings;
+  addDoor(m, 'front_door', 48, 13, o.front_door, 'Front Door');
+  addDoor(m, 'back_door', 48, 6, o.back_door, 'Back Door');
+  addWindow(m, 'win_s1', 45, 13, o.win_s1, 'Front-Left Window');
+  addWindow(m, 'win_s2', 51, 13, o.win_s2, 'Front-Right Window');
+  addWindow(m, 'win_w', 44, 9, o.win_w, 'West Window', true);
+  addWindow(m, 'win_e', 53, 9, o.win_e, 'East Window', true);
+  addWindow(m, 'win_n', 51, 6, o.win_n, 'Back Window');
+  m.fillGround(46, 14, 5, 2, GR.PORCH);
+  m.fillSolid(45, 7, 2, 2, SO.FURN); m.decor.push({ kind: 'bed', x: 45, y: 7, w: 2, h: 2 });
+  addProp(m, { id: 'bed', kind: 'bed', x: 46 * TILE, y: 9.6 * TILE, label: 'Bed', r: 42 });
+  m.fillSolid(51, 7, 2, 1, SO.FURN); m.decor.push({ kind: 'stove', x: 51, y: 7, w: 2, h: 1 });
+  addProp(m, { id: 'stove', kind: 'stove', x: 52 * TILE, y: 8.6 * TILE, label: 'Stove', r: 40 });
+  m.fillSolid(52, 10, 1, 2, SO.FURN); m.decor.push({ kind: 'workbench', x: 52, y: 10, w: 1, h: 2 });
+  addProp(m, { id: 'workbench', kind: 'workbench', x: 51.4 * TILE, y: 11 * TILE, label: 'Workbench', r: 40 });
+  m.fillSolid(47, 9, 3, 2, SO.FURN); m.decor.push({ kind: 'table', x: 47, y: 9, w: 3, h: 2 });
+  m.decor.push({ kind: 'phone', x: 49, y: 7, w: 1, h: 1 });
+  addProp(m, { id: 'phone', kind: 'phone', x: 49.5 * TILE, y: 7.8 * TILE, label: 'Telephone', r: 40 });
+  m.decor.push({ kind: 'rug', x: 46, y: 11, w: 3, h: 1 });
+  // Car on the lane, mailbox and phone pole
+  m.fillSolid(54, 15, 2, 3, SO.CAR);
+  addProp(m, { id: 'car', kind: 'car', x: 55 * TILE, y: 16.5 * TILE, label: 'Your Car', r: 64 });
+  m.setSolid(42, 15, SO.FURN); m.decor.push({ kind: 'mailbox', x: 42, y: 15, w: 1, h: 1 });
+  addProp(m, { id: 'mailbox', kind: 'mailbox', x: 42.5 * TILE, y: 15.6 * TILE, label: 'Mailbox', r: 40 });
+  m.setSolid(40, 15, SO.WALL); m.decor.push({ kind: 'pole', x: 40, y: 15, w: 1, h: 1 });
+  addProp(m, { id: 'phonepole', kind: 'phonepole', x: 40.5 * TILE, y: 15.6 * TILE, label: 'Phone Line', r: 48 });
+  // Overlooks along the railing (recon)
+  for (const [cx, cy] of [[61, 9], [61, 26], [61, 41]]) { m.decor.push({ kind: 'statue', x: cx, y: cy, w: 1, h: 1 }); }
+
+  // Millburn Avenue, north side: Marchetti's, St. Rose, Doyle's Towing
+  building(m, { id: 'marchetti', name: "Marchetti's Deli & Hardware", x: 2, y: 7, w: 10, h: 8, roof: '#5a2a2a', floor: GR.TILEFLOOR, shop: 'angie' });
+  addDoor(m, 'marchetti_door', 7, 14, npcDoorRec(), 'Store Door');
+  addWindow(m, 'march_w1', 4, 14, npcWinRec(), 'Window'); addWindow(m, 'march_w2', 10, 14, npcWinRec(), 'Window');
+  m.fillSolid(3, 10, 6, 1, SO.COUNTER); m.decor.push({ kind: 'counter', x: 3, y: 10, w: 6, h: 1 });
+  m.fillSolid(3, 8, 8, 1, SO.FURN); m.decor.push({ kind: 'shelf', x: 3, y: 8, w: 8, h: 1 });
+  addProp(m, { id: 'store_counter', kind: 'counter', x: 6 * TILE, y: 11.6 * TILE, label: 'Store Counter', r: 44 });
+  building(m, { id: 'strose', name: 'St. Rose of Lima', x: 14, y: 5, w: 10, h: 10, roof: '#4a4a52' });
+  addDoor(m, 'church_door', 19, 14, npcDoorRec(), 'Church Door');
+  m.fillSolid(16, 7, 6, 4, SO.FURN); m.decor.push({ kind: 'pews', x: 16, y: 7, w: 6, h: 4 });
+  building(m, { id: 'doyle', name: "Doyle's Towing", x: 26, y: 8, w: 9, h: 7, roof: '#3a4a3a' });
+  addDoor(m, 'doyle_door', 30, 14, npcDoorRec(), 'Garage Door');
+  m.setSolid(33, 15, SO.FURN); m.decor.push({ kind: 'board', x: 33, y: 15, w: 1, h: 1 });
+  addProp(m, { id: 'jobboard', kind: 'jobboard', x: 33.5 * TILE, y: 15.7 * TILE, label: 'Job Board', r: 44 });
+  m.fillGround(26, 4, 9, 4, GR.GRAVEL);
+  m.fillSolid(27, 5, 3, 2, SO.CAR); m.decor.push({ kind: 'tractor', x: 27, y: 5, w: 3, h: 2 });
+  addProp(m, { id: 'logdrop', kind: 'logdrop', x: 32 * TILE, y: 6 * TILE, label: 'Yard Drop-off', r: 54 });
+  addProp(m, { id: 'shed', kind: 'shed', x: 25.4 * TILE, y: 6 * TILE, label: 'Parts Crates', r: 46 });
+  m.fillSolid(33, 4, 2, 2, SO.FURN); m.decor.push({ kind: 'crate', x: 33, y: 4, w: 2, h: 2 });
+  // South side: the rectory, Angie's house, Mickey's house, Vito's bocce court
+  building(m, { id: 'rectory', name: 'The Rectory', x: 15, y: 20, w: 7, h: 6, roof: '#4a4a52' });
+  addDoor(m, 'rectory_door', 18, 20, npcDoorRec(), 'Rectory Door');
+  building(m, { id: 'angie_house', name: 'Marchetti House', x: 3, y: 21, w: 7, h: 6, roof: '#7a4a3a' });
+  addDoor(m, 'angie_door', 6, 21, npcDoorRec(), "Angie's Door");
+  building(m, { id: 'mickey_house', name: 'Doyle House', x: 26, y: 21, w: 7, h: 6, roof: '#3a4a5a' });
+  addDoor(m, 'mickey_door', 29, 21, npcDoorRec(), "Mickey's Door");
+  m.fillGround(36, 22, 6, 3, GR.GRAVEL); m.decor.push({ kind: 'crate', x: 36, y: 25, w: 1, h: 1 });
+
+  // Trees: woods on the ridge and south of the avenue
+  const clear = [[0, 1, 71, 4], [0, 14, 58, 19], [1, 4, 35, 15], [42, 4, 58, 19], [2, 19, 42, 28], [56, 4, 62, 48], [34, 4, 39, 16]];
+  const avoid = (cx, cy) => clear.some((r) => rectHas(r, cx, cy));
+  scatterTrees(m, rnd, 0, 19, 61, H - 1, 0.3, avoid);
+  scatterTrees(m, rnd, 38, 4, 61, 15, 0.22, avoid);
+  scatterTrees(m, rnd, 0, 0, 61, 1, 0.3, avoid);
+
+  m.spawns = {
+    west: { ...P(0.5, 16.5), label: 'Millburn Avenue' },
+    north: { ...P(52, 2.5), label: 'Old Short Hills Road' },
+    northwest: { ...P(0.5, 2.5), label: 'the north road' },
+    south: { ...P(40, 49), label: 'the south woods' },
+    ravine: { ...P(60, 47.5), label: 'the ravine path' },
+  };
+  m.points = {
+    start: P(55, 18.6), arrive: P(55, 18.6), car: P(53.5, 16.5),
+    cabin_in: P(49, 10.5), porch: P(48.5, 15), cabin_front: P(48.5, 14.6), bed: P(46, 10.4),
+    dom_church: P(19.5, 15.4), dom_porch: P(18.5, 19.4), dom_home: P(18.5, 23),
+    angie_store: P(6, 9.4), angie_porch: P(6.5, 20.4), angie_home: P(6.5, 24),
+    mickey_yard: P(31, 7.2), mickey_porch: P(29.5, 20.4), mickey_home: P(29.5, 24),
+    store_door: P(7.5, 15.6), stranger: P(23, 18.6), deputy: P(48.5, 15.4), reyes: P(57, 18.6),
+    recovery: P(18.5, 23), footprints: P(43.6, 11), strange_car: P(52, 2.5), woodlot: P(20, 34),
+    ruth_c_day: P(56, 12), ruth_c_eve: P(50.5, 15), ruth_c_home: P(49.5, 11.6),
+    walk_a: P(13, 15.4), walk_b: P(36, 18.6), walk_c: P(24, 18.6), walk_d: P(38.5, 23.5),
+    overlook_n: P(60.4, 9.5), overlook_m: P(60.4, 26.5), overlook_s: P(60.4, 41.5),
+  };
+  m.deliveryTargets = {
+    church: { name: 'St. Rose of Lima', ...P(19.5, 15.4) },
+    rectory: { name: 'the rectory', ...P(18.5, 19.4) },
+    angie_house: { name: 'the Marchetti house', ...P(6.5, 20.4) },
+    doyle_house: { name: 'the Doyle house', ...P(29.5, 20.4) },
+  };
+  m.repairTargets = {
+    bocce: { name: 'the bocce court', ...P(39, 25.6) },
+    bell: { name: 'the church bell rope', ...P(17.5, 15.4) },
+    tow: { name: 'the tow truck winch', ...P(28.5, 7.6) },
+    sign: { name: "Marchetti's sign", ...P(9.5, 15.6) },
+  };
+  m.discover = [
+    { id: 'watch', name: 'The Watch House', ...P(49, 10), r: 160 },
+    { id: 'millburn', name: 'Millburn Avenue', ...P(18, 17), r: 200 },
+    { id: 'ravine', name: 'The Ravine', ...P(62, 26), r: 140 },
+  ];
+  m.lights = [{ x: 48.5 * TILE, y: 15 * TILE, r: 130 }];
+  for (let cx = 4; cx < 56; cx += 8) m.lights.push({ x: cx * TILE, y: 15.3 * TILE, r: 120, street: true });
+  for (const b of m.buildings) m.lights.push({ x: (b.x + b.w / 2) * TILE, y: (b.y + b.h / 2) * TILE, r: Math.max(b.w, b.h) * 16, building: b.id });
+  m.homeInfo = {
+    building: 'watchhouse', interior: { cx: 49, cy: 10 }, allyPost: P(46.5, 12.2),
+    flood: { x: 48.5 * TILE, y: 15 * TILE, r: 300 }, porch: { x: 48.5 * TILE, y: 15 * TILE, r: 100 },
+  };
+  return m;
+}
+
+/* ------------------------------------------------------------------ */
+/* Chapter 5: Leo Vescari's mansion (the assault)                       */
+/* ------------------------------------------------------------------ */
+export function buildMansionMap() {
+  const W = 70, H = 56;
+  const m = new GameMap('mansion', W, H, 'The Vescari Mansion');
+  const rnd = seeded(1931);
+  m.stone = new Set(); m.hedge = new Set();
+  const stone = (cx, cy) => { m.setSolid(cx, cy, SO.WALL); m.stone.add(m.idx(cx, cy)); };
+  const hedge = (cx, cy) => { m.setSolid(cx, cy, SO.FENCE); m.hedge.add(m.idx(cx, cy)); };
+  // Road outside, the drive, the wall
+  m.fillGround(0, 2, W, 2, GR.ROAD);
+  m.fillGround(34, 4, 2, 15, GR.GRAVEL);
+  m.fillGround(28, 10, 14, 5, GR.GRAVEL);
+  m.fillSolid(33, 11, 4, 3, SO.ROCK); m.decor.push({ kind: 'fountain', x: 33, y: 11, w: 4, h: 3 });
+  for (let cx = 6; cx <= 63; cx++) { if (cx !== 34 && cx !== 35) stone(cx, 7); stone(cx, 52); }
+  for (let cy = 7; cy <= 52; cy++) { if (cy !== 40 && cy !== 41) stone(6, cy); stone(63, cy); }
+  m.fillGround(0, 39, 7, 4, GR.DIRT); // the service road comes in from the west
+  // The front gate: closed iron unless someone rams it
+  m.gateCells = [[34, 7], [35, 7]];
+  for (const [cx, cy] of m.gateCells) stone(cx, cy);
+  m.decor.push({ kind: 'irongate', x: 34, y: 7, w: 2, h: 1 });
+
+  // The mansion
+  building(m, { id: 'mansion', name: 'Vescari Mansion', x: 20, y: 18, w: 30, h: 19, roof: '#2a2a30' });
+  // interior walls: study (north centre), hall, wings
+  for (let cx = 21; cx <= 48; cx++) if (cx < 34 || cx > 35) m.setSolid(cx, 26, SO.WALL);
+  for (let cy = 19; cy <= 25; cy++) { m.setSolid(30, cy, SO.WALL); m.setSolid(39, cy, SO.WALL); }
+  for (let cy = 27; cy <= 35; cy++) { if (cy !== 31 && cy !== 32) { m.setSolid(28, cy, SO.WALL); m.setSolid(41, cy, SO.WALL); } }
+  m.study = { cx: 34, cy: 26 };
+  addDoor(m, 'study_door', 34, 26, { kind: 'door', hp: 100, reinforced: true, open: false, npc: true, locked: true }, 'Study Door');
+  m.setSolid(35, 26, SO.WALL);
+  addDoor(m, 'front_l', 34, 36, { ...npcDoorRec(), open: true }, 'Front Doors');
+  addDoor(m, 'front_r', 35, 36, { ...npcDoorRec(), open: true }, 'Front Doors');
+  addDoor(m, 'west_door', 20, 31, { ...npcDoorRec(), open: true }, 'Side Door', true);
+  addDoor(m, 'east_door', 49, 31, { ...npcDoorRec(), open: true }, 'Kitchen Door', true);
+  for (const cx of [23, 27, 31, 38, 42, 46]) addWindow(m, 'mw' + cx, cx, 36, npcWinRec(), 'Window');
+  for (const cx of [24, 45]) addWindow(m, 'mn' + cx, cx, 18, npcWinRec(), 'Window');
+  // furnishings
+  m.fillSolid(32, 20, 6, 2, SO.FURN); m.decor.push({ kind: 'table', x: 32, y: 20, w: 6, h: 2 }); // Leo's desk
+  m.fillSolid(31, 19, 1, 3, SO.FURN); m.decor.push({ kind: 'shelf', x: 31, y: 19, w: 1, h: 3 });
+  m.fillSolid(38, 19, 1, 3, SO.FURN); m.decor.push({ kind: 'shelf', x: 38, y: 19, w: 1, h: 3 });
+  m.decor.push({ kind: 'rug', x: 32, y: 22, w: 6, h: 3 }, { kind: 'rug', x: 31, y: 28, w: 8, h: 6 });
+  m.fillSolid(22, 28, 5, 3, SO.FURN); m.decor.push({ kind: 'table', x: 22, y: 28, w: 5, h: 3 });
+  m.fillSolid(43, 28, 5, 1, SO.FURN); m.decor.push({ kind: 'stove', x: 43, y: 28, w: 5, h: 1 });
+  m.fillSolid(22, 20, 1, 5, SO.FURN); m.decor.push({ kind: 'shelf', x: 22, y: 20, w: 1, h: 5 });
+  m.fillSolid(42, 21, 5, 2, SO.FURN); m.decor.push({ kind: 'table', x: 42, y: 21, w: 5, h: 2 });
+
+  // Grounds: hedges, pool, garage, guard hut
+  for (let cx = 10; cx <= 59; cx++) if ((cx < 30 || cx > 40) && cx % 7 !== 0) { hedge(cx, 43); }
+  for (let cy = 46; cy <= 50; cy++) for (let cx = 40; cx <= 52; cx++) { m.setGround(cx, cy, GR.WATER); m.setSolid(cx, cy, SO.WATER); }
+  building(m, { id: 'garage', name: 'Garage', x: 52, y: 10, w: 9, h: 6, roof: '#2a2a30' });
+  addDoor(m, 'garage_door', 56, 15, { ...npcDoorRec(), open: true }, 'Garage');
+  building(m, { id: 'guardhut', name: 'Guard Hut', x: 38, y: 8, w: 4, h: 3, roof: '#2a2a30' });
+  addDoor(m, 'hut_door', 39, 10, { ...npcDoorRec(), open: true }, 'Hut Door');
+  for (const [cx, cy] of [[30, 5], [39, 5]]) { m.setSolid(cx, cy, SO.ROCK); m.decor.push({ kind: 'statue', x: cx, y: cy, w: 1, h: 1 }); }
+  m.fillSolid(12, 30, 2, 3, SO.CAR); m.decor.push({ kind: 'boat', x: 12, y: 29, w: 3, h: 1 });
+
+  const clear = [[0, 1, 69, 6], [7, 8, 62, 51], [0, 37, 8, 44]];
+  const avoid = (cx, cy) => clear.some((r) => rectHas(r, cx, cy));
+  scatterTrees(m, rnd, 0, 4, W - 1, H - 1, 0.32, avoid);
+  [[10, 12], [58, 22], [14, 46], [24, 46], [56, 40], [12, 22]].forEach(([cx, cy]) => addTree(m, cx, cy, 'oak'));
+
+  m.spawns = { west: { ...P(0.5, 40.5), label: 'the service road' }, north: { ...P(34.5, 2.5), label: 'the front gate' } };
+  m.points = {
+    start: P(2.5, 40.5), arrive: P(2.5, 40.5), car: P(2.5, 38.6), front: P(34.5, 4.6),
+    study: P(34.5, 23.6), leo: P(35, 22.6), dante: P(34.5, 30),
+    g_gate1: P(33, 9.5), g_gate2: P(37, 9.5), g_drive: P(35, 16.5), g_west1: P(12, 15), g_west2: P(12, 34), g_east1: P(57, 20),
+    g_east2: P(57, 38), g_south1: P(18, 48), g_south2: P(32, 48), g_pool: P(55, 45), g_hall1: P(30, 33), g_hall2: P(39, 33),
+    g_kitchen: P(45, 33), g_dining: P(24, 33), g_wingw: P(25, 22), g_winge: P(44, 24), g_terrace: P(35, 40), g_garage: P(55, 17.5),
+    stranger: P(2, 2.5),
+  };
+  m.lights = [{ x: 35 * TILE, y: 12 * TILE, r: 170 }, { x: 35 * TILE, y: 38 * TILE, r: 150 }, { x: 55 * TILE, y: 18 * TILE, r: 120 }, { x: 46 * TILE, y: 45 * TILE, r: 140 }];
+  for (const cx of [14, 26, 44, 56]) m.lights.push({ x: cx * TILE, y: 9 * TILE, r: 110, street: true });
+  for (const b of m.buildings) m.lights.push({ x: (b.x + b.w / 2) * TILE, y: (b.y + b.h / 2) * TILE, r: Math.max(b.w, b.h) * 12, building: b.id });
+  m.discover = [{ id: 'mansion', name: 'The Vescari Mansion', ...P(35, 27), r: 260 }];
+  m.props.push({ id: 'car', kind: 'car', x: 2.5 * TILE, y: 37.5 * TILE, label: 'Your Car', r: 64 });
+  return m;
+}

@@ -98,6 +98,14 @@ export const ITEMS = {
     name: 'Burner Phone', icon: '📱', cat: 'Story', cap: 1, sell: 0, story: true,
     desc: 'Taken from Sal Benedetto. One saved number, labeled only "L".',
   },
+  blueprint: {
+    name: 'Mansion Floor Plan', icon: '🗺', cat: 'Story', cap: 1, sell: 0, story: true,
+    desc: 'Carlo Bruno\'s copy of the Vescari mansion plans: the guard posts, the service gate, and Leo\'s study.',
+  },
+  study_key: {
+    name: 'Brass Key', icon: '🗝', cat: 'Story', cap: 1, sell: 0, story: true,
+    desc: 'Dante Ruggiero\'s key to Leo Vescari\'s study.',
+  },
   signet: {
     name: 'Vescari Signet Ring', icon: '💍', cat: 'Story', cap: 1, sell: 0, story: true,
     desc: 'Leo\'s father\'s gold ring, taken from Nico Vescari on the dock.',
@@ -226,6 +234,13 @@ SHOPS.theo = {
   name: "Park's Marina & Provisions",
   owner: 'theo',
   stock: [...SHOPS.rosa.stock.map((s) => ({ ...s, price: Math.round(s.price * 1.1) }))],
+};
+
+// Chapter 5: Marchetti's Deli & Hardware, Millburn Avenue.
+SHOPS.angie = {
+  name: "Marchetti's Deli & Hardware",
+  owner: 'angie',
+  stock: [...SHOPS.rosa.stock.map((s) => ({ ...s, price: Math.round(s.price * 1.05) }))],
 };
 
 // Stove recipes (cooking).

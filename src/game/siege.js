@@ -63,6 +63,17 @@ export function makeRaidPlan(size, kind = 'raid') {
 
 export function storyPlan() {
   const ch = G.s.choices || {};
+  if (G.s.chapter === 5) {
+    const waves = [
+      { dir: 'west', types: ['truck', 'handler', 'gunman'], delay: 0 },
+      { dir: 'north', types: ['gunman', 'enforcer', 'scout'], delay: 15 },
+      { dir: 'ravine', types: ['sniper', 'sniper', 'scout'], delay: 30 },
+      { dir: 'south', types: ['lieutenant', 'enforcer', 'arsonist', 'gunman'], delay: 48, boss: 0 },
+    ];
+    if (ch.reyes === 'give') waves[1].types.pop();
+    if (ch.reyes === 'keep') waves[3].types.push('enforcer');
+    return { kind: 'story', hpMult: 1.3, bossName: 'Carlo Bruno', bossItem: 'blueprint', waves };
+  }
   if (G.s.chapter === 4) {
     const waves = [
       { dir: 'west', types: ['truck', 'handler'], delay: 0 },
@@ -277,6 +288,8 @@ const BOSS_LINES = {
   'Sal "the Knife" Benedetto': ['Leo\'s accountant', '"Nobody walks away from the books, Frankie. Nobody."'],
   'Vinnie Vescari': ['Leo\'s nephew', '"You took something of ours. I\'m here to collect."'],
   'Nico Vescari': ['Leo\'s son', '"My father sends his love. I came to deliver it."'],
+  'Carlo Bruno': ['Leo\'s last captain', '"Welcome home, Frankie. Short Hills is a nice place to be buried."'],
+  'Dante Ruggiero': ['Leo\'s right hand', '"Twenty years I watched you sit at his table. Tonight you don\'t leave it."'],
 };
 function bossEntrance(e) {
   const [role, line] = BOSS_LINES[e.name] || ['', ''];
@@ -393,6 +406,21 @@ export function handleDefeat() {
     return;
   }
   const w = G.s.world;
+  if (G.assault) {
+    const lost = Math.min(150, Math.floor(G.s.money * diff().loss));
+    sfx('defeat');
+    setMusic('night');
+    G.assault = null;
+    showDefeat({
+      lost,
+      rescuer: 'Mickey',
+      text: 'Somebody dragged you out through the service road and threw you in the back of a tow truck. You woke up on a cot at Doyle\'s Towing with Mickey Doyle holding an ice pack to your head. "You went up there alone? You crazy Corsetti."',
+      story: false,
+      onContinue: () => recoverFromDefeat({ lost, story: false, onCabin: false, assault: true }),
+    });
+    w.defeats++;
+    return;
+  }
   const story = G.siege && G.siege.plan.kind === 'story';
   const lost = Math.min(150, Math.floor(G.s.money * diff().loss));
   sfx('defeat');
@@ -429,7 +457,7 @@ export function handleDefeat() {
   w.defeats++;
 }
 
-function recoverFromDefeat({ lost, story, onCabin }) {
+function recoverFromDefeat({ lost, story, onCabin, assault }) {
   const w = G.s.world;
   const plan = G.siege ? G.siege.plan : null;
   G.siegeActive = false;
@@ -459,5 +487,5 @@ function recoverFromDefeat({ lost, story, onCabin }) {
   if (count('bandage') < 2) { addItem('bandage', 2, true); gifts.push('2 bandages'); }
   w.quietUntilDay = G.s.time.day + 1;
   if (story && plan) scheduleSiege(plan, G.s.time.day, 22 * 60);
-  G.events.emit('recovered', { onCabin, gifts, story });
+  G.events.emit('recovered', { onCabin, gifts, story, assault });
 }

@@ -20,6 +20,7 @@ import { banner, toast } from '../ui/hud.js';
 import { sfx } from '../audio.js';
 import { saveGame } from './save.js';
 import { choose } from '../util.js';
+import { chapter } from './chapters.js';
 import { hasSkill } from './state.js';
 
 const T = (x, y) => ({ x: x * TILE, y: y * TILE });
@@ -134,6 +135,94 @@ export const ERRANDS = {
     done: [],
     reward: { xp: 40, jp: ['shadow', 12] },
   },
+
+  /* ---------------- Chapter 5, act 1: coming home ---------------- */
+  ch5_lane: {
+    chapter: 5, chore: true, title: 'The Overgrown Lane',
+    desc: 'Nobody has driven up to the watch house in twenty years. A dead oak lies across the lane.',
+    stages: [{ type: 'chop', map: 'shorthills', at: [56.5, 19.6], n: 6, label: 'Cut up the dead oak across the lane' }],
+    done: [{ who: 'Frank', text: 'Lane\'s clear. From the porch you can see the lights of Leo\'s house across the ravine.' }],
+    reward: { xp: 25, jp: ['survivor', 6], items: { wood: 4 } },
+  },
+  ch5_gen: {
+    chapter: 5, chore: true, title: 'Dead Generator',
+    desc: 'Edward Whitcombe kept a generator behind the watch house. It hasn\'t run since the nineties.',
+    stages: [{ type: 'repair', map: 'shorthills', at: [49.5, 4.8], hits: 4, wood: 2, label: 'Get the old generator running (Toolkit + 2 wood)' }],
+    done: [{ who: 'Frank', text: 'It coughs, it shudders, and the lights come on. If Leo cuts the power, he\'ll have to try harder.' }],
+    reward: { xp: 30, jp: ['handyman', 8] },
+  },
+  ch5_pantry: {
+    chapter: 5, chore: true, title: 'Groceries from Marchetti\'s',
+    desc: 'The watch house has a fridge full of nothing. Angie Marchetti\'s deli is on Millburn Avenue.',
+    stages: [{ type: 'buy', what: 'food', n: 3, shop: 'angie', label: 'Buy 3 groceries at Marchetti\'s' }],
+    done: [{ who: 'Angie Marchetti', text: 'Three sandwiches. You always did eat like a man about to be arrested.' }],
+    reward: { xp: 20, rel: ['angie', 8], jp: ['neighbor', 4] },
+  },
+  ch5_candle: {
+    chapter: 5, chore: true, title: 'A Candle for Mom',
+    desc: 'Rosa Corsetti is buried behind St. Rose. You never came to the funeral.',
+    stages: [{ type: 'visit', map: 'shorthills', at: [19.5, 15.4], label: 'Light a candle at St. Rose for your mother', lines: [
+      { who: 'Frank', text: 'Thirty-one candles in the rack. One of them has a little card under it: R.C. — every Friday.' },
+      { who: 'Frank', text: '...Sorry, Ma. I\'m home. For a little while.' },
+    ] }],
+    done: [],
+    reward: { xp: 30, rel: ['dom', 10], jp: ['neighbor', 6] },
+  },
+  /* ---------------- Chapter 5, act 2: the avenue ---------------- */
+  ferraro_rosary: {
+    chapter: 5, giver: 'folk12', title: 'Mrs. Ferraro\'s Rosary',
+    desc: 'Mrs. Ferraro dropped her mother\'s rosary somewhere on the way to Mass.',
+    offer: [{ who: 'Mrs. Ferraro', text: 'Rosa Corsetti\'s boy! Help an old woman. My mother\'s rosary — I had it at the bakery, I had it at the church, and now I don\'t have it.' }],
+    stages: [
+      { type: 'find', map: 'shorthills', spots: [[12.5, 18.6], [24.5, 19.4], [38.5, 26.5], [21.5, 27.5]], label: 'Find Mrs. Ferraro\'s rosary' },
+      { type: 'return', label: 'Bring the rosary back to Mrs. Ferraro' },
+    ],
+    found: 'Pearl beads and a silver cross, caught in a storm grate. Still warm from the sun.',
+    done: [{ who: 'Mrs. Ferraro', text: 'God bless you. Your mother would be so proud. Here — I made too many pizzelle. I always make too many pizzelle.' }],
+    reward: { money: 20, xp: 30, jp: ['neighbor', 8], items: { sandwich: 2 } },
+  },
+  paulie_papers: {
+    chapter: 5, giver: 'folk13', title: 'The Paper Route',
+    desc: 'Paulie\'s bike has a flat and the Star-Ledger waits for no one.',
+    offer: [{ who: 'Paulie the paperboy', text: 'Mister, my bike\'s busted and Mr. Doyle and Father Dom both get the paper. Mr. Doyle yells. Father Dom prays at you. Which is worse?' }],
+    stages: [
+      { type: 'visit', map: 'shorthills', at: [29.5, 20.4], label: 'Drop a paper at the Doyle house' },
+      { type: 'visit', map: 'shorthills', at: [18.5, 19.4], label: 'Drop a paper at the rectory', lines: [{ who: 'Frank', text: 'Front page: "ESSEX COUNTY GRAND JURY CONVENES." Somebody in Short Hills isn\'t sleeping well.' }] },
+      { type: 'return', label: 'Tell Paulie the papers are delivered' },
+    ],
+    done: [{ who: 'Paulie the paperboy', text: 'You\'re a lifesaver! Here\'s three bucks. That\'s the whole tip economy of Short Hills, mister.' }],
+    reward: { money: 3, xp: 25, jp: ['neighbor', 6] },
+  },
+  vito_bocce: {
+    chapter: 5, giver: 'folk14', title: 'The Bocce Court',
+    desc: 'Old Vito\'s bocce court has a broken backboard. The Sunday tournament is sacred.',
+    offer: [{ who: 'Old Vito', text: 'Corsetti! I played bocce with your grandfather. He cheated. Fix my backboard and I won\'t tell anyone.' }],
+    stages: [
+      { type: 'repair', map: 'shorthills', at: [39, 25.6], hits: 3, wood: 2, label: 'Fix the bocce backboard (Toolkit + 2 wood)' },
+      { type: 'return', label: 'Tell Old Vito the court is ready' },
+    ],
+    done: [{ who: 'Old Vito', text: 'Beautiful. Straight as a judge. ...Not one of Leo\'s judges. Here, my old service pistol rounds. Korea. Still good.' }],
+    reward: { money: 10, xp: 30, jp: ['handyman', 6], items: { ammo: 16 } },
+  },
+  /* ---------------- Chapter 5, act 2: recon ---------------- */
+  recon: {
+    chapter: 5, story: true, title: 'Eyes on the House',
+    desc: 'Watch Leo\'s compound from the ravine railing.',
+    stages: [
+      { type: 'visit', map: 'shorthills', at: [60.4, 9.5], label: 'Watch the front gate from the north overlook', lines: [
+        { who: 'Frank', text: 'Front gate: iron, electric, two men in a hut. They change shifts at midnight. Nobody\'s getting through that without a truck.' },
+      ] },
+      { type: 'visit', map: 'shorthills', at: [60.4, 26.5], label: 'Watch the house from the middle overlook', lines: [
+        { who: 'Frank', text: 'The study light is on. Second floor of nothing — Leo never liked stairs. North side, center. Dante Ruggiero sits outside it like a dog.' },
+      ] },
+      { type: 'visit', map: 'shorthills', at: [60.4, 41.5], label: 'Watch the grounds from the south overlook', lines: [
+        { who: 'Frank', text: 'A service road on the west side, by the pool house. One gap in the wall. Dogs. More men than he needs.' },
+        { who: 'Frank', text: 'I can\'t do this alone. Time to call in every favor I have.' },
+      ] },
+    ],
+    done: [],
+    reward: { xp: 50, jp: ['shadow', 15] },
+  },
 };
 
 const est = () => G.s.errands || (G.s.errands = {});
@@ -173,7 +262,7 @@ export function activeErrands() {
 
 export function choresStatus() {
   const ids = Object.keys(ERRANDS).filter((id) => ERRANDS[id].chore && ERRANDS[id].chapter === G.s.chapter);
-  return { ids, done: ids.filter(errandDone).length };
+  return { ids, done: ids.filter(errandDone).length, need: chapter().choresNeeded || 4 };
 }
 
 export function townErrandsDone() {
@@ -318,7 +407,7 @@ export function errandWaypoint(filter = () => true) {
       if (pt) return { ...pt, label: shortName(e.giver) };
       continue;
     }
-    if (st.type === 'buy') { const pt = G.maps.town && G.maps.town.points.store_door; if (pt) return { map: 'town', ...pt, label: 'Marsh General' }; continue; }
+    if (st.type === 'buy') { const wm = chapter().workMap; const pt = G.maps[wm] && G.maps[wm].points.store_door; if (pt) return { map: wm, ...pt, label: chapter().storeName }; continue; }
     const at = st.type === 'find' ? e.rec.spot : st.at;
     if (at) return { map: st.map, ...T(...at), label: e.title };
   }
@@ -331,8 +420,9 @@ export function errandGiverWaypoint() {
     if (!e.offer || e.chapter !== G.s.chapter || est()[id]) continue;
     const n = G.npcs.find((x) => x.id === e.giver && x.present);
     if (n) return { map: G.map.id, x: n.x, y: n.y, label: shortName(e.giver) };
-    const folk = (TOWNSFOLK.town || []).find((f) => f.id === e.giver);
-    if (folk && G.maps.town) return { map: 'town', ...G.maps.town.points[folk.route[0]], label: folk.name };
+    const wm = chapter().workMap;
+    const folk = (TOWNSFOLK[wm] || []).find((f) => f.id === e.giver);
+    if (folk && G.maps[wm]) return { map: wm, ...G.maps[wm].points[folk.route[0]], label: folk.name };
   }
   return null;
 }

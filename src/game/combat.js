@@ -189,9 +189,9 @@ function collect(pk) {
     const got = addItem(pk.item, pk.amount, true);
     if (got <= 0) return;
     toast(`Taken from the body: ${ITEMS[pk.item].name}${got > 1 ? ' ×' + got : ''}`, 'item', 2.5);
-  } else if (pk.kind === 'ledger' || pk.kind === 'signet') {
+  } else if (pk.kind === 'ledger' || pk.kind === 'signet' || pk.kind === 'blueprint' || pk.kind === 'study_key') {
     addItem(pk.kind, 1, true);
-    G.events.emit(pk.kind === 'ledger' ? 'ledgerFound' : 'signetFound');
+    G.events.emit(`${pk.kind}Found`);
   }
   pk.taken = true;
   sfx(pk.kind === 'cash' ? 'coin' : 'pickup');

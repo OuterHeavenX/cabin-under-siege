@@ -2,7 +2,9 @@
 import { G, newSave, isNight } from './game/state.js';
 import { TILE } from './config.js';
 import { clamp, dist, fmtClock, escapeHtml } from './util.js';
-import { buildCabinMap, buildTownMap, buildMillbrookMap, buildFarmMap, buildEstateMap } from './world/mapgen.js';
+import { buildCabinMap, buildTownMap, buildMillbrookMap, buildFarmMap, buildEstateMap, buildShortHillsMap, buildMansionMap } from './world/mapgen.js';
+import { startAssault, updateAssault, endAssault } from './game/assault.js';
+import { callAllies } from './game/story.js';
 import { chapter, homeMapId, workMapId, atHome, LAST_CHAPTER } from './game/chapters.js';
 import { QUESTS, questWaypoint } from './game/quests.js';
 import { newHome } from './game/state.js';
@@ -84,6 +86,8 @@ const MAP_BUILDERS = {
   millbrook: () => buildMillbrookMap(G.s.home),
   farm: () => buildFarmMap(G.s.home),
   estate: () => buildEstateMap(G.s.home),
+  shorthills: () => buildShortHillsMap(G.s.home),
+  mansion: () => buildMansionMap(),
 };
 
 function buildMaps() {
@@ -114,7 +118,7 @@ export function loadMap(id, pos) {
   G.map = G.maps[id];
   G.enemies = [];
   G.bullets = [];
-  G.pickups = G.pickups.filter((p) => (p.kind === 'note' || p.kind === 'burner' || p.kind === 'ledger' || p.kind === 'signet') && p.map === id);
+  G.pickups = G.pickups.filter((p) => (p.kind === 'note' || p.kind === 'burner' || p.kind === 'ledger' || p.kind === 'signet' || p.kind === 'blueprint' || p.kind === 'study_key') && p.map === id);
   G.particles = [];
   G.floaters = [];
   G.fires = []; G.lobs = []; G.casings = []; G.smoke = []; G.boats = [];
@@ -135,7 +139,7 @@ function travel(target, mode) {
   if (G.siegeActive || inCombat() || G.enemies.some((e) => !e.dead && !e.gone)) { toast('You can\'t leave while you\'re under attack!', 'danger'); return; }
   const mins = mode === 'car' ? 20 : 60;
   if (mode === 'car') sfx('car');
-  const text = target === workMapId() ? `Driving to ${chapter().place}…` : 'Heading home…';
+  const text = target === 'mansion' ? 'Up the ridge to the Vescari house…' : target === workMapId() && target !== homeMapId() ? `Driving to ${chapter().place}…` : 'Heading home…';
   G.transition = {
     t: 0, fade: 0, text, phase: 'out',
     mid: () => {
@@ -197,6 +201,7 @@ function update(dt) {
   updateEffects(dt);
   updateNpcs(dt);
   updateDog(dt);
+  updateAssault(dt);
   updateJobs(dt);
   if (!G.endless) { updateStory(dt); checkDiscovery(); }
 
@@ -267,7 +272,9 @@ function computeHudInfo(dt) {
   if (G.siegeActive) {
     const pending = G.siege ? G.siege.plan.waves.slice(G.siege.waveIdx).reduce((a, w) => a + w.types.length, 0) : 0;
     danger = `UNDER ATTACK — ${alive} attacker${alive === 1 ? '' : 's'}${pending ? ` (+${pending} coming)` : ''}`;
-  } else if (alive) danger = `${alive} attacker${alive === 1 ? '' : 's'} nearby`;
+  } else if (G.assault && !G.assault.alarm) danger = null; // stealth: the objective line is enough
+  else if (G.assault) danger = alive ? `ALARM — ${alive} guard${alive === 1 ? '' : 's'} hunting you` : null;
+  else if (alive) danger = `${alive} attacker${alive === 1 ? '' : 's'} nearby`;
   else if (s.world.siege && s.world.siege.warned) danger = `Attack expected ~${fmtClock(s.world.siege.minute)}. Get ready!`;
   const q = quickItem();
   // Waypoint
@@ -388,10 +395,18 @@ function initEvents() {
   initHomeEvents();
   initStoryEvents();
   G.events.on('playerDown', () => handleDefeat());
-  G.events.on('recovered', ({ onCabin, gifts, story }) => {
+  G.events.on('recovered', ({ onCabin, gifts, story, assault }) => {
     G.transition = null;
     const m = onCabin ? G.maps[homeMapId()] : G.maps[workMapId()];
     loadMap(m.id, m.points.recovery);
+    if (assault) {
+      playDialogue([
+        { who: 'Mickey Doyle', text: 'They\'ll have patched the holes by tonight. And they\'ll be waiting.' },
+        { who: 'Frank', text: 'Then I go back tonight. After dark.' },
+      ]);
+      saveGame('recover', { force: true });
+      return;
+    }
     const who = NPCS[onCabin ? chapter().neighbor : chapter().shopkeeper].name;
     const lines = [{ who, text: onCabin ? 'Easy, easy. You\'ve got stitches in places you don\'t want to know about. You\'ll live.' : 'Morning, sunshine. You owe me a mop.' }];
     if (gifts.length) lines.push({ who, text: `I left you some things: ${gifts.join(' and ')}. Don't argue.` });
@@ -412,6 +427,11 @@ function initEvents() {
     if (!G.sleeping) banner(`Day ${day} begins.`, 'info', 3);
   });
   G.events.on('mapLoaded', (id) => {
+    if (id !== 'mansion') endAssault();
+    else if (G.s.story.step === 'ch5_assault') {
+      startAssault();
+      if (G.map.gateRammed) { if (!G.map.gateRedrawn) { G.map.gateRedrawn = true; G.map.groundCanvas = buildGroundCanvas(G.map); } const f = G.map.points.front; G.player.x = f.x; G.player.y = f.y + 40; G.camera.x = f.x; G.camera.y = f.y; }
+    }
     // Never lose the story note when leaving the cabin.
     if (id === 'cabin' && G.s.story.step === 'search_body' && count('note') === 0 && !G.pickups.some((p) => p.kind === 'note')) {
       const p = G.maps.cabin.points.porch;
@@ -458,7 +478,7 @@ function moveToChapter(n) {
   s.pastHomes[old.id || 'cabin'] = { leftOnDay: s.time.day };
   s.chapter = n;
   unlockEndlessFor(n);
-  s.home = newHome(n === 4 ? 'estate' : n === 3 ? 'farm' : n === 2 ? 'house' : 'cabin');
+  s.home = newHome(n === 5 ? 'watchhouse' : n === 4 ? 'estate' : n === 3 ? 'farm' : n === 2 ? 'house' : 'cabin');
   s.job = null;
   s.story.step = chapter().firstStep;
   s.story.flags = {};
@@ -481,7 +501,7 @@ function moveToChapter(n) {
   saveGame('move', { force: true });
   showChapterStart(n, () => {
     const hi = m.homeInfo && m.homeInfo.interior;
-    const place = { 2: ['MILLBROOK, OHIO', 'A quiet street. A house with a past.'], 3: ['KETTLE CROSSING', 'Two hundred acres, one broken gate.'], 4: ['WHITCOMBE ESTATE', 'Old money. High walls. Open water.'] }[n] || ['', ''];
+    const place = { 2: ['MILLBROOK, OHIO', 'A quiet street. A house with a past.'], 3: ['KETTLE CROSSING', 'Two hundred acres, one broken gate.'], 4: ['WHITCOMBE ESTATE', 'Old money. High walls. Open water.'], 5: ['SHORT HILLS', 'Home. The Vescari house is a mile up the ridge.'] }[n] || ['', ''];
     if (hi) playCutscene({ focus: { x: hi.cx * TILE + 16, y: hi.cy * TILE + 16 }, zoom: 0.8, title: place[0], sub: place[1], hold: 2, sting: null, onEnd: () => banner(`New objective: ${objectiveText()}`, 'objective', 5) });
     else banner(`New objective: ${objectiveText()}`, 'objective', 5);
   });
@@ -599,7 +619,7 @@ function boot() {
   // Test/debug handle (harmless in production; used by the automated smoke test).
   window.__cus = {
     G, newGame, continueGame, travel, loadMap, saveGame, quitToTitle,
-    dbg: { closeAll: () => closeAllModals(), birdCall, renderOffline, musicBar, sfx, audioDebug, input, openingStrength, homeMapId, openMenu, startFire, damageEnemy, spawnEnemy, startSiege, makeRaidPlan, scheduleSiege, addSign, addItem, addXP, addJP, buySkill, derived, damagePlayer, count, moveToChapter, storyPlan, skipCutscene, endCutscene, setWeather },
+    dbg: { closeAll: () => closeAllModals(), birdCall, renderOffline, musicBar, sfx, audioDebug, input, openingStrength, homeMapId, openMenu, startFire, damageEnemy, spawnEnemy, startSiege, makeRaidPlan, scheduleSiege, addSign, addItem, addXP, addJP, buySkill, derived, damagePlayer, count, moveToChapter, storyPlan, callAllies, startAssault, skipCutscene, endCutscene, setWeather },
   };
 }
 

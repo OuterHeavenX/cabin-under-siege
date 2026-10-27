@@ -7,7 +7,7 @@ import { addSign, addThreat, scheduleSiege, storyPlan } from './siege.js';
 import { playCutscene } from '../ui/cutscene.js';
 import { playDialogue } from '../ui/dialogue.js';
 import { banner, toast } from '../ui/hud.js';
-import { showChapterEnd } from '../ui/menus.js';
+import { showChapterEnd, showEnding } from '../ui/menus.js';
 import { sfx } from '../audio.js';
 import { saveGame } from './save.js';
 import { addPickup } from './combat.js';
@@ -74,7 +74,19 @@ export const STEPS = {
   ch4_siege: { obj: 'Nico Vescari is coming — by road and by water. Be home by 10 PM and hold the manor.' },
   ch4_ring: { obj: 'Search the lakeshore for whatever Nico dropped.' },
   ch4_eleanor_truth: { obj: 'Tell Mrs. Whitcombe what happened.' },
-  ch4_free: { obj: 'Chapter 4 complete. Work, fortify, and stay alive. (Chapter 5 — the mansion in Short Hills — is planned for a future update.)' },
+  ch4_free: { obj: 'Chapter 4 complete. Keep playing — or, when you\'re ready, use your car at the manor to drive to Short Hills for the last time (Chapter 5).' },
+  // ---- Chapter 5: The Mansion ----
+  ch5_arrive: { obj: 'Short Hills. Step into the old watch house on the ridge.' },
+  ch5_meet_dom: { obj: 'Father Dom is at St. Rose on Millburn Avenue. Go and see him.' },
+  ch5_settle: { obj: () => `Settle in: finish 3 of the 4 chores (${choresStatus().done}/3 done) — the Journal lists them.` },
+  ch5_find_work: { obj: 'Mickey Doyle runs the tow yard on Millburn Avenue. Ask him for work.' },
+  ch5_trust: { obj: () => `Win back the avenue: jobs for Mickey (${Math.min(3, jobsSinceTrust())}/3) · help the neighbors (${Math.min(2, townErrandsDone())}/2)` },
+  ch5_recon: { obj: 'Watch Leo\'s compound from the three overlooks along the ravine railing.' },
+  ch5_allies: { obj: 'Use the telephone at the watch house. Call in every favor you have.' },
+  ch5_siege: { obj: 'Leo is striking first. Be at the watch house by 10 PM — and hold it.' },
+  ch5_plans: { obj: 'Search Carlo Bruno for whatever he was carrying.' },
+  ch5_assault: { obj: 'Tonight (after 9 PM), drive to the Vescari mansion. Get Dante\'s key. Get to Leo\'s study.' },
+  ch5_free: { obj: 'THE END. The story is over — but Short Hills, and Endless Siege, are still here.' },
 };
 
 const objOf = (s) => (typeof s.obj === 'function' ? s.obj() : s.obj);
@@ -174,6 +186,26 @@ export function storyWaypoint() {
     case 'ch3_ledger': { const pk = G.pickups.find((p) => p.kind === 'ledger'); return pk ? { map: G.map.id, x: pk.x, y: pk.y, label: 'Ledger' } : null; }
     case 'ch3_ingrid_truth': return { ...npcPoint('ingrid'), label: 'Ingrid' };
     case 'ch4_arrive': return { map: 'estate', ...G.maps.estate.points.cabin_front, label: 'Manor' };
+    case 'ch5_arrive': return { map: 'shorthills', ...G.maps.shorthills.points.cabin_front, label: 'Watch house' };
+    case 'ch5_meet_dom': return { ...npcPoint('dom'), label: 'Father Dom' };
+    case 'ch5_settle': return errandWaypoint((e) => e.chore);
+    case 'ch5_find_work': return { ...npcPoint('mickey'), label: 'Mickey' };
+    case 'ch5_trust': {
+      if (G.s.job) return jobWaypoint();
+      if (jobsSinceTrust() < 3) { const jb = G.maps.shorthills.props.find((p) => p.id === 'jobboard'); return { map: 'shorthills', x: jb.x, y: jb.y, label: 'Job board' }; }
+      return errandWaypoint((e) => !e.chore && !e.story) || errandGiverWaypoint();
+    }
+    case 'ch5_recon': return errandWaypoint((e) => e.story);
+    case 'ch5_allies': { const ph = G.maps.shorthills.props.find((p) => p.id === 'phone'); return { map: 'shorthills', x: ph.x, y: ph.y, label: 'Phone' }; }
+    case 'ch5_siege': return { map: 'shorthills', ...G.maps.shorthills.points.cabin_in, label: 'Watch house' };
+    case 'ch5_plans': { const pk = G.pickups.find((p) => p.kind === 'blueprint'); return pk ? { map: G.map.id, x: pk.x, y: pk.y, label: 'Plans' } : null; }
+    case 'ch5_assault': {
+      if (G.map.id === 'mansion') {
+        if (count('study_key') < 1) { const d = G.enemies.find((e) => e.carriesNote === 'study_key' && !e.dead); const k = G.pickups.find((p) => p.kind === 'study_key'); return k ? { map: 'mansion', x: k.x, y: k.y, label: 'Key' } : d ? { map: 'mansion', x: d.x, y: d.y, label: 'Dante' } : null; }
+        return { map: 'mansion', ...G.maps.mansion.points.study, label: 'Leo' };
+      }
+      return { map: 'shorthills', ...G.maps.shorthills.points.car, label: 'Car' };
+    }
     case 'ch4_meet_eleanor': return { ...npcPoint('eleanor'), label: 'Eleanor' };
     case 'ch4_find_work': return { ...npcPoint('walt'), label: 'Walt' };
     case 'ch4_job': {
@@ -331,6 +363,33 @@ export function storyDialogue(id) {
       onEnd: () => { addRel('tess', 6); addXP(25, 'Met Tess'); setStep('ch3_job'); },
     };
   }
+  if (id === 'dom' && st.step === 'ch5_meet_dom') {
+    return {
+      lines: [
+        { who: 'Father Dominic Russo', text: 'Francis Corsetti. I baptized you in that font. I buried your mother from that altar. And now you come home with the devil\'s own book in your pocket.' },
+        { who: ME, text: 'Hello, Father.' },
+        { who: 'Father Dominic Russo', text: 'Leo knows you\'re here. He knew before you crossed the river. The whole avenue knows. Half of them are afraid of him. The other half are afraid for you.' },
+        { who: 'Father Dominic Russo', text: 'Edward Whitcombe\'s old watch house on the ridge — Eleanor called me. It\'s yours. It\'s a ruin. Fix it up, light a candle for your mother, and let the avenue see you\'re staying.' },
+      ],
+      onEnd: () => {
+        addRel('dom', 10); addXP(30, 'Father Dom');
+        for (const id of choresStatus().ids) startErrand(id, true);
+        setStep('ch5_settle');
+        toast('Four chores added — finish any three. Open the Journal to see them.', 'info', 4);
+      },
+    };
+  }
+  if (id === 'mickey' && st.step === 'ch5_find_work') {
+    return {
+      lines: [
+        { who: 'Mickey Doyle', text: 'Frankie Corsetti. I arrested you in 1994. You were fourteen and you\'d stolen a hearse.' },
+        { who: ME, text: 'It was a limousine. With a body in it. I didn\'t know.' },
+        { who: 'Mickey Doyle', text: 'Sure. Look — I spent eleven years looking the other way for that house on the hill. I\'m done looking. Work the board, help the neighbors, let them see you. When it comes to it, people need to want you to win.' },
+      ],
+      onEnd: () => { addRel('mickey', 8); addXP(25, 'Met Mickey'); f.townOpen = true; f.jobsBase = G.s.jobsDone || 0; setStep('ch5_trust'); },
+    };
+  }
+  if (id === 'leo' && st.step === 'ch5_assault') return finaleDialogue();
   if (id === 'eleanor' && st.step === 'ch4_meet_eleanor') {
     const vouched = relOf('ingrid') >= 2 || G.s.choices.marcusHelp;
     return {
@@ -472,6 +531,14 @@ export function initStoryEvents() {
       ], () => setStep('find_work'));
     }
     if (st.step === 'town_trust') checkTrust();
+    if (st.step === 'ch5_settle' && choresStatus().done >= 3) {
+      playDialogue([
+        { who: ME, text: 'The lights work, the lane\'s clear, and there\'s a candle burning for Ma. From the porch I can see the lights of Leo\'s study across the ravine.' },
+        { who: ME, text: 'Mickey Doyle\'s tow yard is hiring, Father Dom said. Let the avenue see me working.' },
+      ], () => setStep('ch5_find_work'));
+    }
+    if (st.step === 'ch5_trust') checkTrust5();
+    if (id === 'recon' && st.step === 'ch5_recon') setStep('ch5_allies');
     if (id === 'trail' && st.step === 'trail') {
       playDialogue([{ who: ME, text: 'Leo\'s people. Here. Already. Dee hears everything in this town — if somebody new has been around, she\'ll know.' }], () => setStep('see_dee'));
     }
@@ -490,6 +557,7 @@ export function initStoryEvents() {
     }, 2600);
   });
   ev.on('jobDone', () => {
+    if (G.s.story.step === 'ch5_trust') checkTrust5();
     if (G.s.story.step === 'town_trust') checkTrust();
     if (G.s.story.step === 'first_job') setStep('see_dee');
     if (G.s.story.step === 'ch2_job') setStep('ch2_rosa');
@@ -517,6 +585,13 @@ export function initStoryEvents() {
   ev.on('talkReyes', (n) => reyesTalk(n));
   ev.on('defenseInstalled', () => { if (G.s.story.step === 'ch4_fortify') { G.s.story.flags.fortified = (G.s.story.flags.fortified || 0) + 1; checkEstateReady(); } });
   ev.on('repaired', () => { if (G.s.story.step === 'ch4_fortify') checkEstateReady(); });
+  ev.on('blueprintFound', () => {
+    const f = G.s.story.flags;
+    if (f.blueprintRead) return;
+    if (G.siegeActive) { f.blueprintPending = true; toast('You pocket Carlo\'s papers. Read them when it\'s quiet.', 'info', 3); return; }
+    readBlueprint();
+  });
+  ev.on('study_keyFound', () => toast('Dante\'s brass key. Leo\'s study is north of the hall.', 'info', 3));
   ev.on('signetFound', () => {
     const f = G.s.story.flags;
     if (f.signetRead) return;
@@ -536,6 +611,8 @@ export function initStoryEvents() {
     if (kind === 'burner' && !f.burnerRead && count('burner') === 0) addPickup('burner', e.x, e.y + 6, 1, { map: G.map.id });
     if (kind === 'ledger' && !f.ledgerRead && count('ledger') === 0) addPickup('ledger', e.x, e.y + 6, 1, { map: G.map.id });
     if (kind === 'signet' && !f.signetRead && count('signet') === 0) addPickup('signet', e.x, e.y + 6, 1, { map: G.map.id });
+    if (kind === 'blueprint' && !f.blueprintRead && count('blueprint') === 0) addPickup('blueprint', e.x, e.y + 6, 1, { map: G.map.id });
+    if (kind === 'study_key' && count('study_key') === 0) { addPickup('study_key', e.x, e.y + 6, 1, { map: G.map.id }); banner('Dante is down. His key is on the floor.', 'good', 3.5); }
   });
   ev.on('burnerFound', () => {
     const f = G.s.story.flags;
@@ -565,6 +642,18 @@ export function initStoryEvents() {
   ev.on('siegeWon', (sg) => {
     if (sg.plan.kind !== 'story') return;
     const f = G.s.story.flags;
+    if (G.s.chapter === 5) {
+      f.firstSiegeDone = true;
+      if (f.blueprintPending) { f.blueprintPending = false; setTimeout(readBlueprint, 2500); return; }
+      if (f.blueprintRead) return;
+      if (!G.pickups.some((p) => p.kind === 'blueprint') && count('blueprint') === 0) {
+        const p = G.map.points.porch;
+        addPickup('blueprint', p.x + 30, p.y + 20, 1, { map: G.map.id });
+        toast('Carlo dropped a folded paper by the porch as he ran.', 'info', 4);
+      }
+      setTimeout(() => { if (G.s.story.step === 'ch5_siege') setStep('ch5_plans'); }, 3800);
+      return;
+    }
     if (G.s.chapter === 4) {
       f.firstSiegeDone = true;
       if (f.signetPending) { f.signetPending = false; setTimeout(readSignet, 2500); return; }
@@ -693,6 +782,107 @@ function checkFarmReady() {
     { who: ME, text: 'Gate\'s fixed. House is ready. If Leo sent Vinnie himself, he\'ll come hard and loud.' },
     { who: ME, text: 'Trucks. Rifles in the treeline. Keep moving, keep them off the house.' },
   ]);
+}
+
+function checkTrust5() {
+  if (G.s.story.step !== 'ch5_trust') return;
+  if (jobsSinceTrust() < 3 || townErrandsDone() < 2) { banner(`New objective: ${objectiveText()}`, 'objective', 3); return; }
+  playDialogue([
+    { who: 'Angie Marchetti', text: '(Angie catches you outside the deli.) The whole avenue\'s talking, Frankie. Old Vito says you\'re the only Corsetti who ever fixed anything. From Vito, that\'s a love letter.' },
+    { who: 'Angie Marchetti', text: 'Whatever you\'re planning — and you\'re planning something — you\'ll want to look at that house first. The railing on the ravine has a view of everything.' },
+  ], () => { startErrand('recon', true); setStep('ch5_recon'); });
+}
+
+/** Who answers when Frank calls in his favors. */
+function decideAllies() {
+  const s = G.s, c = s.choices || {}, rel = (id) => relOf(id);
+  const out = [];
+  if (s.companion && s.companion.ruth && s.companion.ruth.joined) out.push('ruth');
+  if (c.marcusHelp || rel('marcus') >= 2) out.push('marcus');
+  if (rel('ingrid') >= 2) out.push('ingrid');
+  if (rel('walt') >= 2 || rel('eleanor') >= 2) out.push('walt');
+  if (rel('mickey') >= 1) out.push('mickey');
+  if (rel('angie') >= 1) out.push('angie');
+  if (c.reyes === 'give' || c.reyes === 'copy') out.push('reyes');
+  return out;
+}
+
+export function callAllies() {
+  if (G.s.story.step !== 'ch5_allies') return false;
+  const al = decideAllies();
+  G.s.allies = al;
+  const has = (id) => al.includes(id);
+  const lines = [{ who: ME, text: '(You sit by the old phone with a list of numbers you swore you\'d never call.)' }];
+  if (has('ruth')) lines.push({ who: 'Ruth Calloway', text: 'You don\'t have to call me, Frank. I\'m in the next room. I\'ll be in the car with my bag. You get hurt, I come running.' });
+  lines.push(has('marcus')
+    ? { who: 'Marcus Bell', text: 'Frank. I\'ve been listening to their radios for a week. Thirty-one years at the post office, you learn to read everybody\'s mail. I\'ll be your eyes.' }
+    : { who: ME, text: '(Marcus\'s line rings and rings. You never did call him back after Millbrook.)' });
+  lines.push(has('ingrid')
+    ? { who: 'Ingrid Haugen', text: 'I\'ve got a grain truck with a steel bumper and nine hundred miles of nothing to think about. Tell me which gate.' }
+    : { who: ME, text: '(Ingrid picks up, listens, and says she can\'t leave the cows. You didn\'t earn more than that.)' });
+  lines.push(has('walt')
+    ? { who: 'Walt Bishop', text: 'Mrs. Whitcombe sent me. I have a case of marine flares and a grudge against people who scare old ladies. Pool side, you said? Done.' }
+    : { who: ME, text: '(The Whitcombe estate doesn\'t answer. The lake is a long way away.)' });
+  if (has('mickey')) lines.push({ who: 'Mickey Doyle', text: 'Three tow trucks across Old Short Hills Road. Nobody\'s coming up that hill to help him. Not tonight.' });
+  if (has('angie')) lines.push({ who: 'Angie Marchetti', text: 'There\'s a box on your porch. Shells, two first-aid kits, and a sandwich. This is for Joey.' });
+  if (has('reyes')) lines.push({ who: 'Agent Dana Reyes', text: 'I can\'t be there when you go in. But if Leo Vescari is alive at the end of the night, I\'ll be at that gate with warrants and a lot of friends.' });
+  lines.push({ who: ME, text: `(${al.length} ${al.length === 1 ? 'friend' : 'friends'} answered. It'll have to be enough.)` });
+  lines.push({ who: ME, text: '...Headlights on the lane. Leo isn\'t waiting for me. He\'s coming here first.' });
+  playDialogue(lines, () => {
+    if (has('angie')) { addItem('shells', 10, true); addItem('medkit', 2, true); addItem('sandwich', 1, true); }
+    const t = G.s.time;
+    const day = t.minute < 21 * 60 ? t.day : t.day + 1;
+    scheduleSiege(storyPlan(), day, 22 * 60);
+    addSign('strange_car');
+    setStep('ch5_siege');
+  });
+  return true;
+}
+
+function readBlueprint() {
+  const f = G.s.story.flags;
+  if (f.blueprintRead) return;
+  f.blueprintRead = true;
+  playCutscene({ focus: { x: G.player.x, y: G.player.y }, zoom: 1.6, title: 'THE HOUSE ON THE HILL', sub: 'Carlo Bruno\'s copy of the floor plans.', hold: 1.8, sting: null, lines: [
+    { who: ME, text: 'Guard posts, shift changes, the service gate on the west wall. And the study: north side, behind the hall. Dante Ruggiero keeps the only key.' },
+    { who: ME, text: 'Leo sent his best and lost. He\'s alone up there with the men he has left. It has to be tonight.' },
+  ], onEnd: () => { addXP(40, 'The plans'); addJP('shadow', 12); setStep('ch5_assault'); } });
+}
+
+/** Leo's study: the last conversation. Each ending is a choice. */
+function finaleDialogue() {
+  const c = G.s.choices || {};
+  const fed = c.reyes === 'give' || c.reyes === 'copy';
+  const L = 'Leo Vescari';
+  const choices = [];
+  if (fed) choices.push({ text: '"It\'s over, Leo. Agent Reyes is at your gate."', effect: () => { G.s.ending = 'justice'; return [{ who: L, text: '...The FBI. You always were a good boy, Frankie. A good, boring boy.' }, { who: ME, text: 'Sit down, Leo. Let\'s wait for them together.' }]; } });
+  choices.push({ text: '"I\'m walking out of here. You\'ll never see me again."', effect: () => { G.s.ending = 'walk'; return [{ who: L, text: 'You come all this way to leave? ...Go, then. I\'m an old man in an empty house. Maybe that\'s worse.' }, { who: ME, text: 'It is, Leo. I hope you live a long, long time.' }]; } });
+  choices.push({ text: '"This is for everyone you buried." (Pull the trigger.)', effect: () => { G.s.ending = 'blood'; return [{ who: L, text: 'There he is. There\'s the boy I raised.' }, { who: ME, text: '(The shot is very loud in the quiet room.)' }]; } });
+  choices.push({ text: '"Get out of my chair, Leo."', effect: () => { G.s.ending = 'crown'; return [{ who: L, text: '...Ha. Ha! Look at you. You walked away from the family and found your way right back to the head of the table.' }, { who: ME, text: '(Dante\'s men are already waiting at the door. Waiting for orders. Your orders.)' }]; } });
+  return {
+    lines: [
+      { who: L, text: 'Frankie. Sit. You want a drink? You were always a scotch man. Like your father.' },
+      { who: ME, text: 'I didn\'t come for a drink, Leo.' },
+      { who: L, text: 'No. You came because I couldn\'t let you go. A man walks away from this family, everybody sees it. Respect leaks out of the house like heat.' },
+      { who: L, text: 'Carmine. Sal. Vinnie. Nico. Carlo. Dante. I sent you my family, one by one, and you sent them back to me broken. So.', choices },
+    ],
+    onEnd: () => finishGame(),
+  };
+}
+
+function finishGame() {
+  const st = G.s.story;
+  st.done[5] = true;
+  st.step = 'ch5_free';
+  G.s.world.threat = 0;
+  G.s.world.siege = null;
+  G.s.world.quietUntilDay = G.s.time.day + 9999;
+  G.assault = null;
+  if (G.s.ending !== 'walk') G.npcs = G.npcs.filter((n) => n.id !== 'leo');
+  for (const e of G.enemies) if (!e.dead) { e.retreating = true; e.alerted = false; }
+  addXP(300, 'The end of the road');
+  saveGame('chapter', { force: true });
+  showEnding(G.s.ending || 'walk');
 }
 
 function checkEstateReady() {
@@ -884,6 +1074,18 @@ export function updateStory(dt) {
       ], () => setStep('ch4_meet_eleanor'));
     }
   }
+  if (st.step === 'ch5_arrive' && G.map.id === 'shorthills') {
+    const b = G.map.buildingAt(G.player.x, G.player.y);
+    if (b && b.id === 'watchhouse') {
+      st.step = 'ch5_meet_dom';
+      const ruth = G.s.companion && G.s.companion.ruth.joined;
+      playDialogue([
+        { who: ME, text: 'Short Hills. Thirty years since I stood on this ridge. Across the ravine, Leo\'s house is lit up like a cruise ship.' },
+        ...(ruth ? [{ who: 'Ruth Calloway', text: 'So that\'s him. Big house. Small man, I\'d guess. They always are.' }] : []),
+        { who: ME, text: 'Father Dom will be at St. Rose. He\'ll know what Leo knows. He always did.' },
+      ], () => setStep('ch5_meet_dom'));
+    }
+  }
   if (st.step === 'ch2_arrive' && G.map.id === 'millbrook') {
     const b = G.map.buildingAt(G.player.x, G.player.y);
     if (b && b.id === 'house') {
@@ -927,6 +1129,7 @@ export function answerPhone() {
     } });
     return true;
   }
+  if (st.step === 'ch5_allies') return callAllies();
   if (!G.s.home.phoneLine) { toast('Dead line. The phone wire by the road must be damaged.', 'warn', 3); return true; }
   playDialogue([{ who: ME, text: 'Just a dial tone. Nobody to call who wouldn\'t ask questions.' }]);
   return true;

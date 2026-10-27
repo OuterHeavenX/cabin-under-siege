@@ -311,8 +311,104 @@ Object.assign(NPCS, {
   },
 });
 
+// ---------------- Chapter 5: Short Hills, New Jersey ----------------
+Object.assign(NPCS, {
+  dom: {
+    name: 'Father Dominic Russo',
+    title: 'Pastor of St. Rose',
+    bio: 'Baptized Frankie Corsetti, buried his mother, and has heard every Vescari confession for forty years. Seventy-six, stubborn, and still boxes on Thursdays.',
+    body: '#1c1c22', hair: '#d8d8d8', skin: '#e2b494',
+    map: 'shorthills',
+    home: ['shorthills', 'dom_home'],
+    schedule: [
+      [7 * 60, 12 * 60, 'shorthills', 'dom_church'],
+      [12 * 60, 21 * 60, 'shorthills', 'dom_porch'],
+    ],
+    homeLine: 'The rectory is dark. Father Dom keeps a farmer\'s hours, and a priest\'s.',
+    idle: [
+      'Frankie Corsetti. You were an altar boy for exactly one Sunday. You stole the wine.',
+      'Leo comes to confession every Easter. He has never once been sorry.',
+      'Your mother lit a candle for you every Friday until the day she died. I kept it up. Habit.',
+      'This parish has buried eleven men who worked for that house on the hill. I would prefer not to make it twelve.',
+      'I box on Thursdays at the Y. The young men let me win. I let them think so.',
+    ],
+    friendly: [
+      'Whatever you do up there, Frankie, do it so you can still sleep.',
+      'I left something in the confessional for you. It isn\'t a rosary.',
+      'God forgives. Leo doesn\'t. Plan accordingly.',
+    ],
+  },
+  angie: {
+    name: 'Angela "Angie" Marchetti',
+    title: 'Deli & hardware owner',
+    bio: 'Runs Marchetti\'s Deli & Hardware on Millburn Avenue — capicola on one side, crowbars on the other. Her brother Joey drove for Leo until the night he didn\'t come home.',
+    body: '#8a2a2a', hair: '#2b1a12', skin: '#d8a882',
+    map: 'shorthills',
+    home: ['shorthills', 'angie_home'],
+    schedule: [
+      [8 * 60, 20 * 60, 'shorthills', 'angie_store'],
+      [20 * 60, 22 * 60, 'shorthills', 'angie_porch'],
+    ],
+    homeLine: "Marchetti's is closed. A sign in the window: NO VESCARIS. NO EXCEPTIONS.",
+    idle: [
+      'Frankie Corsetti. I heard you were dead. I heard you were in Ohio. Which is worse?',
+      'Sopressata\'s fresh. Twelve-gauge shells are in aisle three, next to the cannoli.',
+      'Joey used to say you were the only one of them with a conscience. He said it like it was a disease.',
+      'Leo\'s boys come in here for sandwiches. I make theirs with yesterday\'s bread.',
+      'You want something done in this town, you ask me. You want something done right, you ask me twice.',
+    ],
+    friendly: [
+      'I put a box aside. Shells, bandages, and a sandwich. Don\'t argue, you look terrible.',
+      'Joey would have liked you back. He\'d have yelled first. Then liked you.',
+      'When you go up that hill, Frankie, you come back down it. You hear me?',
+    ],
+  },
+  mickey: {
+    name: 'Mickey Doyle',
+    title: 'Tow-yard owner & job contact',
+    bio: 'Twenty-two years with the Essex County police, eleven of them pretending not to see Vescari cars. Retired early, bought a tow yard, and has been trying to feel clean ever since.',
+    body: '#2f4a3a', hair: '#9a6a4a', skin: '#e8b898',
+    map: 'shorthills',
+    home: ['shorthills', 'mickey_home'],
+    schedule: [
+      [7 * 60, 17 * 60, 'shorthills', 'mickey_yard'],
+      [17 * 60, 21 * 60, 'shorthills', 'mickey_porch'],
+    ],
+    homeLine: "Doyle's Towing is locked. A dog barks inside. It sounds big.",
+    idle: [
+      'Board\'s on the garage door. Tows, deliveries, fix-its. Cash on Friday.',
+      'I towed Leo\'s Lincoln twice. He tipped a hundred both times. I hated it both times.',
+      'Twenty-two years a cop. I know which streets have cameras. Most of them don\'t work.',
+      'Everybody on this avenue owes that house something. Most of us would like to stop paying.',
+      'You drive like a wheelman. Relax your hands, people notice.',
+    ],
+    friendly: [
+      'Raise. You don\'t get to argue with a raise.',
+      'If you need a car that nobody\'s looking for, I have three.',
+      'When it goes down, call me. I still have a badge in a drawer. It still scares people.',
+    ],
+  },
+  leo: {
+    name: 'Leo Vescari',
+    title: 'Head of the Vescari family',
+    bio: 'Seventy-three. Runs the family from a study in Short Hills with a view of everything he owns. He has never forgiven anyone, least of all himself.',
+    body: '#111114', hair: '#e0e0e0', skin: '#d9ad8c',
+    map: 'mansion',
+    home: ['mansion', 'study'],
+    schedule: [[0, 24 * 60, 'mansion', 'study']],
+    homeLine: '',
+    idle: ['...'],
+    friendly: ['...'],
+  },
+});
+
 // Unnamed townsfolk who walk around during the day, per map.
 export const TOWNSFOLK = {
+  shorthills: [
+    { id: 'folk12', name: 'Mrs. Ferraro', body: '#3a2a3a', hair: '#cfcfcf', skin: '#e2b494', route: ['walk_a', 'walk_b', 'walk_c'] },
+    { id: 'folk13', name: 'Paulie the paperboy', body: '#c0392b', hair: '#5a3a1a', skin: '#f0c7a5', route: ['walk_b', 'walk_d', 'walk_a'] },
+    { id: 'folk14', name: 'Old Vito', body: '#4a4a3a', hair: '#e0e0e0', skin: '#d0a07e', route: ['walk_c', 'walk_a', 'walk_d'] },
+  ],
   estate: [
     { id: 'folk9', name: 'Commodore Ames', body: '#1d2a44', hair: '#e0e0e0', skin: '#efd2bc', route: ['walk_a', 'walk_b', 'walk_d'] },
     { id: 'folk10', name: 'June Tremblay', body: '#a05a7a', hair: '#7a4a2a', skin: '#e8b898', route: ['walk_b', 'walk_d', 'walk_a'] },
@@ -335,6 +431,12 @@ export const TOWNSFOLK = {
 };
 
 export const FOLK_LINES = {
+  shorthills: [
+    'You\'re Rosa Corsetti\'s boy. You look like her around the eyes. God rest her.',
+    'Don\'t look up at that house too long. They notice.',
+    'Black cars on the avenue every night this week. Something\'s coming.',
+    'Best sfogliatelle in Essex County is at Marchetti\'s. Don\'t tell my sister.',
+  ],
   estate: [
     'The Whitcombe place had a caretaker in \'09. He left in a hurry.',
     'Sailing season\'s over. Only fools and fishermen on the lake now.',
