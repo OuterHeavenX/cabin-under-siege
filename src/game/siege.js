@@ -2,7 +2,7 @@
 import { G, isNight } from './state.js';
 import { TILE } from '../config.js';
 import { choose, chance, clamp, dist, randInt, rand } from '../util.js';
-import { spawnEnemy, pickSpawnTypes } from './enemies.js';
+import { spawnEnemy, pickSpawnTypes, huntMode } from './enemies.js';
 import { addXP, addJP, derived, relOf } from './progression.js';
 import { addItem, count } from './inventory.js';
 import { banner, toast, centerMessage, clearBanners } from '../ui/hud.js';
@@ -332,7 +332,26 @@ export function updateSiege(dt) {
     sg.waveIdx++;
   }
   const alive = G.enemies.filter((e) => !e.dead && !e.gone).length;
+  // Hiding: if they go four in-game hours without anyone spotting you, they give up for tonight.
+  if (huntMode() && !sg.gaveUp) {
+    const now = G.s.time.day * 1440 + G.s.time.minute;
+    if (sg.lastSpot == null) sg.lastSpot = now;
+    const hunted = G.enemies.some((e) => !e.dead && !e.gone && e.alerted);
+    if (hunted) sg.lastSpot = now;
+    sg.searching = !!sg.homeCleared && !hunted && sg.waveIdx >= sg.plan.waves.length;
+    sg.giveUpIn = HIDE_MINUTES - (now - sg.lastSpot);
+    if (sg.waveIdx >= sg.plan.waves.length && sg.giveUpIn <= 0) giveUp(sg);
+  }
   if (sg.waveIdx >= sg.plan.waves.length && alive === 0 && !G.player.dead) endSiege();
+}
+
+export const HIDE_MINUTES = 240;
+
+function giveUp(sg) {
+  sg.gaveUp = true;
+  sg.searching = false;
+  for (const e of G.enemies) if (!e.dead && !e.gone) { e.retreating = true; e.alerted = false; e.path = null; }
+  centerMessage('THEY GAVE UP', 'Four hours and they never found you. Headlights pulling away…', 3.5);
 }
 
 function freeSpot(x, y) {
@@ -369,6 +388,21 @@ function endSiege() {
   G.siegeActive = false;
   allyEndSiege();
   if (kind === 'endless') { G.siege = null; addXP(20 + sg.total * 4, null); endlessWaveCleared(sg); return; }
+  if (sg.gaveUp) {
+    // Nobody won tonight. They'll be back tomorrow night with the same crew.
+    G.siege = null;
+    const t = G.s.time;
+    const day = t.minute < 12 * 60 ? t.day : t.day + 1;
+    scheduleSiege(sg.plan, day, 22 * 60);
+    w.quietUntilDay = 0;
+    addXP(40, 'Stayed hidden');
+    addJP('shadow', 15);
+    setMusic(isNight() ? 'night' : 'day');
+    banner('They\'ll be back tomorrow night — same crew. Fortify, or find a better hiding place.', 'objective', 6);
+    G.events.emit('siegeEvaded', sg);
+    saveGame('siege');
+    return;
+  }
   w.threat = clamp(w.threat - (kind === 'ambush' ? 8 : 20), 0, 100);
   w.lastSiegeDay = G.s.time.day;
   w.quietUntilDay = G.s.time.day + (kind === 'ambush' ? 1 : 2);

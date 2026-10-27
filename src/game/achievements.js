@@ -35,6 +35,8 @@ export const ACHIEVEMENTS = [
   // Fighting
   { id: 'kills50', icon: '🎯', name: 'Not Today', desc: 'Defeat 50 attackers.' },
   { id: 'kills300', icon: '🔥', name: 'Army of One', desc: 'Defeat 300 attackers.' },
+  { id: 'takedowns10', icon: '🤫', name: 'Quiet Professional', desc: 'Take down 10 attackers silently, from behind.' },
+  { id: 'evaded', icon: '🫥', name: 'Hide and Seek', desc: 'Stay hidden until a crew gives up and drives away.' },
   { id: 'trap', icon: '🪤', name: 'Watch Your Step', desc: 'Catch an attacker in a bear trap.' },
   { id: 'fortress', icon: '🏰', name: 'Fortress', desc: 'Have every window boarded or shuttered and every door braced.' },
   // Life
@@ -154,6 +156,8 @@ export function initAchievementEvents() {
     if (n >= 300) unlock('kills300');
   });
   ev.on('trapSprung', () => unlock('trap'));
+  ev.on('takedown', () => { if (bump('takedowns') >= 10) unlock('takedowns10'); });
+  ev.on('siegeEvaded', () => unlock('evaded'));
   ev.on('fishCaught', () => { if (bump('fish') >= 10) unlock('fish10'); });
   ev.on('treeChopped', () => { if (bump('trees') >= 50) unlock('trees50'); });
   ev.on('cropPicked', (n) => { if (bump('crops', Number(n) || 1) >= 20) unlock('crops20'); });

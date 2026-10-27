@@ -550,6 +550,8 @@ export function openHelp() {
       <li><b>Nights</b>: the family may come. Warning signs — strange cars, footprints, a cut phone line, a stranger in town — mean trouble is near. Not every sign means an attack.</li>
       <li><b>Attackers</b>: Scouts, Enforcers (break doors), Gunmen (use cover), Arsonists (molotovs — fire burns doors, windows and you) and Lieutenants (tough, rally nearby attackers). Raiders probe your weakest door or window.</li>
       <li><b>Defend</b>: board windows, add steel shutters, brace doors, place sandbags and bear traps, install a floodlight, tripwire alarm and cameras. Solid things (trees, rocks, cars, walls, cover) stop bullets. Standing next to cover reduces damage you take.</li>
+      <li><b>Hide</b>: attackers don't know where you are. They hit your home first, then search. Stay out of sight (they see poorly behind them; sprinting is loud; gunshots carry) and after <b>4 hours</b> they give up and come back the next night. Break line of sight and they lose track of you.</li>
+      <li><b>Silent takedown</b>: get behind an attacker who hasn't seen you and press ACT/E or melee. Nobody else hears it — unless someone sees it.</li>
       <li><b>Repair</b>: walk up to damaged doors/windows and press ACT. Costs wood.</li>
       <li><b>Rest</b> in your bed to sleep until morning. You'll never sleep through an attack.</li>
       <li><b>XP</b> raises your level (attribute points). <b>JP</b> is earned per path and buys skills.</li>

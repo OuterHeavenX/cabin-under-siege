@@ -68,23 +68,70 @@ function makeCost(e) {
 }
 const costFn = makeCost({ id: 0 });
 
-function alertEnemy(e) {
+/** Attacks where the crew has to find you (story nights, raids, ambushes) —
+ *  not Endless Siege, the mansion or the Newark episode, which play as before. */
+export function huntMode() {
+  return !!(G.siegeActive && G.siege && G.siege.plan.kind !== 'endless' && !G.endless && !G.prequel && !G.assault);
+}
+const nowMin = () => G.s.time.day * 1440 + G.s.time.minute;
+
+/** `at` is where they think you are: what they saw or heard, not where you really are. */
+function alertEnemy(e, at = null) {
   if (e.alerted || e.dead) return;
+  const p = G.player;
   e.alerted = true;
+  e.searching = false;
+  e.lastSeen = at ? { x: at.x, y: at.y } : { x: p.x, y: p.y };
+  e.lostT = 0;
   if (e.def.dog) sfx('bark', { x: e.x, y: e.y });
   e.path = null;
   e.fireCd = Math.max(e.fireCd, 0.6);
-  // Nearby allies hear the shout.
+  if (G.siege) G.siege.lastSpot = nowMin();
+  // Nearby allies hear the shout — and go where the shouter thinks you are.
   for (const o of G.enemies) {
-    if (o !== e && !o.alerted && !o.dead && dist(o.x, o.y, e.x, e.y) < 360) { o.alerted = true; o.path = null; }
+    if (o !== e && !o.alerted && !o.dead && dist(o.x, o.y, e.x, e.y) < 360) { o.alerted = true; o.searching = false; o.lastSeen = { ...e.lastSeen }; o.lostT = 0; o.path = null; }
   }
+}
+
+/** A silent takedown: a witness who can see the body raises the alarm, nobody else hears a thing. */
+export function witnessTakedown(victim) {
+  const p = G.player;
+  for (const o of G.enemies) {
+    if (o === victim || o.dead || o.gone || o.alerted) continue;
+    const d = dist(o.x, o.y, victim.x, victim.y);
+    const facing = Math.abs(angleDiff(o.angle, angleTo(o.x, o.y, victim.x, victim.y))) < 1.4;
+    if (d < 230 && facing && G.map.los(o.x, o.y, victim.x, victim.y)) alertEnemy(o, { x: p.x, y: p.y });
+  }
+}
+
+/** Where a searcher looks next: places on the map, spreading out across the crew. */
+function searchGoal(e) {
+  const sg = G.siege, m = G.map;
+  if (e.searchGoal && e.searchGoalT > 0 && dist(e.x, e.y, e.searchGoal.x, e.searchGoal.y) > 36) return e.searchGoal;
+  if (!sg.spots) {
+    const pts = [...Object.values(m.points || {}), ...Object.values(m.spawns || {})].filter((pt) => pt && isFinite(pt.x));
+    sg.spots = pts.filter((pt) => { const cx = Math.floor(pt.x / TILE), cy = Math.floor(pt.y / TILE); return m.inBounds(cx, cy) && costFn(cx, cy) === 0; });
+    sg.looked = new Set();
+  }
+  if (!sg.spots.length) return null;
+  let pick = null, best = Infinity;
+  for (let i = 0; i < 8; i++) {
+    const pt = choose(sg.spots);
+    const score = (sg.looked.has(pt) ? 900 : 0) + dist(e.x, e.y, pt.x, pt.y) * (0.5 + Math.random());
+    if (score < best) { best = score; pick = pt; }
+  }
+  sg.looked.add(pick);
+  if (sg.looked.size > sg.spots.length * 0.8) sg.looked.clear();
+  e.searchGoal = pick;
+  e.searchGoalT = 30;
+  return pick;
 }
 
 export function initEnemyEvents() {
   G.events.on('enemyAlert', (e) => alertEnemy(e));
   G.events.on('shot', (x, y, quiet) => {
     const r = quiet ? 110 : 420;
-    for (const e of G.enemies) if (!e.dead && !e.alerted && dist(e.x, e.y, x, y) < r) alertEnemy(e);
+    for (const e of G.enemies) if (!e.dead && !e.alerted && dist(e.x, e.y, x, y) < r) alertEnemy(e, { x, y });
   });
 }
 
@@ -133,13 +180,27 @@ function goalCellFor(e, p) {
     const ex = nearestExit(e);
     return ex ? { cx: Math.floor(ex.x / TILE), cy: Math.floor(ex.y / TILE) } : null;
   }
+  const cell = (pt) => ({ cx: Math.floor(pt.x / TILE), cy: Math.floor(pt.y / TILE) });
   if (!e.alerted) {
-    if (e.guard) { const pt = guardGoal(e); return { cx: Math.floor(pt.x / TILE), cy: Math.floor(pt.y / TILE) }; }
+    if (e.guard) return cell(guardGoal(e));
+    if (huntMode()) {
+      // First they hit the house. Only when it's empty do they start searching.
+      const sg = G.siege;
+      const g = !sg.homeCleared ? entryGoal() : null;
+      if (g) {
+        if (Math.abs(Math.floor(e.x / TILE) - g.cx) <= 1 && Math.abs(Math.floor(e.y / TILE) - g.cy) <= 1) sg.homeCleared = true;
+        else return g;
+      } else sg.homeCleared = true;
+      const s = searchGoal(e);
+      return s ? cell(s) : null;
+    }
     const g = entryGoal();
     if (g) return g;
   }
+  // Out of sight, they go where they last saw (or heard) you.
+  if (e.alerted && huntMode() && !e.canSee && e.lastSeen) return cell(e.lastSeen);
   if ((e.type === 'gunman' || e.type === 'sniper') && e.cover) return { cx: e.cover.cx, cy: e.cover.cy };
-  return { cx: Math.floor(p.x / TILE), cy: Math.floor(p.y / TILE) };
+  return cell(p);
 }
 
 function followPath(e, dt, speed) {
@@ -342,15 +403,34 @@ export function updateEnemies(dt) {
     // Perception
     const wx = weatherMods();
     const canSee = pd < Math.max(520, e.def.range) * wx.range && m.los(e.x, e.y, p.x, p.y);
+    e.canSee = canSee;
     if (!e.alerted && !p.dead) {
       const lit = isLit(p.x, p.y) || p.muzzle > 0;
-      const base = (isNight() && !lit ? 140 : 240) * wx.notice;
+      // They see poorly behind them: that's how you sneak up.
+      const behind = Math.abs(angleDiff(e.angle, angleTo(e.x, e.y, p.x, p.y))) > 1.75;
+      const loud = Math.hypot(p.vx || 0, p.vy || 0) > 150 && p.dodgeT <= 0; // sprinting footsteps
+      const base = (isNight() && !lit ? 140 : 240) * wx.notice * (behind ? 0.4 : 1);
       if (canSee && pd < base * d.noticeMult) alertEnemy(e);
-      else if (pd < 50) alertEnemy(e);
-      // Searching attackers eventually start hunting (no endless stalemates).
-      e.searchT = (e.searchT || 0) + dt;
-      if (e.searchT > 22 && !e.dead && !e.guard) alertEnemy(e);
+      else if (pd < (behind ? (loud ? 90 : 22) : 50)) alertEnemy(e);
+      else if (loud && pd < 100) alertEnemy(e);
+      // Endless Siege: searching attackers eventually start hunting (no stalemates).
+      if (!huntMode()) {
+        e.searchT = (e.searchT || 0) + dt;
+        if (e.searchT > 22 && !e.dead && !e.guard) alertEnemy(e);
+      }
+    } else if (e.alerted && huntMode() && !e.guard) {
+      // Lose you: they go to where you were, look around, and go back to searching.
+      if (canSee) { e.lastSeen = { x: p.x, y: p.y }; e.lostT = 0; G.siege.lastSpot = nowMin(); }
+      else {
+        e.lostT = (e.lostT || 0) + dt;
+        const there = e.lastSeen && dist(e.x, e.y, e.lastSeen.x, e.lastSeen.y) < 40;
+        if (e.lostT > 16 || (there && e.lostT > 4)) {
+          e.alerted = false; e.searching = true; e.cover = null; e.path = null; e.aimT = 0;
+          e.searchGoal = null; e.searchGoalT = 0;
+        }
+      }
     }
+    if (e.searchGoalT) e.searchGoalT -= dt;
     // Player spotting unalerted attackers -> Shadow JP
     if (!e.spottedOnce && !e.alerted && canSee && pd < d.seeRadius + 40) {
       e.spottedOnce = true;
@@ -420,7 +500,13 @@ export function updateEnemies(dt) {
     e.fireCd -= dt;
     if (!e.alerted) {
       if (e.guard) { if (!updateGuard(e, dt)) followPath(e, dt, e.def.speed * 0.45); continue; }
-      followPath(e, dt, e.def.speed * 0.8); continue;
+      const searching = huntMode() && G.siege.homeCleared;
+      if (!followPath(e, dt, e.def.speed * (searching ? 0.55 : 0.8)) && searching) {
+        // Reached a spot: look around before moving on.
+        if (Math.random() < dt * 1.2) e.angle += (Math.random() - 0.5) * 2.2;
+        e.searchGoalT = Math.min(e.searchGoalT || 0, 1.2);
+      }
+      continue;
     }
 
     // --- Alerted behaviours ---

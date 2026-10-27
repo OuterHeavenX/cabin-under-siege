@@ -279,7 +279,10 @@ function computeHudInfo(dt) {
   const alive = G.enemies.filter((e) => !e.dead && !e.gone).length;
   if (G.siegeActive) {
     const pending = G.siege ? G.siege.plan.waves.slice(G.siege.waveIdx).reduce((a, w) => a + w.types.length, 0) : 0;
-    danger = `UNDER ATTACK — ${alive} attacker${alive === 1 ? '' : 's'}${pending ? ` (+${pending} coming)` : ''}`;
+    danger = G.siege && G.siege.gaveUp ? 'They\'re leaving — stay out of sight until they\'re gone'
+      : G.siege && G.siege.searching
+      ? `HIDDEN — they're searching for you · they give up in ${Math.floor(G.siege.giveUpIn / 60)}h ${String(Math.max(0, Math.round(G.siege.giveUpIn % 60))).padStart(2, '0')}m`
+      : `UNDER ATTACK — ${alive} attacker${alive === 1 ? '' : 's'}${pending ? ` (+${pending} coming)` : ''}`;
   } else if (G.assault && !G.assault.alarm) danger = null; // stealth: the objective line is enough
   else if (G.assault) danger = alive ? `ALARM — ${alive} guard${alive === 1 ? '' : 's'} hunting you` : null;
   else if (alive) danger = `${alive} attacker${alive === 1 ? '' : 's'} nearby`;

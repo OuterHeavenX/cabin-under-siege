@@ -17,7 +17,7 @@ import { toast } from '../ui/hud.js';
 import { addJP, addXP } from './progression.js';
 import { addThreat } from './siege.js';
 import { sfx } from '../audio.js';
-import { inCombat } from './player.js';
+import { inCombat, canTakedown, takedown } from './player.js';
 import { tryStudyDoor, endAssault } from './assault.js';
 import { prequelProp } from './prequel.js';
 
@@ -35,6 +35,8 @@ function candidates() {
     const facing = Math.abs(angleDiff(p.angle, angleTo(p.x, p.y, x, y))) < 1.2 ? 0 : 10;
     out.push({ x, y, label, short, action, score: d + facing - prio * 40 });
   };
+
+  for (const e of G.enemies) if (canTakedown(e)) add(e.x, e.y, 60, `Silent takedown — ${e.name || 'attacker'}${e.def.boss ? ' (won\'t go down quietly)' : ''}`, 'TAKEDOWN', () => takedown(e), 6);
 
   for (const n of G.npcs) {
     if (!n.present) continue;

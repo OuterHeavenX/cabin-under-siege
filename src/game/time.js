@@ -28,7 +28,8 @@ export function updateTime(dt) {
     if (absNow() >= G.sleeping.target - 0.01) finishSleep(false);
     return;
   }
-  advanceMinutes(dt * (G.siegeActive ? SIEGE_MIN_PER_SEC : GAME_MIN_PER_SEC));
+  // During an attack the clock slows down — except while they're searching for you and haven't found you.
+  advanceMinutes(dt * (G.siegeActive && !(G.siege && G.siege.searching) ? SIEGE_MIN_PER_SEC : GAME_MIN_PER_SEC));
 }
 
 /** Why the player can't rest right now, or null if they can. */

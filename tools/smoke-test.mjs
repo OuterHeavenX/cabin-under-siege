@@ -1358,6 +1358,62 @@ if (want('v7')) {
   await ctx.close();
 }
 
+/* ================================================================== */
+/* Stealth: hide, they search, give up after 4 hours; silent takedowns  */
+/* ================================================================== */
+if (want('stealth')) {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const page = await ctx.newPage();
+  watch(page, 'stealth');
+  await page.goto(URL); await page.waitForSelector('#t-new');
+  await ev(page, () => window.__cus.newGame('normal')); await sleep(500);
+  await skipDialogues(page);
+  await ev(page, () => { const c = window.__cus; c.G.s.chapter = 1; c.G.s.story.done = { 1: true }; c.dbg.moveToChapter(2); });
+  await sleep(500); await page.click('[data-go]').catch(() => {}); await sleep(300); await skipDialogues(page);
+  const hidePos = [19.6, 20.6]; // inside the Bell house across Larch Street
+  await ev(page, ([x, y]) => { const c = window.__cus; c.dbg.closeAll(); c.G.s.story.step = 'ch2_free'; c.G.s.story.flags.firstSiegeDone = true; c.G.s.time.minute = 22 * 60; c.G.s.time.day = 5; c.G.player.x = x * 32; c.G.player.y = y * 32; c.dbg.startSiege({ plan: c.dbg.makeRaidPlan(4) }, true); }, hidePos);
+  await sleep(300); await ev(page, () => { if (window.__cus.G.cutscene) window.__cus.dbg.skipCutscene(); });
+  let st = null, sawSearch = false, everAlerted = false;
+  for (let i = 0; i < 440; i++) {
+    await sleep(500);
+    st = await ev(page, ([x, y]) => { const G = window.__cus.G; G.player.x = x * 32; G.player.y = y * 32; G.player.hp = 999; const sg = G.siege; return sg ? { searching: !!sg.searching, gaveUp: !!sg.gaveUp, alerted: G.enemies.some((e) => !e.dead && e.alerted), danger: document.getElementById('danger').textContent } : { done: true, next: G.s.world.siege && [G.s.world.siege.day, G.s.world.siege.minute], day: G.s.time.day, min: G.s.time.minute }; }, hidePos);
+    if (st.searching) sawSearch = true;
+    if (st.alerted) everAlerted = true;
+    if (i === 40) await page.screenshot({ path: OUT + 'stealth-search.png' });
+    if (st.done) break;
+  }
+  check('Stealth: hidden in a neighbor\'s house, they search without knowing where you are', sawSearch && !everAlerted);
+  check('Stealth: after 4 hours they give up and come back tomorrow night', !!(st && st.done && st.next && st.next[1] === 22 * 60 && st.next[0] === st.day), JSON.stringify(st));
+  check('Stealth: trophy Hide and Seek', await ev(page, () => !!(JSON.parse(localStorage.getItem('cabinUnderSiege.achievements') || '{}').unlocked || {}).evaded));
+  // Silent takedown from behind doesn't alert the rest of the crew.
+  await ev(page, () => { const c = window.__cus; c.G.s.world.siege = null; c.dbg.startSiege({ plan: { kind: 'raid', hpMult: 1, waves: [{ dir: Object.keys(c.G.map.spawns)[0], types: ['gunman', 'gunman', 'scout'], delay: 0 }] } }, true); });
+  await sleep(300); await ev(page, () => { if (window.__cus.G.cutscene) window.__cus.dbg.skipCutscene(); }); await sleep(1200);
+  const prompt = await ev(page, async () => {
+    const G = window.__cus.G; const [a, b2, s2] = G.enemies.filter((e) => !e.dead);
+    a.x = 40 * 32; a.y = 33 * 32; a.angle = 0; a.path = null; a.stun = 2; a.alerted = false;
+    b2.x = 10 * 32; b2.y = 40 * 32; s2.x = 12 * 32; s2.y = 40 * 32;
+    G.player.x = a.x - 30; G.player.y = a.y; G.player.angle = 0; G.player.invuln = 99;
+    await new Promise((r) => setTimeout(r, 150));
+    return G.interactTarget && G.interactTarget.label;
+  });
+  check('Stealth: sneaking up behind an unaware attacker offers a silent takedown', /Silent takedown/.test(prompt || ''), prompt);
+  await page.keyboard.press('KeyE'); await sleep(300);
+  const after = await ev(page, () => window.__cus.G.enemies.map((e) => ({ dead: e.dead, alerted: e.alerted })));
+  check('Stealth: the takedown is silent — the rest of the crew doesn\'t notice', after[0].dead && after.slice(1).every((e) => !e.dead && !e.alerted), JSON.stringify(after));
+  // Spotted, then out of sight: they lose track instead of homing in through walls.
+  const lost = await ev(page, async ([x, y]) => {
+    const G = window.__cus.G; const e = G.enemies.find((q) => !q.dead);
+    G.player.x = e.x + 60; G.player.y = e.y; G.player.invuln = 999;
+    await new Promise((r) => setTimeout(r, 600));
+    const spotted = e.alerted;
+    const t0 = performance.now(); let gone = false;
+    while (performance.now() - t0 < 30000) { await new Promise((r) => setTimeout(r, 300)); G.player.x = x * 32; G.player.y = y * 32; G.player.hp = 999; if (!G.enemies.some((q) => !q.dead && q.alerted)) { gone = true; break; } }
+    return { spotted, gone };
+  }, hidePos);
+  check('Stealth: once you break line of sight they lose track and search again', lost.spotted && lost.gone, JSON.stringify(lost));
+  await ctx.close();
+}
+
 /* Packaged Electron app (only when `node tools/build-desktop.mjs` has been run). */
 if (want('electron')) {
   const exe = decodeURIComponent(new globalThis.URL('../desktop/out/Cabin Under Siege-linux-x64/cabin-under-siege', import.meta.url).pathname);

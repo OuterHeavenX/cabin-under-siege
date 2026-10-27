@@ -13,6 +13,7 @@ import { toast } from '../ui/hud.js';
 import { isNight } from './state.js';
 import { WEAPONS, WEAPON_ORDER } from '../data/weapons.js';
 import { tryAllyRevive } from './ally.js';
+import { witnessTakedown } from './enemies.js';
 import { assaultRevive } from './assault.js';
 
 const SURFACE = { 0: 'grass', 1: 'dirt', 2: 'hard', 3: 'wood', 4: 'wood', 5: 'grass', 6: 'gravel', 7: 'hard', 8: 'dirt', 9: 'hard', 10: 'hard' };
@@ -252,8 +253,41 @@ function finishReload(p, d) {
 
 const ITEM_NAME = (id) => ({ ammo: '9mm rounds', shells: 'shotgun shells', rifle_ammo: 'rifle rounds' }[id] || id);
 
+/** An unaware attacker you're right behind: one quiet blow. */
+export function canTakedown(e) {
+  const p = G.player;
+  if (!e || e.dead || e.gone || e.alerted || e.retreating || e.def.vehicle || p.dead) return false;
+  if (dist(p.x, p.y, e.x, e.y) > 40 + e.radius) return false;
+  return Math.abs(angleDiff(e.angle, angleTo(e.x, e.y, p.x, p.y))) > 1.9;
+}
+
+export function takedown(e) {
+  const p = G.player;
+  if (!canTakedown(e) || p.meleeCd > 0) return false;
+  p.meleeCd = 0.7; p.meleeAnim = 0.25; p.lastCombat = 0;
+  p.angle = angleTo(p.x, p.y, e.x, e.y);
+  if (e.def.boss) {
+    // Bosses don't go down quietly.
+    damageEnemy(e, e.maxHp * 0.5, p.angle, 'melee', 120);
+    sfx('thud', { x: e.x, y: e.y });
+    toast(`${e.name} shrugs off the blow!`, 'danger', 2);
+    return true;
+  }
+  e.kx = 0; e.ky = 0;
+  damageEnemy(e, e.hp + 1, p.angle, 'takedown', 30);
+  sfx('thud', { x: e.x, y: e.y, vol: 0.45 });
+  addFloater(e.x, e.y - 22, 'TAKEDOWN', '#c8d6ff');
+  witnessTakedown(e);
+  addJP('shadow', 6, 'takedown', 30);
+  G.events.emit('takedown', e);
+  return true;
+}
+
 function melee(p, d) {
   if (p.meleeCd > 0 || p.dodgeT > 0) return;
+  // From behind an attacker who hasn't seen you: a silent takedown instead of a shove.
+  const quiet = G.enemies.find((e) => canTakedown(e) && Math.abs(angleDiff(p.angle, angleTo(p.x, p.y, e.x, e.y))) < 1.2);
+  if (quiet && takedown(quiet)) return;
   const cost = 14 * d.staminaMult;
   if (p.stamina < cost) { toast('Too tired to strike.', 'warn', 1.2); return; }
   p.stamina -= cost;

@@ -40,6 +40,20 @@ than using simple beeps:
 loop per mood). See [`audio/README.md`](audio/README.md) for the sound names and
 recommended free sources.
 
+### Stealth (v0.8.1)
+
+- **They don't know where you are.** Attackers go for your home first; if it's empty, they spread
+  out and search the map. They find you by seeing you (they're half-blind behind them, and the dark
+  helps), hearing you (sprinting nearby, gunfire) or bumping into you. Once you break line of sight
+  they go to where they last saw you, look around, and lose you.
+- **Stay hidden for 4 hours and they give up**: the HUD counts down, the clock runs at normal speed
+  while they search, and the crew drives off and comes back the next night. Being spotted resets the
+  countdown.
+- **Silent takedowns**: sneak up behind an attacker who hasn't seen you and press ACT/E (or melee).
+  It's quiet: only a crewmate who sees it raises the alarm. Bosses don't go down quietly.
+- Two new trophies: *Hide and Seek* and *Quiet Professional*.
+- Fixed: the Map tab after Chapter 1, and molotov fire reaching you through walls.
+
 ### What's new in v0.8 — play anywhere, play again
 
 - **Cloud save**: turn it on (title screen or Settings) and you get a code like `K7F2-9QXD-M3PA`.
@@ -352,7 +366,7 @@ validation/migration, simultaneous two-finger touch (joystick + aim) in an iPhon
 landscape viewport, rotation to portrait and back, and pausing when backgrounded. It fails
 on any console error. Screenshots go to `test-output/`.
 
-Current result: **all checks pass** (see the count printed at the end of `npm test`). Run one part with `ONLY=desktop|v2|audio|v3|v4|v5|v7|pad|electron|mobile npm test` (comma-separate several). The v7 block covers cloud save between two browsers (code pad, newer-save offer, conflict refusal), trophies, New Game+, the whole Newark episode (including a restart after falling) and the daily challenge posting to the leaderboard; the local server runs the real API Worker against SQLite. The pad block drives the desktop build with a simulated controller (title, difficulty, dialogue, move, aim, fire, pause menu, tabs, settings, back); the electron block launches the packaged app (after `node tools/build-desktop.mjs`, under a display such as `xvfb-run`). The v5 block plays Chapter 5 end to end: the move to Short Hills, chores, Mickey's jobs, recon, the ally phone calls, Carlo's siege, the floor plans, the night-only drive, guards holding posts, the locked study, Ruth's rescue, Dante's key and the justice ending. The v0.4 block covers portraits, rain, cutscenes and skipping, lasting damage, Duke, the safe room, dog handlers, loot drops and the full Chapter 4 story; the v0.3 block covers Ruth's move, Chapter 3, farm life, difficulty and Endless Siege. The v0.2 block covers buying/switching/firing the shotgun and rifle, rifle pierce, favors, shutters, traps, cameras, arsonist fire, the lieutenant's rally, weakest-point targeting, the move to Chapter 2, the full Chapter 2 story and siege, saving in Chapter 2 and migrating a version-1 save.
+Current result: **all checks pass** (see the count printed at the end of `npm test`). Run one part with `ONLY=desktop|v2|audio|v3|v4|v5|v7|stealth|pad|electron|mobile npm test` (comma-separate several). The v7 block covers cloud save between two browsers (code pad, newer-save offer, conflict refusal), trophies, New Game+, the whole Newark episode (including a restart after falling) and the daily challenge posting to the leaderboard; the local server runs the real API Worker against SQLite. The pad block drives the desktop build with a simulated controller (title, difficulty, dialogue, move, aim, fire, pause menu, tabs, settings, back); the electron block launches the packaged app (after `node tools/build-desktop.mjs`, under a display such as `xvfb-run`). The v5 block plays Chapter 5 end to end: the move to Short Hills, chores, Mickey's jobs, recon, the ally phone calls, Carlo's siege, the floor plans, the night-only drive, guards holding posts, the locked study, Ruth's rescue, Dante's key and the justice ending. The v0.4 block covers portraits, rain, cutscenes and skipping, lasting damage, Duke, the safe room, dog handlers, loot drops and the full Chapter 4 story; the v0.3 block covers Ruth's move, Chapter 3, farm life, difficulty and Endless Siege. The v0.2 block covers buying/switching/firing the shotgun and rifle, rifle pierce, favors, shutters, traps, cameras, arsonist fire, the lieutenant's rally, weakest-point targeting, the move to Chapter 2, the full Chapter 2 story and siege, saving in Chapter 2 and migrating a version-1 save.
 
 ### iPhone / iPad checklist (real device testing still needed)
 
