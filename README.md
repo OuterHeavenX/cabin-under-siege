@@ -38,6 +38,21 @@ than using simple beeps:
 loop per mood). See [`audio/README.md`](audio/README.md) for the sound names and
 recommended free sources.
 
+### What's new in v0.5 — the world gets depth
+
+- **Characters** are drawn in a slightly angled 3/4 view: legs that stride, arms that swing,
+  clothes per person (Frank's coat, Ruth's cardigan and bun, the deputy's uniform and trooper hat,
+  fedoras on gunmen, the lieutenant's suit and red tie), guns held toward where they aim with a
+  kick when fired, a stagger when hit, and bodies that fall instead of fading circles.
+- **Buildings have height**: every front wall is a facade — log cabins, painted clapboard, brick
+  storefronts, stone manors, a glass greenhouse — under raised hip roofs with shingles, ridge
+  lines and chimneys that smoke, casting shadows on the ground. Front doors and windows are seen
+  face-on: boards, shutters, cracks and broken glass included, and windows glow warm at night.
+- **Real night lighting**: lamps, porch lights and floodlights are stopped by walls, closed doors
+  and shutters, while lit windows throw light out onto the yard. Frank carries a **flashlight**
+  whose beam stops at walls (with dust drifting in it), gunfire lights up the room for an instant,
+  and fire flickers. The Low graphics setting keeps the old, cheaper lighting.
+
 ### What's new in v0.4.1 — a longer, richer Chapter 1
 
 Chapter 1 now takes 30–40 minutes over about six in-game days, in three acts. The story
