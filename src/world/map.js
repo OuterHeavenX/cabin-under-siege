@@ -45,6 +45,7 @@ export class GameMap {
   idx(cx, cy) { return cy * this.w + cx; }
   inBounds(cx, cy) { return cx >= 0 && cy >= 0 && cx < this.w && cy < this.h; }
 
+  getGround(cx, cy) { return this.inBounds(cx, cy) ? this.ground[this.idx(cx, cy)] : -1; }
   setGround(cx, cy, g) { if (this.inBounds(cx, cy)) this.ground[this.idx(cx, cy)] = g; }
   setSolid(cx, cy, s) { if (this.inBounds(cx, cy)) this.solid[this.idx(cx, cy)] = s; }
   fillGround(x, y, w, h, g) { for (let j = y; j < y + h; j++) for (let i = x; i < x + w; i++) this.setGround(i, j, g); }

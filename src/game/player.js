@@ -4,6 +4,7 @@ import { PLAYER_RADIUS, PLAYER_SPEED, SPRINT_SPEED, TILE } from '../config.js';
 import { input, consume, readMove } from '../input.js';
 import { derived, addJP } from './progression.js';
 import { count, removeItem, quickItem, useConsumable } from './inventory.js';
+import { modStats } from './activities.js';
 import { spawnBullet, spawnParticles, addFloater, shake, damageEnemy } from './combat.js';
 import { angleDiff, angleTo, clamp, dist } from '../util.js';
 import { sfx } from '../audio.js';
@@ -29,7 +30,7 @@ export function createPlayer() {
     vx: 0, vy: 0,
     fireCd: 0, reloadT: 0, meleeCd: 0, meleeAnim: 0,
     invuln: 0, dodgeT: 0, dodgeDx: 0, dodgeDy: 0,
-    flinch: 0, muzzle: 0, lastHurt: 99, lastCombat: 99, regenBuff: 0,
+    flinch: 0, muzzle: 0, lastHurt: 99, lastCombat: 99, regenBuff: 0, wellFed: 0,
     walkPhase: 0, inCover: false, chopAnim: 0,
     dead: false,
   };
@@ -65,6 +66,7 @@ export function updatePlayer(dt) {
   p.lastHurt += dt; p.lastCombat += dt;
   p.flinch = Math.max(0, p.flinch - dt * 2.5);
   if (p.regenBuff > 0) p.regenBuff -= dt;
+  if (p.wellFed > 0) { p.wellFed -= dt; if (p.wellFed <= 0) { const d0 = derived(); p.hp = Math.min(p.hp, d0.maxHp); p.stamina = Math.min(p.stamina, d0.maxStamina); } }
   if (p.hp > d.maxHp) p.hp = d.maxHp;
 
   // --- Movement ---
@@ -202,7 +204,8 @@ function fire(p, d, moving, w) {
   p.fireCd = w.fireCd;
   p.muzzle = w.pellets > 1 ? 0.09 : 0.06;
   p.lastCombat = 0;
-  let spread = w.spread * (w.pellets > 1 ? 1 : d.spreadMult);
+  const md = modStats(p.weapon);
+  let spread = w.spread * (w.pellets > 1 ? 1 : d.spreadMult) * md.spread;
   if (moving) spread += w.moveSpread * d.moveSpreadMult;
   spread += p.flinch * 0.2 * d.flinchMult;
   const mx = p.x + Math.cos(p.angle) * 18, my = p.y + Math.sin(p.angle) * 18;
@@ -210,17 +213,17 @@ function fire(p, d, moving, w) {
     const a = w.pellets > 1
       ? p.angle + ((i / (w.pellets - 1)) - 0.5) * 2 * spread * (0.75 + Math.random() * 0.25) + (Math.random() - 0.5) * 0.04
       : p.angle + (Math.random() - 0.5) * 2 * spread;
-    spawnBullet({ x: mx, y: my, angle: a, speed: w.speed * (0.92 + Math.random() * 0.16), dmg: w.dmg, owner: 'player', range: w.range * (w.pellets > 1 ? 0.85 + Math.random() * 0.3 : 1), pierce: w.pierce || 0, knock: w.knock, weapon: p.weapon });
+    spawnBullet({ x: mx, y: my, angle: a, speed: w.speed * (0.92 + Math.random() * 0.16), dmg: w.dmg, owner: 'player', range: w.range * md.range * (w.pellets > 1 ? 0.85 + Math.random() * 0.3 : 1), pierce: w.pierce || 0, knock: w.knock, weapon: p.weapon });
   }
   // Ejected casing (visual)
   G.casings = G.casings || [];
   if (G.casings.length > 40) G.casings.shift();
   const side = p.angle + Math.PI / 2;
   G.casings.push({ x: p.x, y: p.y, vx: Math.cos(side) * 90 + (Math.random() - 0.5) * 40, vy: Math.sin(side) * 90 + (Math.random() - 0.5) * 40, t: 0, rot: Math.random() * 6, color: p.weapon === 'shotgun' ? '#c0392b' : '#d9b84a' });
-  sfx(w.sound);
-  shake(w.shake);
+  sfx(md.quiet ? 'suppressed' : w.sound);
+  shake(md.quiet ? 1 : w.shake);
   if (p.weapon !== 'pistol') { p.x -= Math.cos(p.angle) * 3; p.y -= Math.sin(p.angle) * 3; }
-  G.events.emit('shot', p.x, p.y);
+  G.events.emit('shot', p.x, p.y, md.quiet);
   if (p.mag === 0 && count(w.ammo) > 0) startReload(p, d);
 }
 

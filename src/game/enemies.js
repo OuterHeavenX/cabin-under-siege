@@ -71,8 +71,9 @@ function alertEnemy(e) {
 
 export function initEnemyEvents() {
   G.events.on('enemyAlert', (e) => alertEnemy(e));
-  G.events.on('shot', (x, y) => {
-    for (const e of G.enemies) if (!e.dead && !e.alerted && dist(e.x, e.y, x, y) < 420) alertEnemy(e);
+  G.events.on('shot', (x, y, quiet) => {
+    const r = quiet ? 110 : 420;
+    for (const e of G.enemies) if (!e.dead && !e.alerted && dist(e.x, e.y, x, y) < r) alertEnemy(e);
   });
 }
 

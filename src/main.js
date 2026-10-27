@@ -34,6 +34,7 @@ import { saveGame, hasSave, readSaveRaw, migrate, validateSave, deleteSave, load
 import { addPickup, damageEnemy } from './game/combat.js';
 import { updateFire, startFire } from './game/fire.js';
 import { spawnEnemy, openingStrength } from './game/enemies.js';
+import { initActivityEvents } from './game/activities.js';
 import { startSiege, makeRaidPlan, scheduleSiege, addSign, storyPlan } from './game/siege.js';
 import { buySkill } from './game/progression.js';
 import { damagePlayer } from './game/player.js';
@@ -299,7 +300,7 @@ function frame(ts) {
 
 function handleGlobalKeys() {
   const top = topModal();
-  if (top && top.name === 'repair' && G.repairGameHit) {
+  if (top && (top.name === 'repair' || top.name === 'fishing') && G.repairGameHit) {
     if (consume('interact') || consume('dodge') || consume('advance')) G.repairGameHit();
   }
   if (consume('pause')) {
@@ -336,6 +337,7 @@ window.addEventListener('focus', () => resumeAudio());
 function initEvents() {
   initEnemyEvents();
   initSiegeEvents();
+  initActivityEvents();
   initTimeEvents();
   initHomeEvents();
   initStoryEvents();

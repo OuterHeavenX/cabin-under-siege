@@ -194,16 +194,19 @@ export function installBrace(d) {
 export function installUpgrade(id) {
   const def = ITEMS[id];
   if (!def || !def.install) return false;
-  if (def.install !== 'extMag' && !atHome()) { toast('Install this at home.', 'warn'); return false; }
+  const gunMod = ['extMag', 'scope', 'choke', 'suppressor'].includes(def.install);
+  if (!gunMod && !atHome()) { toast('Install this at home.', 'warn'); return false; }
   const mods = G.s.weaponMods || (G.s.weaponMods = {});
-  const has = def.install === 'extMag' ? mods.extMag || G.s.home.upgrades.extMag : G.s.home.upgrades[def.install];
+  const has = gunMod ? mods[def.install] || (def.install === 'extMag' && G.s.home.upgrades.extMag) : G.s.home.upgrades[def.install];
   if (has) { toast('Already installed.', 'warn'); return false; }
+  const needs = { scope: 'rifle', choke: 'shotgun' }[def.install];
+  if (needs && count(needs) < 1) { toast(`You need the ${needs} first.`, 'warn'); return false; }
   if (!removeItem(id, 1)) return false;
-  if (def.install === 'extMag') mods.extMag = true; else G.s.home.upgrades[def.install] = true;
+  if (gunMod) mods[def.install] = true; else G.s.home.upgrades[def.install] = true;
   sfx('hammer'); sfx('chime');
-  const msg = { camera: 'Cameras mounted on every corner. Nobody sneaks up on you now.', floodlight: 'Floodlight mounted over the porch.', alarm: 'Tripwires strung through the treeline. You\'ll hear them coming.', extMag: 'Extended magazine fitted: 12 rounds.' }[def.install];
+  const msg = { camera: 'Cameras mounted on every corner. Nobody sneaks up on you now.', floodlight: 'Floodlight mounted over the porch.', alarm: 'Tripwires strung through the treeline. You\'ll hear them coming.', extMag: 'Extended magazine fitted: 12 rounds.', scope: 'Scope mounted. The rifle reaches out and touches someone.', choke: 'Choke threaded on. Tighter pattern, longer reach.', suppressor: 'Suppressor fitted. Your handgun whispers now.' }[def.install];
   toast(msg, 'info', 3);
-  if (def.install !== 'extMag') { addJP('handyman', 8, 'install', 6); G.events.emit('defenseInstalled', def.install); }
+  if (!gunMod) { addJP('handyman', 8, 'install', 6); G.events.emit('defenseInstalled', def.install); }
   saveGame('install');
   return true;
 }

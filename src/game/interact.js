@@ -9,7 +9,8 @@ import { installBoards, installBrace, installShutters, pickUpCover, repairNeed, 
 import { atHome, chapter, LAST_CHAPTER } from './chapters.js';
 import { questProps, questPropAction } from './quests.js';
 import { answerPhone, storyMail } from './story.js';
-import { openBedMenu, openCraft, openActions, openShop, openJobBoard } from '../ui/menus.js';
+import { openBedMenu, openCraft, openActions, openShop, openJobBoard, openCook, openFishingGame } from '../ui/menus.js';
+import { gardenNear, pickGarden, waterNear, landFish } from './activities.js';
 import { playDialogue } from '../ui/dialogue.js';
 import { toast } from '../ui/hud.js';
 import { addJP, addXP } from './progression.js';
@@ -58,6 +59,15 @@ function candidates() {
         else add(cx * TILE + 16, cy * TILE + 16, 40, 'Pick up bear trap', 'TAKE', () => pickUpTrap(trap), -2);
       }
       const t = m.inBounds(cx, cy) ? m.trees.get(m.idx(cx, cy)) : null;
+      if (cx === pcx && cy === pcy && !inCombat()) {
+        const g = gardenNear(p);
+        if (g) add(g.x, g.y, 44, 'Pick vegetables', 'PICK', () => pickGarden(g), -1);
+        const wtr = waterNear(p);
+        if (wtr) {
+          if (count('fishing_rod') > 0) add(wtr.x, wtr.y, 60, 'Go fishing (15 min per catch)', 'FISH', () => openFishingGame({ onCatch: landFish }), 0);
+          else add(wtr.x, wtr.y, 60, 'Water — you\'d need a Fishing Rod', 'LOOK', () => toast(`${chapter().storeName} sells fishing rods.`, 'info'), -2);
+        }
+      }
       if (t && !t.chopped) add(cx * TILE + 16, cy * TILE + 16, 42, `Chop tree (${3 - t.chops} swings left)`, 'CHOP', () => chopTree(t), -1);
     }
   }
@@ -69,6 +79,7 @@ function propAction(pr) {
   switch (pr.kind) {
     case 'bed': return { label: 'Use bed (sleep / save)', short: 'REST', action: () => openBedMenu() };
     case 'workbench': return { label: 'Use workbench (craft)', short: 'CRAFT', action: () => openCraft() };
+    case 'stove': return { label: 'Use the stove (cook)', short: 'COOK', action: () => openCook() };
     case 'phone': return { label: s.story.step === 'phone_call' ? 'Answer the ringing phone' : 'Use telephone', short: 'PHONE', action: () => answerPhone(), prio: s.story.step === 'phone_call' ? 3 : 0 };
     case 'car': return carAction();
     case 'exit': return { label: G.map.id === 'cabin' ? 'Walk to Pine Hollow (1 hr)' : 'Walk home (1 hr)', short: 'WALK', action: () => travelFn && travelFn(pr.target, 'walk') };
@@ -77,7 +88,10 @@ function propAction(pr) {
       return { label: 'Repair the cut phone line (Toolkit + 1 wood)', short: 'FIX', action: () => startRepair(null, 'phone'), prio: 2 };
     case 'mailbox': return { label: 'Check mailbox', short: 'MAIL', action: () => checkMail(), prio: G.s.story.step === 'ch2_letter' ? 4 : 0 };
     case 'jobboard': return { label: 'Read the job board', short: 'JOBS', action: () => openJobBoard() };
-    case 'logdrop': return { label: s.job && s.job.type === 'woodcut' ? `Drop off wood (${count('wood')}/${s.job.need})` : 'Log drop-off', short: 'DROP', action: () => onLogDrop(), prio: s.job && s.job.type === 'woodcut' ? 2 : 0 };
+    case 'logdrop': {
+      const it = s.job && { woodcut: 'wood', harvest: 'vegetables', fishing: 'fish' }[s.job.type];
+      return { label: it ? `Drop off ${it} (${count(it)}/${s.job.need})` : 'Drop-off', short: 'DROP', action: () => onLogDrop(), prio: it ? 2 : 0 };
+    }
     case 'shed': {
       const j = s.job;
       const want = j && ((j.type === 'repair' && j.stage === 'materials') || (j.type === 'supply' && j.stage === 'pickup'));

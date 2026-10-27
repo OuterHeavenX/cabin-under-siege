@@ -11,9 +11,10 @@ export function derived() {
   const a = G.s.stats.attrs;
   const sk = hasSkill;
   const lvlBonus = (n) => n - 1;
+  const fed = G.player && G.player.wellFed > 0;
   return {
-    maxHp: 100 + 12 * lvlBonus(a.vit),
-    maxStamina: 100 + 10 * lvlBonus(a.end),
+    maxHp: Math.round((100 + 12 * lvlBonus(a.vit)) * (fed ? 1.1 : 1)),
+    maxStamina: 100 + 10 * lvlBonus(a.end) + (fed ? 25 : 0),
     staminaMult: 1 - 0.04 * lvlBonus(a.end),
     spreadMult: (1 - 0.06 * lvlBonus(a.pre)) * (sk('steady_hands') ? 0.7 : 1),
     moveSpreadMult: sk('steady_hands') ? 0.5 : 1,
@@ -41,7 +42,7 @@ export function shopDiscount(owner) {
   let d = 0;
   if (hasSkill('local_discount')) d += 0.1;
   if (owner === chapter().shopkeeper) {
-    const lv = relLevel(G.s.rel.dee);
+    const lv = relLevel(G.s.rel[owner] || 0);
     if (lv >= 4) d += 0.1; else if (lv >= 2) d += 0.05;
   }
   return d;

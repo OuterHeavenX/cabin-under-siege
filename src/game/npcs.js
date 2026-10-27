@@ -138,6 +138,40 @@ function firstTalkBonus(id) {
   }
 }
 
+/** NPCs remember what you did: favors, story choices, recent fights. One line, picked at random. */
+function memoryLine(id) {
+  const s = G.s, q = s.quests || {}, c = s.choices || {}, w = s.world;
+  const done = (qid) => q[qid] && q[qid].state === 'done';
+  const out = [];
+  if (w.lastAttackDay && s.time.day - w.lastAttackDay <= 1) out.push({
+    ruth: 'I counted the shell casings this morning. Forty-one. Harold would\'ve had something to say about that.',
+    dee: 'Heard the shooting all the way from the store last night. You look like you haven\'t slept. Sit down a minute.',
+    marcus: 'Sounded like a war over at your place. I had the radio scanner on. Nobody called it in. Interesting, isn\'t it?',
+    ingrid: 'Cows wouldn\'t give milk this morning. Can\'t imagine why. You hurt?',
+    rosa: 'You\'re on the morning gossip circuit, Frank. Somebody heard firecrackers. I said firecrackers.',
+    bo: 'Couple of fellas asked me who bought all those shells. I said hunters. Hunt something, will you?',
+  }[id]);
+  if (id === 'ruth') {
+    if (done('ruth_watch')) out.push('I wind Harold\'s watch every morning now. Then I give it back to you. You always forget it, Frank.');
+    if (c.stranger === 'threaten') out.push('That man in the grey coat — you threatened him, didn\'t you? Men like that remember.');
+    if (s.chapter >= 3 && c.deputy === 'bribe') out.push('Paying off a deputy. Harold paid off a building inspector once. The roof fell in anyway.');
+    if (s.chapter >= 2) out.push('Pine Hollow seems a long way off now. I don\'t miss the winters. I miss the pond.');
+  }
+  if (id === 'dee' && done('dee_pie')) out.push('Pastor Abe still talks about that pie. Says it was delivered by an angel. I didn\'t correct him.');
+  if (id === 'gus' && done('gus_log')) out.push('County finally came to look at that tree you cleared. Took the credit, too.');
+  if (id === 'marcus' && done('marcus_antenna')) out.push('Antenna\'s holding. Picked up a trucker in Toledo last night singing to his cat. Worth it.');
+  if (id === 'pete' && done('pete_dog')) out.push('Biscuit sleeps by the door now. Waiting for you, I think. Traitor.');
+  if (id === 'ingrid') {
+    if (c.marcusHelp) out.push('Marcus Bell called again. Asked if you\'re eating. I said you\'re eating my food, so yes.');
+    if (c.deputy === 'refuse') out.push('Mott\'s been parking at the crossroads every night since you ran him off. Good. Let him get cold.');
+    if (done('ingrid_calf')) out.push('Clover\'s been following the tractor around like a dog. Your fault, I think.');
+    if (ruthJoined()) out.push('Your Ruth beat me at cribbage three times. I don\'t lose at cribbage, Frank.');
+  }
+  if (id === 'bo' && done('bo_fish')) out.push('Best fish fry in ten years. People asked who caught them. I said a mysterious stranger. Fits.');
+  if (id === 'tess' && done('tess_scale')) out.push('Scale\'s still reading true. The Johansson boys are furious. They were the ones getting the deal.');
+  return out.length ? choose(out) : null;
+}
+
 /** Everyday chat, with context-aware hints that are relationship benefits. */
 export function chatWith(id) {
   const def = NPCS[id];
@@ -145,7 +179,8 @@ export function chatWith(id) {
   const lines = [];
   const pool = id === 'ruth' && G.s.chapter > 1 ? [...COMPANION_LINES] : [...def.idle];
   if (hasSkill('familiar_face') || lv >= 3) pool.push(...def.friendly);
-  lines.push({ who: def.name, text: choose(pool) });
+  const mem = memoryLine(id);
+  lines.push({ who: def.name, text: mem && Math.random() < 0.6 ? mem : choose(pool) });
   const w = G.s.world;
   const ch = chapter();
   const first = def.name.split(' ')[0].replace(/"/g, '');

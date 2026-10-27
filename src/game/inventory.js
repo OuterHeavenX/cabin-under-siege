@@ -49,6 +49,7 @@ export function useConsumable(id) {
   p.hp = Math.min(d.maxHp, p.hp + heal);
   if (def.stamina) p.stamina = d.maxStamina;
   if (def.regenBuff) p.regenBuff = def.regenBuff;
+  if (def.wellFed) { p.wellFed = def.wellFed; toast('Well Fed: +10% max health, +25 stamina for a while.', 'good', 3); }
   sfx(def.food ? 'eat' : 'heal');
   toast(`Used ${def.name}: +${heal} HP`, 'heal');
   addJP('survivor', 2, 'consume', 5);

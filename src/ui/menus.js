@@ -1,7 +1,8 @@
 // Modal UI: pause menu tabs, NPC menus, shops, job board, bed, workbench,
 // repair minigame, siege summary, defeat and chapter-end screens.
 import { G, hasSkill } from '../game/state.js';
-import { ITEMS, SHOPS, RECIPES } from '../data/items.js';
+import { ITEMS, SHOPS, RECIPES, COOK_RECIPES } from '../data/items.js';
+import { cook, canCook, mods } from '../game/activities.js';
 import { ATTRIBUTES, MAX_ATTR, PATHS, SKILLS, xpForLevel } from '../data/skills.js';
 import { NPCS, relLevel } from '../data/npcs.js';
 import { HOMES } from '../data/homes.js';
@@ -276,6 +277,7 @@ function homeTab() {
   const w = G.s.world;
   const heat = hasSkill('keen_eye') ? `${heatLabel(w.threat)} (${Math.round(w.threat)}/100)` : heatLabel(w.threat);
   return `<div class="stat-line">Mob Heat: <b class="heat-${heatLabel(w.threat).toLowerCase()}">${heat}</b> <span class="muted">— how close the family is to striking. Learn <i>Keen Eye</i> to see the exact number.</span></div>
+    ${(w.heatLog || []).length ? `<div class="heat-log small">${w.heatLog.slice(0, 4).map((h) => `<span class="${h.n > 0 ? 'bad' : 'good'}">${h.n > 0 ? '▲' : '▼'} ${escapeHtml(h.why)}</span>`).join(' · ')}</div>` : ''}
     ${rows}
     <div class="def-row wide"><div class="def-name">🛡 Placed cover</div><div class="def-stat">${G.s.home.covers.length} / ${MAX_COVERS} placed${G.s.home.covers.map((c) => ` · ${c.type} ${Math.round((c.hp))}hp`).join('')}</div></div>
     <div class="def-row wide"><div class="def-name">⚙ Bear traps</div><div class="def-stat">${(G.s.home.traps || []).length} / ${MAX_TRAPS} set${(G.s.home.traps || []).some((t) => !t.armed) ? ' · some need re-arming (walk up and press ACT)' : ''}</div></div>
@@ -505,8 +507,8 @@ export function openJobBoard() {
     const open = jobOpenHours();
     const offers = boardOffers().map((o) => {
       const t = JOB_TYPES[o.type];
-      return `<div class="job-card ${o.locked ? 'locked' : ''}"><div class="job-title">${t.icon} ${t.name} <span class="pay">$${o.pay}</span></div><div class="small">${escapeHtml(o.desc)}</div><div class="small muted">Rewards: money, XP, ${PATHS[t.path].name} JP${o.type !== 'woodcut' ? ', friendship' : ', friendship with Gus'}</div>
-        ${o.locked ? '<div class="small hl">Requires the Neighbor skill "Good Reputation".</div>' : `<button class="btn" data-accept="${o.type}" ${j || !open ? 'disabled' : ''}>Accept</button>`}</div>`;
+      return `<div class="job-card ${o.locked ? 'locked' : ''}"><div class="job-title">${t.icon} ${t.name} <span class="pay">$${o.pay}</span></div><div class="small">${escapeHtml(o.desc)}</div><div class="small muted">Rewards: money, XP, ${PATHS[t.path].name} JP, friendship with ${escapeHtml(NPCS[chapter().jobContact].name.split(' ')[0])}</div>
+        ${o.locked ? '<div class="small hl">Requires the Neighbor skill "Good Reputation".</div>' : o.needs ? `<div class="small hl">Needs a ${escapeHtml(ITEMS[o.needs].name)} (${escapeHtml(chapter().storeName)}).</div>` : `<button class="btn" data-accept="${o.type}" ${j || !open ? 'disabled' : ''}>Accept</button>`}</div>`;
     }).join('');
     rerender(entry, `<h2>📋 Okafor Lumber — Job Board</h2>
       ${!open ? '<p class="hl">The board is closed. New jobs are handed out 7 AM – 5 PM.</p>' : ''}
@@ -559,6 +561,78 @@ export function openCraft() {
     if (b) { craft(b.dataset.craft); render(); }
   });
   render();
+}
+
+/* ---------------- stove ---------------- */
+export function openCook() {
+  const el = openModal('cook', '', { cls: 'small' });
+  const entry = stack[stack.length - 1];
+  const render = () => {
+    const rows = COOK_RECIPES.map((r) => {
+      const need = Object.entries(r.needs).map(([id, n]) => `${n} ${ITEMS[id].name}${count(id) < n ? ` <span class="bad">(have ${count(id)})</span>` : ''}`).join(' + ');
+      return `<div class="item-row"><div class="item-icon">${ITEMS[r.id].icon}</div><div class="item-main"><div class="item-name">${escapeHtml(r.label)} <span class="muted">(have ${count(r.id)})</span></div><div class="item-desc">${escapeHtml(ITEMS[r.id].desc)}<br><span class="muted">Needs: ${need}</span></div></div><button class="btn" data-cook="${r.id}" ${canCook(r) ? '' : 'disabled'}>Cook</button></div>`;
+    }).join('');
+    rerender(entry, `<h2>🍳 Stove</h2><p class="small muted">Cooking takes 20 minutes. Fish come from the pond (Fishing Rod); vegetables from a farm garden.</p>${rows}`);
+  };
+  el.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-cook]');
+    if (b) { cook(b.dataset.cook); render(); }
+  });
+  render();
+}
+
+/* ---------------- fishing minigame ---------------- */
+// Wait for a bite, strike while the bobber is down, then reel: keep tapping
+// while the fish is inside the green zone. Too early or too many misses and it's gone.
+export function openFishingGame({ onCatch }) {
+  const el = openModal('fishing', `<h2>🎣 Fishing</h2><p class="small fg-msg">Casting…</p>
+    <div class="fg-water"><div class="fg-bobber"></div></div>
+    <div class="rg-bar fg-bar hidden"><div class="rg-zone"></div><div class="rg-needle fish"></div></div>
+    <div class="rg-count"></div>
+    <button class="btn big primary rg-hit">STRIKE</button>`, { cls: 'small' });
+  const msg = el.querySelector('.fg-msg'), bob = el.querySelector('.fg-bobber'), bar = el.querySelector('.fg-bar');
+  const zone = el.querySelector('.rg-zone'), needle = el.querySelector('.rg-needle'), cnt = el.querySelector('.rg-count'), btn = el.querySelector('.rg-hit');
+  let phase = 'wait', t = 0, waitFor = 1.5 + Math.random() * 2.5, pos = 0.5, vel = 0, good = 0, miss = 0, zx = 0.4, zw = hasSkill('quick_fix') ? 0.3 : 0.24;
+  sfx('splash');
+  const setPhase = (ph) => {
+    phase = ph; t = 0;
+    if (ph === 'wait') { waitFor = 1.5 + Math.random() * 2.5; msg.textContent = 'Waiting for a bite… (don\'t strike yet)'; bob.classList.remove('bite'); bar.classList.add('hidden'); btn.textContent = 'STRIKE'; }
+    if (ph === 'bite') { msg.textContent = 'BITE! Strike now!'; bob.classList.add('bite'); sfx('splash'); }
+    if (ph === 'reel') { msg.textContent = 'Reel when the fish is in the green zone — 3 good pulls.'; bar.classList.remove('hidden'); btn.textContent = 'REEL'; good = 0; miss = 0; upd(); }
+  };
+  const upd = () => { cnt.textContent = phase === 'reel' ? `${'🐟'.repeat(good)}${'·'.repeat(3 - good)}  ${'✕'.repeat(miss)}` : ''; };
+  setPhase('wait');
+  let raf, last = performance.now();
+  const tick = (now) => {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now; t += dt;
+    if (phase === 'wait') { bob.style.transform = `translateY(${Math.sin(now / 300) * 3}px)`; if (t > waitFor) setPhase('bite'); }
+    else if (phase === 'bite') { bob.style.transform = 'translateY(10px)'; if (t > 0.9) { msg.textContent = 'Too slow — it stole the bait. Casting again…'; sfx('miss'); setTimeout(() => el.isConnected && phase === 'bite' && setPhase('wait'), 600); phase = 'lost'; } }
+    else if (phase === 'reel') {
+      vel += (Math.random() - 0.5) * 9 * dt; vel *= 0.985; vel = Math.max(-0.9, Math.min(0.9, vel));
+      pos += vel * dt;
+      if (pos < 0.02 || pos > 0.98) { vel = -vel; pos = Math.max(0.02, Math.min(0.98, pos)); }
+      needle.style.left = `${pos * 100}%`;
+      zone.style.left = `${zx * 100}%`; zone.style.width = `${zw * 100}%`;
+    }
+    if (el.isConnected) raf = requestAnimationFrame(tick);
+  };
+  raf = requestAnimationFrame(tick);
+  const hit = () => {
+    if (phase === 'wait') { msg.textContent = 'Too early — you spooked it. Wait for the bobber to dip.'; sfx('miss'); t = 0; waitFor = 1.5 + Math.random() * 2; return; }
+    if (phase === 'bite') { sfx('reload'); setPhase('reel'); vel = (Math.random() < 0.5 ? -1 : 1) * 0.5; return; }
+    if (phase !== 'reel') return;
+    if (pos >= zx && pos <= zx + zw) {
+      good++; sfx('reload'); zx = 0.08 + Math.random() * (0.84 - zw); upd();
+      if (good >= 3) { cancelAnimationFrame(raf); closeModal(); onCatch(); return; }
+    } else {
+      miss++; sfx('miss'); upd(); bar.classList.add('miss'); setTimeout(() => bar.classList.remove('miss'), 200);
+      if (miss >= 3) { msg.textContent = 'The line snaps back — it got away. Casting again…'; phase = 'lost'; setTimeout(() => el.isConnected && setPhase('wait'), 900); }
+    }
+  };
+  btn.addEventListener('pointerdown', (e) => { e.preventDefault(); hit(); });
+  G.repairGameHit = hit;
+  const entry = stack[stack.length - 1];
+  entry.onClose = () => { cancelAnimationFrame(raf); G.repairGameHit = null; };
 }
 
 /* ---------------- action chooser ---------------- */

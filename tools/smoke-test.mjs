@@ -743,7 +743,7 @@ async function faceTo(page, x, y) { await ev(page, ([x, y]) => { if (window.__cu
   await page.reload();
   await page.click('#t-new');
   await sleep(1200);
-  const names = ['shot', 'shotgun', 'rifleShot', 'enemyShot', 'rifle', 'reload', 'shell', 'swap', 'hit', 'hurt', 'thud', 'ricochet', 'impact', 'glass', 'wood', 'chop', 'treefall', 'door', 'doorBreak', 'crash', 'explode', 'hammer', 'trap', 'molotov', 'step', 'dodge', 'pickup', 'coin', 'heal', 'eat', 'car', 'phone', 'alarm', 'warning', 'ui', 'chime', 'jobDone', 'levelup', 'victory', 'defeat'];
+  const names = ['shot', 'shotgun', 'rifleShot', 'enemyShot', 'rifle', 'reload', 'shell', 'swap', 'hit', 'hurt', 'thud', 'ricochet', 'impact', 'glass', 'wood', 'chop', 'treefall', 'door', 'doorBreak', 'crash', 'explode', 'dig', 'splash', 'suppressed', 'hammer', 'trap', 'molotov', 'step', 'dodge', 'pickup', 'coin', 'heal', 'eat', 'car', 'phone', 'alarm', 'warning', 'ui', 'chime', 'jobDone', 'levelup', 'victory', 'defeat'];
   const lv = await page.evaluate(async (names) => {
     const d = window.__cus.dbg; const out = {};
     for (const n of names) out[n] = await d.renderOffline(() => d.sfx(n), 2);

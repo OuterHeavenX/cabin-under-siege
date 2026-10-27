@@ -21,7 +21,17 @@ export const JOB_TYPES = {
   delivery: { name: 'Delivery', icon: '📦', path: 'neighbor' },
   repair: { name: 'Repair Work', icon: '🔧', path: 'handyman' },
   supply: { name: 'Supply Run', icon: '🚚', path: 'neighbor', requires: 'good_reputation' },
+  harvest: { name: 'Harvest', icon: '🥕', path: 'survivor', item: 'vegetables' },
+  fishing: { name: 'Fish Order', icon: '🎣', path: 'survivor', item: 'fish', needsItem: 'fishing_rod' },
 };
+
+/** First water cell on a map (for fishing waypoints). */
+function pondPoint(m) {
+  for (let cy = 0; cy < m.h; cy++) for (let cx = 0; cx < m.w; cx++) {
+    if (m.getSolid(cx, cy) === 3 && m.getSolid(cx, cy - 1) === 0) return { x: cx * TILE + 16, y: (cy - 1) * TILE + 16 };
+  }
+  return null;
+}
 
 function payMult() {
   let m = derived().jobPayMult;
@@ -38,8 +48,10 @@ export function boardOffers() {
   if (!o.woodcut) { const need = randInt(4, 6); o.woodcut = { type: 'woodcut', need, pay: 25 + need * 9, desc: `Cut and deliver ${need} wood to the log drop-off at the yard.` }; }
   if (!o.delivery) { const t = choose(Object.keys(town.deliveryTargets)); o.delivery = { type: 'delivery', target: t, pay: 45, desc: `Pick up a parcel at ${C().storeName} and deliver it to ${town.deliveryTargets[t].name} before time runs out.` }; }
   if (!o.repair) { const t = choose(Object.keys(town.repairTargets)); o.repair = { type: 'repair', target: t, pay: 55, desc: `Collect materials from the yard's supply crates, then fix ${town.repairTargets[t].name}. Needs a Toolkit.` }; }
+  if (town.cropsPickable && !o.harvest) { const need = randInt(5, 8); o.harvest = { type: 'harvest', need, pay: 20 + need * 8, desc: `Pick ${need} vegetables from your garden and bring them to the drop-off at ${C().jobPlace}.` }; }
+  if (!o.fishing && pondPoint(town) || !o.fishing && pondPoint(homeMap())) { const need = randInt(2, 3); o.fishing = { type: 'fishing', need, pay: 30 + need * 15, desc: `A restaurant wants ${need} fresh fish. Catch them in the pond and bring them to the drop-off. Needs a Fishing Rod.` }; }
   if (!o.supply) o.supply = { type: 'supply', pay: 70, desc: `Load a crate of supplies from the yard and take it to ${first(C().neighbor)}'s porch.` };
-  return Object.values(o).map((x) => ({ ...x, pay: Math.round(x.pay * payMult()), locked: JOB_TYPES[x.type].requires && !hasSkill(JOB_TYPES[x.type].requires) }));
+  return Object.values(o).map((x) => ({ ...x, pay: Math.round(x.pay * payMult()), locked: JOB_TYPES[x.type].requires && !hasSkill(JOB_TYPES[x.type].requires), needs: JOB_TYPES[x.type].needsItem && count(JOB_TYPES[x.type].needsItem) < 1 ? JOB_TYPES[x.type].needsItem : null }));
 }
 
 export function jobOpenHours() {
@@ -52,8 +64,9 @@ export function acceptJob(type) {
   if (!jobOpenHours()) { toast(`The board is closed. ${first(C().jobContact)} posts work from 7 AM to 5 PM.`, 'warn'); return false; }
   const offer = boardOffers().find((o) => o.type === type);
   if (!offer || offer.locked) return false;
+  if (offer.needs) { toast('You need a Fishing Rod for this one.', 'warn'); return false; }
   const job = { ...offer, stage: 'start', accepted: G.s.time.day };
-  if (type === 'woodcut') job.stage = 'gather';
+  if (type === 'woodcut' || type === 'harvest' || type === 'fishing') job.stage = 'gather';
   if (type === 'delivery') job.stage = 'pickup';
   if (type === 'repair') job.stage = 'materials';
   if (type === 'supply') job.stage = 'pickup';
@@ -77,7 +90,9 @@ export function jobHint() {
   if (!j) return '';
   const town = workMap();
   switch (j.type) {
-    case 'woodcut': return count('wood') >= j.need ? `Bring ${j.need} wood to the drop-off at ${C().jobPlace}.` : `Chop trees (wood ${count('wood')}/${j.need}). ${C().id === 1 ? 'The woodlot east of the yard is closest.' : 'Millbrook Park has plenty of deadfall.'}`;
+    case 'woodcut': return count('wood') >= j.need ? `Bring ${j.need} wood to the drop-off at ${C().jobPlace}.` : `Chop trees (wood ${count('wood')}/${j.need}). ${{ 1: 'The woodlot east of the yard is closest.', 2: 'Millbrook Park has plenty of deadfall.', 3: 'The windbreaks along the fields are full of trees.' }[C().id] || ''}`;
+    case 'harvest': return count('vegetables') >= j.need ? `Bring ${j.need} vegetables to the drop-off at ${C().jobPlace}.` : `Pick vegetables in your garden (${count('vegetables')}/${j.need}).`;
+    case 'fishing': return count('fish') >= j.need ? `Bring ${j.need} fish to the drop-off at ${C().jobPlace}.` : `Catch fish at the pond (${count('fish')}/${j.need}).`;
     case 'delivery': return j.stage === 'pickup' ? `Pick up the parcel at the ${C().storeName} counter.` : `Deliver the parcel to ${town.deliveryTargets[j.target].name}.`;
     case 'repair': return j.stage === 'materials' ? `Collect materials from the supply crates at ${C().jobPlace}.` : `Fix ${town.repairTargets[j.target].name}.`;
     case 'supply': return j.stage === 'pickup' ? `Load the crate at ${C().jobPlace}.` : `Leave the crate on ${first(C().neighbor)}'s porch.`;
@@ -96,6 +111,12 @@ export function jobWaypoint() {
     case 'woodcut': {
       if (count('wood') >= j.need) { const pr = town.props.find((p) => p.id === 'logdrop'); return { map: wm, x: pr.x, y: pr.y, label: 'Drop-off' }; }
       return { map: wm, ...town.points.woodlot, label: 'Woodlot' };
+    }
+    case 'harvest': case 'fishing': {
+      if (count(JOB_TYPES[j.type].item) >= j.need) { const pr = town.props.find((p) => p.id === 'logdrop'); return { map: wm, x: pr.x, y: pr.y, label: 'Drop-off' }; }
+      if (j.type === 'harvest') return { map: wm, ...(town.points.garden || town.points.start), label: 'Garden' };
+      const hp = pondPoint(homeMap()), wp = pondPoint(town);
+      return wp ? { map: wm, ...wp, label: 'Pond' } : { map: homeMapId(), ...hp, label: 'Pond' };
     }
     case 'delivery': return j.stage === 'pickup' ? { ...tp('store_door'), label: C().storeName } : { map: wm, ...town.deliveryTargets[j.target], label: 'Delivery' };
     case 'repair': {
@@ -178,7 +199,14 @@ export function onShed() {
 
 export function onLogDrop() {
   const j = G.s.job;
-  if (!j || j.type !== 'woodcut') { toast('Nothing to drop off. Take a woodcutting job from the board.', 'info'); return; }
+  if (j && (j.type === 'harvest' || j.type === 'fishing')) {
+    const item = JOB_TYPES[j.type].item;
+    if (count(item) < j.need) { toast(`${first(C().jobContact)} needs ${j.need}. You have ${count(item)}.`, 'warn'); return; }
+    removeItem(item, j.need);
+    completeJob({ xp: 25, jp: ['survivor', 6], rel: [[C().jobContact, 4]] });
+    return;
+  }
+  if (!j || j.type !== 'woodcut') { toast('Nothing to drop off. Take a job from the board.', 'info'); return; }
   if (count('wood') < j.need) { toast(`${first(C().jobContact)} needs ${j.need} wood. You have ${count('wood')}.`, 'warn'); return; }
   removeItem('wood', j.need);
   completeJob({ xp: 25, jp: ['survivor', 5], rel: [[C().jobContact, 5]] });

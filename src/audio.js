@@ -344,6 +344,7 @@ export function sfx(name, opts = {}) {
   const v = 1;
   switch (name) {
     case 'shot': gunshot(out, t, 'pistol'); break;
+    case 'suppressed': nz(out, t, { dur: 0.04, a: 0.001, peak: 0.5, bp: 1100, q: 0.8 }); nz(out, t, { type: 'pink', dur: 0.09, peak: 0.35, lp: 900 }); metalClick(out, t + 0.01, 1.1, 0.35, 0.03); break;
     case 'shotgun': gunshot(out, t, 'shotgun'); break;
     case 'rifleShot': gunshot(out, t, 'rifle'); break;
     case 'enemyShot': gunshot(out, t, 'pistol'); break;
@@ -408,6 +409,8 @@ export function sfx(name, opts = {}) {
       osc(out, t, { f: 70, fTo: 28, sweep: 0.6, dur: 0.8, peak: 1, a: 0.002 });
       for (let i = 0; i < 10; i++) nz(out, t + 0.2 + Math.random() * 1.2, { dur: 0.01, peak: 0.3, hp: 1800 });
       break;
+    case 'dig': nz(out, t, { type: 'brown', dur: 0.14, peak: 0.6, lp: 600 }); for (let i = 0; i < 4; i++) nz(out, t + 0.05 + i * 0.02, { dur: 0.015, peak: 0.12, bp: 1800, q: 2 }); break;
+    case 'splash': nz(out, t, { dur: 0.25, a: 0.01, peak: 0.5, bp: 1200, q: 0.7 }); nz(out, t + 0.03, { type: 'pink', dur: 0.5, peak: 0.25, lp: 2500, lpTo: 600 }); break;
     case 'doorBreak':
       for (let i = 0; i < 5; i++) woodKnock(out, t + i * 0.035, 0.8 + Math.random() * 0.8, 0.8, 0.12);
       nz(out, t, { type: 'pink', dur: 0.4, peak: 0.9, lp: 2500, lpTo: 300 }); osc(out, t, { f: 80, fTo: 40, sweep: 0.2, dur: 0.25, peak: 0.6 });

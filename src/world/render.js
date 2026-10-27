@@ -519,6 +519,23 @@ export function render(ctx) {
   const cx0 = Math.max(0, Math.floor(vx0 / TILE)), cy0 = Math.max(0, Math.floor(vy0 / TILE));
   const cx1 = Math.min(m.w - 1, Math.ceil(vx1 / TILE)), cy1 = Math.min(m.h - 1, Math.ceil(vy1 / TILE));
 
+  // Crops: ripe plants stand tall; picked rows are bare soil until they regrow.
+  if (m.cropsPickable) {
+    const picked = (G.s.world.picked || {})[m.id] || {};
+    for (let cy = cy0; cy <= cy1; cy++) for (let cx = cx0; cx <= cx1; cx++) {
+      if (m.ground[m.idx(cx, cy)] !== GR.GARDEN) continue;
+      const x = cx * TILE, y = cy * TILE;
+      const pd = picked[m.idx(cx, cy)];
+      if (pd != null && G.s.time.day - pd < 3) { ctx.fillStyle = '#4e3826'; ctx.fillRect(x + 2, y + 4, TILE - 4, TILE - 8); continue; }
+      const hue = (cx * 7 + cy * 13) % 3;
+      for (let i = 0; i < 3; i++) for (let j = 0; j < 2; j++) {
+        const px = x + 6 + i * 10, py = y + 10 + j * 14;
+        ctx.fillStyle = '#3f8a3a'; ctx.beginPath(); ctx.ellipse(px, py - 2, 4, 6, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = hue === 0 ? '#e67e22' : hue === 1 ? '#c0392b' : '#f1c40f'; ctx.beginPath(); ctx.arc(px + 1, py + 3, 2.2, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+  }
+
   // Water shimmer
   ctx.strokeStyle = 'rgba(200,235,255,0.22)';
   ctx.lineWidth = 1.2;

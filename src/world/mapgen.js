@@ -671,7 +671,7 @@ export function buildFarmMap(home) {
     ingrid_yard: P(48.5, 27), ingrid_porch: P(47.5, 25.5), ingrid_in: P(47.5, 20.5),
     bo_store: P(66.6, 8.5), bo_home: P(66.5, 35.5), bo_porch: P(66.5, 32.4),
     tess_yard: P(51.5, 13.4), tess_home: P(72.5, 35.5), tess_porch: P(72.5, 32.4),
-    store_door: P(61.4, 8.5), stranger: P(61.5, 13.6), deputy: P(20.5, 17.6), recovery: P(47.5, 20.5),
+    store_door: P(61.4, 8.5), stranger: P(61.5, 13.6), deputy: P(20.5, 17.6), garden: P(10, 35), recovery: P(47.5, 20.5),
     footprints: P(13.3, 24.5), strange_car: P(30, 2.5), woodlot: P(24, 46),
     ruth_c_day: P(9.5, 29.2), ruth_c_eve: P(18.5, 18.6), ruth_c_home: P(11.6, 15),
     walk_a: P(58.4, 6), walk_b: P(58.4, 22), walk_c: P(61.6, 31), walk_d: P(44, 4.5),

@@ -19,6 +19,7 @@ const ASSETS = [
   "./src/data/npcs.js",
   "./src/data/skills.js",
   "./src/data/weapons.js",
+  "./src/game/activities.js",
   "./src/game/ally.js",
   "./src/game/chapters.js",
   "./src/game/combat.js",
