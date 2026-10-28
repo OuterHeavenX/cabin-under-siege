@@ -3,7 +3,7 @@
 // home projects in projects.js.)
 import { G } from './state.js';
 import { NPCS } from '../data/npcs.js';
-import { chapter } from './chapters.js';
+import { chapter, here, hereN } from './chapters.js';
 import { addItem } from './inventory.js';
 import { addMoney, addRel, addXP, addJP, derived } from './progression.js';
 import { eventOn, fairDay, weekday, fmtWindow, WEEKLY, nextWeekday } from './calendar.js';
@@ -66,7 +66,7 @@ export function townLifeProp(pr, { openShop }) {
 
 /* ---------------- Sunday supper ---------------- */
 function joinSupper() {
-  const ch = chapter();
+  const ch = here();
   G.s.world.supperDay = G.s.time.day;
   const people = [ch.neighbor, ch.shopkeeper, ch.jobContact].filter((id) => NPCS[id]);
   for (const id of people) addRel(id, 4);
@@ -74,10 +74,10 @@ function joinSupper() {
   G.player.hp = derived().maxHp; G.player.stamina = derived().maxStamina;
   const lines = [{ who: '', text: 'Long tables in the chapel hall. Casseroles, three kinds of pie, and the whole town talking at once.' }];
   for (const f of supperHooks) { const l = f(); if (l) { lines.push(...[].concat(l)); break; } }
-  if (lines.length === 1) lines.push(choose(SUPPER_TALK[G.s.chapter] || SUPPER_TALK[1]));
+  if (lines.length === 1) lines.push(choose(SUPPER_TALK[hereN()] || SUPPER_TALK[1]));
   lines.push({ who: '', text: '(You leave full, rested, and a little more a part of the place.)' });
   sfx('chime');
-  playDialogue(lines, () => { advanceMinutes(90); banner('Sunday supper: everyone you know likes you a little more. Health restored.', 'good', 4); saveGame('supper'); });
+  playDialogue(lines, () => { advanceMinutes(90); banner('Sunday supper: everyone you know likes you a little more. Health restored.', 'good', 4); G.events.emit('supper'); saveGame('supper'); });
 }
 
 const SUPPER_TALK = {

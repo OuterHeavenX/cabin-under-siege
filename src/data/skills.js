@@ -54,7 +54,22 @@ export const SKILLS = {
   keen_eye: { path: 'shadow', name: 'Keen Eye', cost: 20, desc: 'Suspicious signs are marked on screen, you see the exact Heat number, and you spot attackers in the dark 60 px further.' },
   quiet_steps: { path: 'shadow', name: 'Quiet Steps', cost: 25, desc: 'Attackers who have not noticed you yet need you 40% closer to notice you.' },
   escape_artist: { path: 'shadow', name: 'Escape Artist', cost: 35, desc: 'Dodge roll goes 30% further, has longer invulnerability and costs 40% less stamina.' },
+
+  // ---- Tier 2 (The Longer Life): each needs two skills from its own path first ----
+  trail_sense: { path: 'survivor', tier: 2, name: 'Trail Sense', cost: 40, desc: 'You read the ground. Watcher clues are marked from anywhere on your property, and deer only spook if you sprint.' },
+  prepared: { path: 'survivor', tier: 2, name: 'Prepared', cost: 45, desc: 'Carrying a healing item, food and 2+ wood makes you PREPARED: +10% max health and +15 max stamina.' },
+  controlled_fire: { path: 'gunhand', tier: 2, name: 'Controlled Fire', cost: 45, active: true, cooldown: 60, short: 'STEADY', desc: 'ABILITY (G / R3 / the STEADY button): for 6 seconds your aim barely spreads and getting hit doesn\'t throw you off. 60 s cooldown.' },
+  ready_reload: { path: 'gunhand', tier: 2, name: 'Ready Reload', cost: 40, desc: 'Reloading while standing still or in cover is 40% faster.' },
+  emergency_repair: { path: 'handyman', tier: 2, name: 'Emergency Repair', cost: 45, active: true, cooldown: 90, short: 'PATCH', desc: 'ABILITY: even mid-attack, patch the nearest damaged door or window (+40% of its strength) for 1 wood — or splice a cut power line. 90 s cooldown.' },
+  efficient_construction: { path: 'handyman', tier: 2, name: 'Efficient Construction', cost: 35, desc: 'Home projects (and restoring your car) cost 25% less wood and money.' },
+  trusted_friend: { path: 'neighbor', tier: 2, name: 'Trusted Friend', cost: 40, desc: 'Once per chapter, ask a close friend (♥3+) for a favor from their menu: a day\'s work on a home project, a box of supplies, or an eye on the road (+60 min warning next attack).' },
+  local_knowledge: { path: 'neighbor', tier: 2, name: 'Local Knowledge', cost: 35, desc: 'People tell you things. Every investigation (a watcher phase or a rat case) starts with one clue already in hand.' },
+  misdirection: { path: 'shadow', tier: 2, name: 'Misdirection', cost: 40, active: true, cooldown: 25, short: 'TOSS', desc: 'ABILITY: toss a stone where you\'re aiming. Attackers who haven\'t seen you go to look at the noise for a few seconds. 25 s cooldown.' },
+  vanish: { path: 'shadow', tier: 2, name: 'Vanish', cost: 45, desc: 'Out of sight, attackers lose track of you twice as fast — and a dodge roll while none of them can see you breaks contact on the spot.' },
 };
+
+/** How many skills of a path a tier-2 skill needs first. */
+export const TIER2_NEEDS = 2;
 
 /** Character XP needed to go from `level` to `level+1`. */
 export function xpForLevel(level) {

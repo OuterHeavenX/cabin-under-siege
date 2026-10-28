@@ -13,7 +13,11 @@ import { openNpcMenu } from '../ui/menus.js';
 import { toast } from '../ui/hud.js';
 import { hasSkill } from './state.js';
 import { dailyAllow } from './progression.js';
-import { chapter, workMapId, homeMapId } from './chapters.js';
+import { chapter, workMapId, homeMapId, here, mapChapter } from './chapters.js';
+import { isVisitMap, reunionTalk } from './visits.js';
+import { exposedRat } from './rat.js';
+import { lifeTalk, guestSpawn } from './life.js';
+import { watchVisitors, visitorPresent, visitorTalk } from './watch.js';
 import { ruthJoined, companionSchedule, updateAlly, COMPANION_LINES } from './ally.js';
 import { questOffer, questTalk } from './quests.js';
 import { errandTalk, offerErrand, autoOfferErrand, errandOffer } from './errands.js';
@@ -41,21 +45,26 @@ export function spawnNpcs() {
   for (const [id, def] of Object.entries(NPCS)) {
     const followsYou = id === 'ruth' && G.s.chapter > 1 && ruthJoined() && m.id === homeMapId();
     if (def.map !== m.id && !followsYou) continue;
-    if (id === 'ruth' && G.s.chapter > 1 && !followsYou) continue;
+    if (id === 'ruth' && G.s.chapter > 1 && !followsYou && (ruthJoined() || m.id !== 'cabin')) continue;
     if (id === 'leo' && (G.s.story.done || {})[5] && G.s.ending !== 'walk') continue; // the study is empty now
     const spot = scheduleSpot(def, minute);
     const p = m.points[spot.pt];
     G.npcs.push({ id, def, named: true, x: p.x, y: p.y, radius: 10, angle: Math.PI / 2, spot: spot.pt, path: null, walkPhase: 0, idleT: 0 });
   }
-  if (m.id === workMapId() && !G.prequel) {
+  if ((m.id === workMapId() || isVisitMap(m.id)) && !G.prequel) {
     for (const f of TOWNSFOLK[m.id] || []) {
-      if (G.s.story.flags.ratGone === f.id) continue;
+      if (G.s.story.flags.ratGone === f.id || exposedRat(mapChapter(m.id)) === f.id) continue;
       const p = m.points[f.route[0]];
       G.npcs.push({ id: f.id, def: f, folk: true, x: p.x, y: p.y, radius: 10, angle: 0, routeIdx: 0, path: null, walkPhase: 0, idleT: Math.random() * 3, spot: f.route[0] });
     }
+  }
+  if (m.id === workMapId() && !G.prequel) {
     G.npcs.push({ id: 'stranger', def: { name: 'Man in a Grey Coat', body: '#3b3f46', hair: '#111', skin: '#d6a98a' }, stranger: true,
       x: m.points.stranger.x, y: m.points.stranger.y, radius: 10, angle: Math.PI / 2, path: null, walkPhase: 0, spot: 'stranger' });
   }
+  if (!G.prequel && !G.endless) G.npcs.push(...watchVisitors(m));
+  const guest = guestSpawn(m);
+  if (guest) G.npcs.push(guest);
   if (m.points.reyes) {
     G.npcs.push({ id: 'reyes', def: { name: 'Agent Dana Reyes', body: '#1d2230', hair: '#1a1210', skin: '#b88660' }, reyes: true,
       x: m.points.reyes.x, y: m.points.reyes.y, radius: 10, angle: Math.PI, path: null, walkPhase: 0, spot: 'reyes' });
@@ -76,6 +85,7 @@ export function npcPresent(n) {
     return (storyWants || signActive) && minute >= 8 * 60 && minute < 19 * 60;
   }
   if (n.def && n.def.prequel) return !!(G.prequel && G.prequel.cast.includes(n.id));
+  if (n.visitor) return visitorPresent(n);
   if (n.reyes) return G.s.story.step === 'ch4_reyes' && minute >= 8 * 60 && minute < 19 * 60;
   if (n.deputy) return G.s.story.step === 'ch3_deputy' && minute >= 8 * 60 && minute < 19 * 60;
   return true;
@@ -130,17 +140,20 @@ export function updateNpcs(dt) {
 export function interactNpc(n, skipRat = false) {
   if (!skipRat && ratTalk(n, () => interactNpc(n, true))) return;
   if (n.folk) {
-    if (errandTalk(n.id) || offerErrand(n.id)) return;
+    if (lifeTalk(n) || errandTalk(n.id) || offerErrand(n.id)) return;
     playDialogue([{ who: n.def.name, text: choose(FOLK_LINES[G.map.id] || FOLK_LINES.town) }]);
     if (dailyAllow('folk:' + n.id)) addJP('neighbor', 1);
     return;
   }
   if (n.stranger) { G.events.emit('talkStranger', n); return; }
+  if (n.visitor) { visitorTalk(n); return; }
   if (n.deputy) { G.events.emit('talkDeputy', n); return; }
   if (n.reyes) { G.events.emit('talkReyes', n); return; }
   if (G.prequel) { prequelTalk(n.id); return; }
+  if (reunionTalk(n.id)) return;
   // Story conversations take priority over the menu.
   const story = storyDialogue(n.id);
+  if (!story && lifeTalk(n)) return;
   if (story) { playDialogue(story.lines, story.onEnd); firstTalkBonus(n.id); return; }
   if (errandTalk(n.id)) return;
   if (questTalk(n.id)) return;
@@ -208,7 +221,7 @@ export function chatWith(id) {
   const mem = memoryLine(id);
   lines.push({ who: def.name, text: mem && Math.random() < 0.6 ? mem : choose(pool) });
   const w = G.s.world;
-  const ch = chapter();
+  const ch = here();
   const first = def.name.split(' ')[0].replace(/"/g, '');
   if (id === ch.neighbor || (id === 'ruth' && G.s.chapter > 1)) {
     if (lv >= 2 && siegeTonight()) {
@@ -254,13 +267,14 @@ export function giveGift(id) {
     ruth: 'Well aren\'t you sweet. I\'ll pretend I didn\'t see the price tag.', dee: 'From my own shelves? Ha! It\'s the thought, honey.', gus: 'Huh. Thanks. I skipped lunch.',
     marcus: 'Thoughtful. I\'ll eat it at the radio. Thank you, Frank.', rosa: 'Food from a customer? That\'s a first. Gracias.', pete: 'Oh, buddy. You\'re my favorite person today.',
   }[id];
-  playDialogue([{ who: def.name, text: reply }]);
+  playDialogue([{ who: def.name, text: reply || 'Oh — thank you, Frank. That\'s kind.' }]);
+  G.events.emit('gift', id);
 }
 
 export function npcAvailableServices(n) {
   const minute = G.s.time.minute;
   const out = [];
-  const ch = chapter();
+  const ch = here();
   if (n.id === ch.shopkeeper && n.spot === `${n.id}_store` && minute >= 8 * 60 && minute < 20 * 60) out.push('shop');
   if (n.id === ch.jobContact && n.spot === `${n.id}_yard` && minute >= 7 * 60 && minute < 17 * 60) { out.push('jobs'); if (n.id === 'gus') out.push('shop'); }
   if (questOffer(n.id)) out.push('favor');

@@ -1,5 +1,6 @@
 // The player character: movement, aiming, shooting, melee, dodge, damage.
-import { G } from './state.js';
+import { G, hasSkill } from './state.js';
+import { useAbility, onDodge } from './abilities.js';
 import { inSafeRoom } from './home.js';
 import { PLAYER_RADIUS, PLAYER_SPEED, SPRINT_SPEED, TILE } from '../config.js';
 import { input, consume, readMove } from '../input.js';
@@ -155,6 +156,7 @@ export function updatePlayer(dt) {
 
   if (consume('melee')) melee(p, d);
   if (consume('dodge')) dodge(p, d, mv);
+  if (consume('ability')) useAbility();
   if (consume('use')) {
     const q = quickItem();
     if (q) useConsumable(q); else toast('No healing items or food. Buy some at Marsh General.', 'warn');
@@ -181,7 +183,10 @@ export function magSize(id) {
 
 export function reloadTime(id) {
   const w = WEAPONS[id];
-  return w.reload * (derived().reloadTime / 1.45);
+  const p = G.player;
+  // Ready Reload: standing still or tucked in behind cover.
+  const ready = hasSkill('ready_reload') && p && (p.inCover || Math.hypot(p.vx || 0, p.vy || 0) < 20);
+  return w.reload * (derived().reloadTime / 1.45) * (ready ? 0.6 : 1);
 }
 
 export function equipWeapon(p, id) {
@@ -322,6 +327,7 @@ function dodge(p, d, mv) {
   p.invuln = Math.max(p.invuln, d.dodgeIframes);
   p.stamina -= d.dodgeCost;
   sfx('dodge', { surface: surfaceAt(G.map, p.x, p.y) });
+  onDodge();
   if (inCombat()) addJP('shadow', 1, 'dodge', 6);
 }
 

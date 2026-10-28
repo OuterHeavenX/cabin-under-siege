@@ -2,31 +2,44 @@
 // derived stats every other system reads.
 import { G, hasSkill } from './state.js';
 import { weatherMods } from './weather.js';
-import { ATTRIBUTES, ATTR_POINTS_PER_LEVEL, MAX_ATTR, PATHS, SKILLS, xpForLevel } from '../data/skills.js';
+import { ATTRIBUTES, ATTR_POINTS_PER_LEVEL, MAX_ATTR, PATHS, SKILLS, xpForLevel, TIER2_NEEDS } from '../data/skills.js';
+import { ITEMS } from '../data/items.js';
 import { NPCS, relLevel } from '../data/npcs.js';
 import { toast } from '../ui/hud.js';
-import { chapter } from './chapters.js';
+import { chapter, here } from './chapters.js';
 import { sfx } from '../audio.js';
 import { perkEff, perkShop } from './perks.js';
 import { eventOn } from './calendar.js';
 import { projectDone } from './projects.js';
+
+/** Prepared (Survivor): carrying a healing item, food and two wood. */
+export function isPrepared() {
+  if (!hasSkill('prepared') || !G.s) return false;
+  const inv = G.s.inv;
+  const heal = (inv.bandage || 0) + (inv.medkit || 0) > 0;
+  const food = Object.keys(inv).some((k) => inv[k] > 0 && ITEMS[k] && ITEMS[k].food);
+  return heal && food && (inv.wood || 0) >= 2;
+}
 
 export function derived() {
   const a = G.s.stats.attrs;
   const sk = hasSkill;
   const lvlBonus = (n) => n - 1;
   const fed = G.player && G.player.wellFed > 0;
+  const prep = isPrepared();
+  const steady = G.player && G.player.steadyT > 0; // Controlled Fire
   return {
-    maxHp: Math.round((100 + 12 * lvlBonus(a.vit)) * (fed ? 1.1 : 1)),
-    maxStamina: 100 + 10 * lvlBonus(a.end) + (fed ? 25 : 0) + perkEff('stam'),
+    maxHp: Math.round((100 + 12 * lvlBonus(a.vit)) * (fed ? 1.1 : 1) * (prep ? 1.1 : 1)),
+    maxStamina: 100 + 10 * lvlBonus(a.end) + (fed ? 25 : 0) + perkEff('stam') + (prep ? 15 : 0),
+    prepared: prep,
     staminaMult: 1 - 0.04 * lvlBonus(a.end),
-    spreadMult: (1 - 0.06 * lvlBonus(a.pre)) * (sk('steady_hands') ? 0.7 : 1) * perkEff('spread'),
-    moveSpreadMult: sk('steady_hands') ? 0.5 : 1,
+    spreadMult: (1 - 0.06 * lvlBonus(a.pre)) * (sk('steady_hands') ? 0.7 : 1) * perkEff('spread') * (steady ? 0.35 : 1),
+    moveSpreadMult: (sk('steady_hands') ? 0.5 : 1) * (steady ? 0.4 : 1),
     reloadTime: 1.45 * (sk('quick_reload') ? 0.7 : 1),
     healMult: (1 + 0.05 * lvlBonus(a.res)) * (sk('field_recovery') ? 1.35 : 1) * ((G.s.unlocks || {}).firstAid ? 1.15 : 1) * perkEff('heal'),
     regenCap: 0.3 + 0.05 * lvlBonus(a.res),
     graceTime: 0.55 + 0.05 * lvlBonus(a.res),
-    seeRadius: (170 + 20 * lvlBonus(a.awa) + (sk('keen_eye') ? 60 : 0)) * weatherMods().see,
+    seeRadius: (170 + 20 * lvlBonus(a.awa) + (sk('keen_eye') ? 60 : 0) + perkEff('see')) * weatherMods().see,
     warnLead: 15 + 4 * lvlBonus(a.awa) + (sk('watchful') ? 30 : 0) + (G.s.home.upgrades.alarm ? 45 : 0) + (projectDone('radio') ? 60 : 0) + perkEff('warn'),
     showDirections: sk('watchful') || G.s.home.upgrades.alarm,
     noticeMult: sk('quiet_steps') ? 0.6 : 1,
@@ -36,7 +49,7 @@ export function derived() {
     dodgeCost: 28 * (sk('escape_artist') ? 0.6 : 1),
     repairSpeed: sk('quick_fix') ? 1.6 : 1,
     woodBonus: sk('resourceful') ? 1 : 0,
-    flinchMult: sk('composure') ? 0.25 : 1,
+    flinchMult: steady ? 0 : sk('composure') ? 0.25 : 1,
     magSize: (G.s.weaponMods && G.s.weaponMods.extMag) || G.s.home.upgrades.extMag ? 12 : 8,
     jobPayMult: (sk('good_reputation') ? 1.15 : 1) * perkEff('pay'),
   };
@@ -46,8 +59,8 @@ export function shopDiscount(owner) {
   let d = 0;
   if (hasSkill('local_discount')) d += 0.1;
   if (perkShop(owner)) d += 0.1;
-  if (owner === chapter().shopkeeper && eventOn('market')) d += 0.2; // market day sale
-  if (owner === chapter().shopkeeper) {
+  if (owner === here().shopkeeper && eventOn('market')) d += 0.2; // market day sale
+  if (owner === here().shopkeeper) {
     const lv = relLevel(G.s.rel[owner] || 0);
     if (lv >= 4) d += 0.1; else if (lv >= 2) d += 0.05;
   }
@@ -116,9 +129,17 @@ export function addJP(path, n, dailyKey = null, cap = 1) {
   return true;
 }
 
+/** Tier-2 skills need two skills from the same path first. Returns a reason, or null. */
+export function skillLocked(id) {
+  const sk = SKILLS[id];
+  if (!sk || sk.tier !== 2) return null;
+  const have = G.s.skills.filter((x) => SKILLS[x] && SKILLS[x].path === sk.path && SKILLS[x].tier !== 2).length;
+  return have >= TIER2_NEEDS ? null : `Needs ${TIER2_NEEDS} ${PATHS[sk.path].name} skills first (${have}/${TIER2_NEEDS}).`;
+}
+
 export function canBuySkill(id) {
   const sk = SKILLS[id];
-  return sk && !hasSkill(id) && G.s.jp[sk.path] >= sk.cost;
+  return !!sk && !hasSkill(id) && !skillLocked(id) && G.s.jp[sk.path] >= sk.cost;
 }
 
 export function buySkill(id) {

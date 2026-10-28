@@ -7,6 +7,7 @@ import { sfx } from '../audio.js';
 import { toast } from './hud.js';
 import { ANTE, BET, TABLES, newHand, drawCards, act, canSit, cardLabel, isRed, handName } from '../game/poker.js';
 import { eventOn } from '../game/calendar.js';
+import { hereN } from '../game/chapters.js';
 import { advanceMinutes } from '../game/time.js';
 
 const card = (c, i, sel, hidden) => hidden
@@ -16,7 +17,7 @@ const card = (c, i, sel, hidden) => hidden
 export function openPoker() {
   if (!eventOn('poker')) { toast('No game tonight. Poker is Wednesday and Saturday, 7–11 PM.', 'warn', 3); return; }
   if (!canSit()) { toast(`You need at least $${ANTE + BET} to sit down.`, 'warn', 3); return; }
-  const t = TABLES[G.s.chapter] || TABLES[1];
+  const t = TABLES[hereN()] || TABLES[1];
   const el = openModal('poker', '', { cls: 'wide poker' });
   const body = () => el.querySelector('.modal-body');
   let picked = new Set();

@@ -106,6 +106,33 @@ export function newSave() {
     job: null,
     jobsDone: 0,
     log: [],
+    // Where Frank is when he's away from his active home ({ ch, since } or null).
+    visit: null,
+    // The Longer Life expansion: chapter phases, quiet days, evidence, letters, projects that travel.
+    life: newLife(),
+  };
+}
+
+/** Fresh expansion state. Old saves get these defaults when they're migrated. */
+export function newLife() {
+  return {
+    ch: {}, // per chapter: { moments: {}, events: {}, watch: {}, counter: {}, farewell: {}, phase }
+    evidence: {}, // the Paper Trail: { id: day found }
+    deduced: null, // the answer Frank settled on, or null
+    wrongGuesses: [],
+    mail: [], // letters waiting in the mailbox: [{ id, day }]
+    calls: [], // phone calls waiting: [{ id, day }]
+    read: {}, // letters/calls already delivered: { id: day }
+    replies: {}, // { letterId: choice }
+    romance: { stage: 0, path: null }, // Dee: null | 'romance' | 'friend'
+    ruthTalks: {},
+    guest: null, // { id, until } a friend staying for a few days
+    visits: {}, // { ch: times visited }
+    car: { progress: 0, lastDay: -1, done: false, started: false },
+    legacy: {}, // chapters played before this expansion existed: { n: true }
+    post: null, // after the story: { ending, day }
+    news: [], // recent notable events for letters to react to
+    eventDay: -1, // last day a quiet-day event fired
   };
 }
 

@@ -10,12 +10,12 @@ import { sfx } from '../audio.js';
 import { openRepairGame } from '../ui/menus.js';
 import { playDialogue } from '../ui/dialogue.js';
 import { saveGame } from './save.js';
-import { chapter, workMap, workMapId, homeMap, homeMapId } from './chapters.js';
+import { chapter, workMap, workMapId, homeMap, homeMapId, here } from './chapters.js';
 import { NPCS } from '../data/npcs.js';
 import { LATER_COURIER } from '../data/storylines.js';
 
 const first = (id) => NPCS[id].name.split(' ')[0].replace(/"/g, '');
-const C = () => chapter();
+const C = () => here();
 
 export const JOB_TYPES = {
   woodcut: { name: 'Woodcutting', icon: '🪓', path: 'survivor' },

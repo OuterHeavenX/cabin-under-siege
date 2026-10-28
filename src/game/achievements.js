@@ -32,6 +32,10 @@ export const ACHIEVEMENTS = [
   { id: 'allies', icon: '📞', name: 'Every Favor Called', desc: 'Have six friends answer the phone in Short Hills.' },
   { id: 'duke', icon: '🐕', name: 'Good Boy', desc: 'Adopt Duke.' },
   { id: 'neighbor', icon: '🤝', name: 'Good Neighbor', desc: 'Finish 15 favors and errands.' },
+  { id: 'going_back', icon: '🚗', name: 'Going Back', desc: 'Drive back to a town you\'d left behind.' },
+  { id: 'letters5', icon: '✉', name: 'Three Hops', desc: 'Read 5 letters or calls from old friends.' },
+  { id: 'paper_trail', icon: '📎', name: 'The Paper Trail', desc: 'Work out how the family keeps finding you.' },
+  { id: 'homemaker', icon: '🏡', name: 'Somewhere With a Porch', desc: 'Make three different places home.' },
   // Fighting
   { id: 'kills50', icon: '🎯', name: 'Not Today', desc: 'Defeat 50 attackers.' },
   { id: 'kills300', icon: '🔥', name: 'Army of One', desc: 'Defeat 300 attackers.' },
@@ -135,6 +139,11 @@ function checkSave() {
   if ((s.stats.level || 1) >= 10) unlock('level10');
   if ((s.skills || []).length >= 10) unlock('skills10');
   if ((s.money || 0) >= 1500) unlock('rich');
+  const L = s.life || {};
+  if (L.visits && Object.keys(L.visits).length) unlock('going_back');
+  if (L.read && Object.keys(L.read).filter((k) => !k.startsWith('c_marcus_intro')).length >= 5) unlock('letters5');
+  if (L.deduced === 'title') unlock('paper_trail');
+  if (L.ch && Object.values(L.ch).filter((c) => c && c.lifeDone).length >= 3) unlock('homemaker');
   const o = Object.values((s.home && s.home.openings) || {});
   if (o.length && o.every((x) => (x.kind === 'door' ? x.reinforced : x.boards || x.shutters))) unlock('fortress');
 }

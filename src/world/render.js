@@ -15,6 +15,7 @@ import { jobProps } from '../game/jobs.js';
 import { questProps } from '../game/quests.js';
 import { errandProps } from '../game/errands.js';
 import { ratProps } from '../game/rat.js';
+import { watchProps } from '../game/watch.js';
 import { homeMapId } from '../game/chapters.js';
 import { ITEMS } from '../data/items.js';
 import { REGROW_DAYS } from '../game/activities.js';
@@ -393,6 +394,52 @@ function drawDecor(g, d) {
       g.fillStyle = '#3a2a20'; g.beginPath(); g.moveTo(x, y + 6); g.lineTo(x + w / 2, y - 8); g.lineTo(x + w, y + 6); g.closePath(); g.fill();
       g.fillStyle = '#2a2a2a'; g.fillRect(x + w - 14, y - 10, 6, 10);
       g.fillStyle = '#c0782a'; g.fillRect(x + w / 2 - 5, y + h - 14, 10, 10);
+      break;
+    }
+    case 'generator': {
+      g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(x + 4, y + 5, w, h);
+      g.fillStyle = '#4a5a3a'; roundRectG(g, x + 2, y + 4, w - 4, h - 8, 4); g.fill();
+      g.fillStyle = '#2a2a2a'; g.fillRect(x + 8, y + 8, 14, h - 16);
+      g.fillStyle = '#c0c4c8'; for (let i = 0; i < 4; i++) g.fillRect(x + 26 + i * 6, y + 9, 3, h - 18);
+      g.fillStyle = '#e0c040'; g.beginPath(); g.moveTo(x + w - 14, y + 8); g.lineTo(x + w - 20, y + h / 2 + 2); g.lineTo(x + w - 15, y + h / 2); g.lineTo(x + w - 18, y + h - 8); g.lineTo(x + w - 10, y + h / 2 - 3); g.lineTo(x + w - 15, y + h / 2 - 1); g.closePath(); g.fill();
+      break;
+    }
+    case 'garden': {
+      g.fillStyle = '#6a4a2a'; g.fillRect(x + 2, y + 2, w - 4, h - 4);
+      g.fillStyle = '#4e3520'; for (let r2 = 0; r2 < 3; r2++) g.fillRect(x + 6, y + 8 + r2 * ((h - 16) / 2), w - 12, 5);
+      for (let i = 0; i < 12; i++) { const px = x + 10 + (i % 6) * ((w - 20) / 5), py = y + 10 + Math.floor(i / 6) * (h - 22); g.fillStyle = i % 3 ? '#4a8a3a' : '#6aa84a'; g.beginPath(); g.arc(px, py, 5, 0, Math.PI * 2); g.fill(); if (i % 4 === 0) { g.fillStyle = '#d0452a'; g.beginPath(); g.arc(px + 2, py + 2, 2.2, 0, Math.PI * 2); g.fill(); } }
+      g.strokeStyle = '#8a6a4a'; g.lineWidth = 2; g.strokeRect(x + 2, y + 2, w - 4, h - 4);
+      break;
+    }
+    case 'greenhouse_p': {
+      g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(x + 4, y + 5, w, h);
+      g.fillStyle = 'rgba(170,220,210,0.55)'; g.fillRect(x + 2, y + 2, w - 4, h - 4);
+      g.strokeStyle = '#e8f0ee'; g.lineWidth = 2; g.strokeRect(x + 2, y + 2, w - 4, h - 4);
+      for (let i = 1; i < 4; i++) { g.beginPath(); g.moveTo(x + (w / 4) * i, y + 2); g.lineTo(x + (w / 4) * i, y + h - 2); g.stroke(); }
+      g.fillStyle = '#4a8a3a'; for (let i = 0; i < 6; i++) { g.beginPath(); g.arc(x + 10 + i * ((w - 20) / 5), y + h / 2, 4, 0, Math.PI * 2); g.fill(); }
+      break;
+    }
+    case 'kennel': {
+      g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(x + 4, y + 5, w, h);
+      g.strokeStyle = '#9a8a6a'; g.lineWidth = 2; g.strokeRect(x + 2, y + 2, w - 4, h - 4);
+      g.fillStyle = '#7a5634'; g.fillRect(x + 6, y + 6, 22, 18);
+      g.fillStyle = '#5a3a24'; g.beginPath(); g.moveTo(x + 4, y + 8); g.lineTo(x + 17, y - 2); g.lineTo(x + 30, y + 8); g.closePath(); g.fill();
+      g.fillStyle = '#1a1410'; g.beginPath(); g.arc(x + 17, y + 20, 5, Math.PI, 0); g.fill();
+      g.fillStyle = '#c84a2a'; g.beginPath(); g.arc(x + w - 14, y + h - 14, 4, 0, Math.PI * 2); g.fill();
+      break;
+    }
+    case 'cache': {
+      g.fillStyle = '#5a4630'; g.beginPath(); g.ellipse(x + w / 2, y + h / 2, w / 2 - 3, h / 2 - 6, 0, 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#7a6a4a'; g.fillRect(x + w / 2 - 7, y + h / 2 - 4, 14, 8);
+      g.fillStyle = '#3a6a2a'; g.beginPath(); g.arc(x + 6, y + 8, 5, 0, Math.PI * 2); g.arc(x + w - 6, y + h - 8, 4, 0, Math.PI * 2); g.fill();
+      break;
+    }
+    case 'comfort': {
+      // A rocking chair and a pot of geraniums: somebody lives here now.
+      g.fillStyle = 'rgba(0,0,0,0.3)'; g.beginPath(); g.ellipse(x + 16, y + 26, 12, 4, 0, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = '#6a4024'; g.lineWidth = 3; g.beginPath(); g.arc(x + 16, y + 10, 14, 0.35 * Math.PI, 0.65 * Math.PI); g.stroke();
+      g.fillStyle = '#8a5a34'; g.fillRect(x + 8, y + 10, 16, 10); g.fillRect(x + 9, y, 14, 9);
+      g.fillStyle = '#b5523a'; g.fillRect(x + 24, y + 16, 7, 7); g.fillStyle = '#d63b5a'; g.beginPath(); g.arc(x + 27.5, y + 14, 4, 0, Math.PI * 2); g.fill();
       break;
     }
     case 'stall': {
@@ -1906,10 +1953,11 @@ function drawOverlays(ctx, dk, inView) {
     ctx.beginPath(); ctx.arc(tg.x, tg.y, 19, 0, Math.PI * 2); ctx.stroke();
     ctx.setLineDash([]);
   }
-  // Sign markers (Keen Eye highlights them)
-  for (const pr of G.map.props) {
-    if (!pr.sign) continue;
-    if (!G.s.skills.includes('keen_eye') && dist(pr.x, pr.y, p.x, p.y) > 160) continue;
+  // Sign markers (Keen Eye highlights them; watcher clues show close up, or always with Surveillance Eye / Trail Sense)
+  for (const pr of [...G.map.props, ...watchProps(G.map.id)]) {
+    if (!pr.sign && !pr.watch) continue;
+    const far = pr.watch ? !(pr.mark || G.s.skills.includes('trail_sense')) && dist(pr.x, pr.y, p.x, p.y) > 220 : !G.s.skills.includes('keen_eye') && dist(pr.x, pr.y, p.x, p.y) > 160;
+    if (far) continue;
     ctx.strokeStyle = '#b9a4e0'; ctx.lineWidth = 2;
     ctx.beginPath(); ctx.arc(pr.x, pr.y, 22 + Math.sin(t * 4) * 3, 0, Math.PI * 2); ctx.stroke();
     ctx.fillStyle = '#b9a4e0'; ctx.font = 'bold 14px system-ui'; ctx.textAlign = 'center'; ctx.fillText('?', pr.x, pr.y - 28);

@@ -3,7 +3,7 @@ import { G } from './state.js';
 import { toast } from '../ui/hud.js';
 import { sfx } from '../audio.js';
 
-// eff: pay (job pay ×), heal (healing ×), spread (aim spread ×), warn (+minutes of
+// eff: see (+px night sight), pay (job pay ×), heal (healing ×), spread (aim spread ×), warn (+minutes of
 // attack warning), stam (+max stamina), shop (owner id: 10% off there).
 export const PERKS = {
   field_medic: { icon: '🩹', name: 'Field Medic', from: 'Ruth', desc: 'Bandages and first-aid kits heal 50% more.', eff: { heal: 1.5 } },
@@ -27,6 +27,10 @@ export const PERKS = {
   // Chapter 5
   corner_man: { icon: '🥊', name: 'Corner Man', from: 'Father Dom', desc: 'Dom taught you to take a punch: healing 25% stronger.', eff: { heal: 1.25 } },
   family_discount: { icon: '🥪', name: 'Family Discount', from: 'Angie', desc: '10% off at Marchetti\'s.', eff: { shop: 'angie' } },
+  // Taught by people in the side stories
+  mechanic: { icon: '🔩', name: 'Mechanic', from: 'Billy Kowal', desc: 'You can keep an old car alive: no more breakdowns on the way to work, long drives take an hour less, and car restoration is a day shorter.' },
+  surveillance: { icon: '👓', name: 'Surveillance Eye', from: 'Marcus', desc: 'You spot people watching you: watcher signs are marked with ◎ and each one you look into teaches you more (+4 Shadow JP).' },
+  night_eyes: { icon: '🌙', name: 'Night Eyes', from: 'Dr. Halvorsen', desc: 'Look to the side of things in the dark: you see attackers 30 px farther at night.', eff: { see: 30 } },
   cop_eyes: { icon: '🚨', name: 'Cop\'s Eyes', from: 'Mickey', desc: 'Mickey\'s old scanner codes: 30 more minutes of warning before an attack.', eff: { warn: 30 } },
 };
 

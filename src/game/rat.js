@@ -14,6 +14,7 @@ import { gossipHooks } from './poker.js';
 import { supperHooks } from './townlife.js';
 import { saveGame } from './save.js';
 import { chapter } from './chapters.js';
+import { addEvidence } from './evidence.js';
 
 const ME = 'Frank';
 const F = ME;
@@ -339,6 +340,7 @@ function findClue(id, then) {
   const r = ratState(), cl = C().clues[id];
   if (r.clues[id]) { then && then(); return; }
   r.clues[id] = G.s.time.day;
+  if (G.s.chapter === 1 && id === 'payphone') setTimeout(() => addEvidence('t1_ventura', true), 600);
   const n = cluesFound().length;
   const go = () => {
     sfx('chime');
@@ -356,6 +358,11 @@ export function startRatCase() {
   const r = ratState();
   r.deadline = G.s.time.day + DAYS;
   cluesFound();
+  // Local Knowledge: somebody already told you something.
+  if (G.s.skills.includes('local_knowledge') && C() && !r.freeClue) {
+    const [id, cl] = Object.entries(C().clues).find(([k, x]) => x.talk && !r.clues[k]) || [];
+    if (id) { r.freeClue = id; r.clues[id] = G.s.time.day; setTimeout(() => banner(`🐀 Local Knowledge — word reached you: ${cl.note}`, 'objective', 6), 1500); }
+  }
 }
 
 export function ratObjective() {
@@ -497,4 +504,10 @@ export function ratWaypoint() {
     if (n) return { map: G.map.id, x: n.x, y: n.y, label: 'Suspect' };
   }
   return null;
+}
+
+/** The rat Frank ran out of a chapter's town, if he did (they don't come back on visits). */
+export function exposedRat(ch) {
+  if (!G.s || !CASES[ch]) return null;
+  return (G.s.choices || {})[ch === 1 ? 'rat' : `rat${ch}`] === 'expose' ? CASES[ch].culprit : null;
 }

@@ -55,7 +55,7 @@ kbd { background: #2a1515; border: 1px solid #5e2424; border-bottom-width: 2px; 
 .objective::before { content: "◆ "; color: var(--accent); }
 .jobline { margin-top: 3px; font-size: 11px; background: rgba(10,30,40,0.7); border: 1px solid rgba(91,192,222,0.5); padding: 3px 8px; border-radius: 8px; color: #cdefff; }
 
-.hud-tr { position: absolute; right: calc(10px + var(--sar)); top: calc(8px + var(--sat)); display: flex; gap: 8px; align-items: flex-start; }
+.hud-tr { position: absolute; right: calc(10px + var(--sar)); top: calc(8px + var(--sat)); display: flex; flex-wrap: wrap; justify-content: flex-end; max-width: 46vw; gap: 4px 8px; align-items: flex-start; }
 .ammo-box { text-align: right; background: rgba(0,0,0,0.55); padding: 4px 10px; border-radius: 8px; min-width: 96px; }
 .ammo { font-weight: 800; font-size: 18px; letter-spacing: 0.5px; }
 .ammo.warn { color: var(--danger); animation: pulse 0.5s infinite alternate; }
@@ -74,6 +74,9 @@ kbd { background: #2a1515; border: 1px solid #5e2424; border-bottom-width: 2px; 
 .banner.b-good { border-color: var(--good); }
 .banner.b-objective { border-color: var(--accent); color: #f4e7d9; }
 @keyframes slide { from { opacity: 0; transform: translate(-50%, -8px); } to { opacity: 1; transform: translate(-50%, 0); } }
+.ability-tag { flex-basis: 100%; text-align: right; font-size: 10px; font-weight: 800; letter-spacing: 0.3px; color: #d9ccf5; text-shadow: 0 1px 2px #000; margin-top: 2px; }
+.ability-tag .ready { color: #b9f0c0; }
+body.touch .ability-tag .ab { display: none; }
 .cover-tag { position: absolute; left: 50%; bottom: calc(40% + var(--sab)); transform: translateX(-50%); font-size: 11px; font-weight: 800; background: rgba(30,60,90,0.85); border: 1px solid var(--info); padding: 2px 8px; border-radius: 6px; }
 .toasts { position: absolute; left: calc(10px + var(--sal)); top: calc(78px + var(--sat)); width: min(46vw, 320px); display: flex; flex-direction: column; gap: 4px; }
 .toast { font-size: 12px; background: rgba(0,0,0,0.72); border-left: 3px solid var(--info); padding: 4px 8px; border-radius: 4px; animation: slide2 0.2s ease-out; transition: opacity 0.4s; }
@@ -124,6 +127,8 @@ body.touch .prompt { bottom: auto; top: calc(48% + 26px); font-size: 12px; paddi
 #btn-dodge { right: calc(254px + var(--sar)); bottom: calc(18px + var(--sab)); }
 #btn-use { right: calc(254px + var(--sar)); bottom: calc(88px + var(--sab)); font-size: 14px; }
 #btn-swap { right: calc(14px + var(--sar)); bottom: calc(226px + var(--sab)); font-size: 9px; background: rgba(60,50,20,0.6); border-color: #e0c060; }
+#btn-skill { right: calc(84px + var(--sar)); bottom: calc(226px + var(--sab)); font-size: 9px; background: rgba(70,40,110,0.6); border-color: #b9a4e0; }
+#btn-skill.cooling { opacity: 0.55; }
 .tbtn.dim { opacity: 0.45; }
 
 /* Short landscape phones: shrink a little so everything fits */
@@ -137,6 +142,7 @@ body.touch .prompt { bottom: auto; top: calc(48% + 26px); font-size: 12px; paddi
   #btn-dodge { right: calc(228px + var(--sar)); }
   #btn-use { right: calc(228px + var(--sar)); bottom: calc(80px + var(--sab)); }
   #btn-swap { right: calc(14px + var(--sar)); bottom: calc(200px + var(--sab)); }
+  #btn-skill { right: calc(76px + var(--sar)); bottom: calc(200px + var(--sab)); }
   .hud-tc { width: min(40vw, 380px); }
   .objective { font-size: 11px; padding: 3px 8px; }
   #danger { top: calc(70px + var(--sat)); font-size: 11px; }
@@ -153,6 +159,7 @@ body.portrait #btn-melee { right: calc(68px + var(--sar)); bottom: calc(160px + 
 body.portrait #btn-dodge { right: calc(10px + var(--sar)); bottom: calc(194px + var(--sab)); }
 body.portrait #btn-use { right: calc(68px + var(--sar)); bottom: calc(222px + var(--sab)); }
 body.portrait #btn-swap { right: calc(10px + var(--sar)); bottom: calc(256px + var(--sab)); }
+body.portrait #btn-skill { right: calc(68px + var(--sar)); bottom: calc(282px + var(--sab)); }
 body.portrait #joy-zone { width: 50%; height: 50%; }
 body.portrait .hud-tl { width: 40vw; }
 body.portrait .hud-tc { top: calc(60px + var(--sat)); width: 92vw; }
@@ -542,3 +549,16 @@ body.touch .trophy-card { padding: 5px 12px; gap: 8px; border-radius: 10px; }
 body.touch .trophy-card .tr-icon { font-size: 20px; }
 body.touch .trophy-card .tr-txt { font-size: 10px; }
 body.touch .trophy-card .tr-name { font-size: 13px; }
+
+/* ---- The Longer Life: journal sections, phases, projects, tier-2 skills ---- */
+.subtabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 0 0 10px; }
+.subtab { padding: 7px 10px; min-height: 36px; border-radius: 8px; border: 1px solid var(--line); background: #1a1111; font-size: 12px; font-weight: 700; cursor: pointer; }
+.subtab.on { background: #4a2c1c; border-color: #e0a542; color: #fff; }
+.subtab .pip { color: #ffd166; }
+.phase-line { margin: 2px 0 6px; font-size: 13px; }
+.phase-tag { display: inline-block; min-width: 20px; text-align: center; border-radius: 4px; background: #e0a542; color: #1a1010; font-weight: 900; padding: 0 5px; margin-right: 4px; }
+.objective-box.visit { border-color: #5bc0de; }
+.def-row.proj.done .def-name { color: #b9f0c0; }
+.tag.tier { background: #3a2a55; color: #d9ccf5; }
+.skill.locked { opacity: 0.75; }
+.move-sum { text-align: left; margin: 8px auto; max-width: 520px; }

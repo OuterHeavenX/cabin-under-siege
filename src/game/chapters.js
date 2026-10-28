@@ -45,6 +45,28 @@ export const homeMap = () => G.maps[homeMapId()];
 export const workMap = () => G.maps[workMapId()];
 export const atHome = () => G.map && G.map.id === homeMapId();
 
+/* ---- Where Frank is vs. where he lives ----
+ * `chapter()` is always the active chapter (the home that can be attacked,
+ * the main story). While Frank is visiting an earlier town (`G.s.visit`),
+ * `here()` is that town's chapter: its shopkeeper, job board, card table and
+ * side stories apply. Away from a visit, here() === chapter(). */
+export const visiting = () => !!(G.s && G.s.visit && G.s.visit.ch && !G.endless && !G.prequel);
+export const hereN = () => (visiting() ? G.s.visit.ch : (G.s && G.s.chapter) || 1);
+export const here = () => CHAPTERS[hereN()] || CHAPTERS[1];
+/** Which story chapter a map belongs to (1–5), or 0. */
+export function mapChapter(mapId) {
+  for (let n = 1; n <= LAST_CHAPTER; n++) if (CHAPTERS[n].maps.includes(mapId)) return n;
+  return 0;
+}
+/** Is this map the work/town map of the place it belongs to? */
+export const isTownMap = (mapId) => { const n = mapChapter(mapId); return !!n && CHAPTERS[n].workMap === mapId; };
+/** Maps that should be built right now: the active chapter's, plus a visited town's. */
+export function loadedMapIds() {
+  const ids = [...chapter().maps];
+  if (visiting()) for (const id of CHAPTERS[G.s.visit.ch].maps) if (!ids.includes(id)) ids.push(id);
+  return ids;
+}
+
 /** Interior target cell of the home building (attackers search there). */
 export function homeInterior(mapId) {
   if (mapId !== homeMapId()) return null;

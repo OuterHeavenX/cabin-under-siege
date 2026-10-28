@@ -6,6 +6,7 @@ import { choose } from '../util.js';
 import { addMoney } from './progression.js';
 import { hasPerk } from './perks.js';
 import { LATER_TABLES } from '../data/storylines.js';
+import { hereN } from './chapters.js';
 
 export const ANTE = 10;
 export const BET = 20;
@@ -102,7 +103,7 @@ export function canSit() { return G.s.money >= ANTE + BET; }
 
 /** Start a new hand. */
 export function newHand() {
-  const t = TABLES[G.s.chapter] || TABLES[1];
+  const t = TABLES[hereN()] || TABLES[1];
   const d = deck();
   const hand = {
     deck: d,
@@ -163,7 +164,7 @@ function showdown() {
 
 function tableTalk(h) {
   for (const f of gossipHooks) { const l = f(h); if (l) return l; }
-  const t = TABLES[G.s.chapter] || TABLES[1];
+  const t = TABLES[hereN()] || TABLES[1];
   const [who, text] = choose(t.gossip);
   return { who, text };
 }

@@ -128,4 +128,19 @@ export function updateHud(dt, info) {
     els.actBtn.classList.remove('ready');
   }
   els.useLabel.textContent = info.quickLabel;
+  // Tier-2 ability slot and the Prepared state.
+  const ab = info.ability;
+  const sb = els.skillBtn || (els.skillBtn = document.getElementById('btn-skill'));
+  const sl = els.skillLbl || (els.skillLbl = document.getElementById('btn-skill-label'));
+  const tag = els.abTag || (els.abTag = document.getElementById('ability-tag'));
+  if (sb) {
+    sb.classList.toggle('hidden', !ab);
+    if (ab) { sl.textContent = ab.ready ? ab.short : `${ab.left}s`; sb.classList.toggle('cooling', !ab.ready); }
+  }
+  if (tag) {
+    const key = document.body.classList.contains('pad') ? 'R3' : 'G';
+    const html = [ab ? `<span class="ab ${ab.ready ? 'ready' : ''}">${key}: ${escapeHtml(ab.short)} ${ab.ready ? 'ready' : ab.left + 's'}</span>` : '', info.prepared ? '<span class="ready">✚ PREPARED</span>' : ''].filter(Boolean).join(' · ');
+    tag.classList.toggle('hidden', !html);
+    if (tag._h !== html) { tag.innerHTML = html; tag._h = html; }
+  }
 }

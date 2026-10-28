@@ -19,6 +19,12 @@ import { startQuest } from './quests.js';
 import { input } from '../input.js';
 import { NG_TWISTS } from './ngplus.js';
 import { startRatCase, ratObjective, ratWaypoint, CASES } from './rat.js';
+import { lifeObjective, startLifeStep, lifeCh } from './life.js';
+import { startWatch, setWatchStory, scheduleProbe as scheduleWatchProbe, onProbeWon, watchObjective, probeObjective, watchWaypoint } from './watch.js';
+import { addEvidence } from './evidence.js';
+import { answerCall } from './letters.js';
+import { visiting, here } from './chapters.js';
+import { LIFE_STEPS } from '../data/life.js';
 
 const ME = 'Frank';
 
@@ -36,6 +42,13 @@ export const STEPS = {
   first_job: { obj: 'Take and complete a job from the board at Okafor Lumber.' },
   see_dee: { obj: 'Dee at Marsh General wants a word.' },
   stranger: { obj: 'Find the man in the grey coat near the diner (daytime).' },
+  ch1_life: { obj: () => lifeObjective() },
+  ch2_life: { obj: () => lifeObjective() },
+  ch3_life: { obj: () => lifeObjective() },
+  ch4_life: { obj: () => lifeObjective() },
+  ch5_life: { obj: () => lifeObjective() },
+  ch2_watch: { obj: () => watchObjective() }, ch3_watch: { obj: () => watchObjective() }, ch4_watch: { obj: () => watchObjective() }, ch5_watch: { obj: () => watchObjective() },
+  ch2_probe: { obj: () => probeObjective() }, ch3_probe: { obj: () => probeObjective() }, ch4_probe: { obj: () => probeObjective() }, ch5_probe: { obj: () => probeObjective() },
   ch1_rat: { obj: () => ratObjective() },
   ch2_rat: { obj: () => ratObjective() },
   ch3_rat: { obj: () => ratObjective() },
@@ -94,18 +107,36 @@ export const STEPS = {
   ch5_siege: { obj: 'Leo is striking first. Be at the watch house by 10 PM — and hold it.' },
   ch5_plans: { obj: 'Search Carlo Bruno for whatever he was carrying.' },
   ch5_assault: { obj: 'Tonight (after 9 PM), drive to the Vescari mansion. Get Dante\'s key. Get to Leo\'s study.' },
-  ch5_free: { obj: 'THE END. The story is over — but Short Hills, and Endless Siege, are still here.' },
+  ch5_free: { obj: () => (G.s.life && G.s.life.post ? postObjective() : 'THE END. The story is over — but Short Hills, and Endless Siege, are still here.') },
 };
+
+/** After the story: a gentle nudge toward whatever's left, never a requirement. */
+function postObjective() {
+  const L = G.s.life;
+  if (L.mail.length) return 'Life after the story. There\'s a letter in the mailbox.';
+  if (L.guest) return 'Life after the story. You have company on the porch.';
+  return 'Life after the story. Work, visit old friends, finish what you started — or just sit on the porch. (Journal → Story)';
+}
 
 const objOf = (s) => (typeof s.obj === 'function' ? s.obj() : s.obj);
 export function objectiveText() {
   const st = G.s.story;
+  if (visiting()) return `Visiting ${here().place}. See old friends, work, or finish old business — then drive home from your car. (At home: ${objOf(STEPS[st.step] || STEPS.free)})`;
   return objOf(STEPS[st.step] || STEPS.free);
 }
 const jobsSinceTrust = () => (G.s.jobsDone || 0) - (G.s.story.flags.jobsBase || 0);
 const questDoneFn = (id) => ((G.s.quests || {})[id] || {}).state === 'done';
 
 /** Before the fortify step: somebody in town sold you out. Find them first. */
+/** Phase C: something is wrong around the house (watch.js). Old saves without it go straight on. */
+function toWatch() { if (!startWatch()) toRatCase(); }
+setWatchStory({
+  setStep: (st) => setStep(st),
+  afterProbe: (n) => {
+    if (n === 5) { startErrand('recon', true); setStep('ch5_recon'); } else toRatCase();
+  },
+});
+
 function toRatCase() {
   const c = CASES[G.s.chapter];
   if (!c) return;
@@ -113,7 +144,14 @@ function toRatCase() {
   if (c.intro) playDialogue([{ who: ME, text: c.intro }], go); else go();
 }
 
-function setStep(step) {
+/** Phase B: settle into a life here before the trouble starts. */
+function toLifeStep(n) {
+  const ls = LIFE_STEPS[n];
+  if (!ls) return;
+  playDialogue(ls.start || [], () => { startLifeStep(); setStep(ls.step); });
+}
+
+export function setStep(step) {
   G.s.story.step = step;
   G.events.emit('storyStep', step);
   banner(`New objective: ${objOf(STEPS[step])}`, 'objective', 5);
@@ -133,6 +171,7 @@ const npcPoint = (id) => {
 /** Where the story wants you: {map, x, y, label}. */
 export function storyWaypoint() {
   const st = G.s.story;
+  if (visiting()) return errandWaypoint();
   const cab = G.maps.cabin, town = G.maps.town;
   switch (st.step) {
     case 'arrive': return { map: 'cabin', ...cab.points.cabin_front, label: 'Cabin' };
@@ -161,6 +200,8 @@ export function storyWaypoint() {
     }
     case 'see_dee': return { ...npcPoint('dee'), label: 'Dee' };
     case 'stranger': return { map: 'town', ...town.points.stranger, label: 'Stranger' };
+    case 'ch2_watch': case 'ch3_watch': case 'ch4_watch': case 'ch5_watch':
+    case 'ch2_probe': case 'ch3_probe': case 'ch4_probe': case 'ch5_probe': return watchWaypoint();
     case 'ch1_rat': case 'ch2_rat': case 'ch3_rat': case 'ch4_rat': case 'ch5_rat': return ratWaypoint();
     case 'reinforce': return { map: 'cabin', ...cab.points.cabin_front, label: 'Cabin' };
     case 'first_siege': return { map: 'cabin', ...cab.points.cabin_in, label: 'Cabin' };
@@ -533,6 +574,7 @@ export function storyDialogue(id) {
 
 export function initStoryEvents() {
   const ev = G.events;
+  ev.on('lifeStepDone', (n) => afterLife(n));
   ev.on('mapLoaded', (id) => {
     if (id === 'town' && G.s.story.step === 'go_town') {
       addXP(25, 'Reached Pine Hollow');
@@ -563,7 +605,9 @@ export function initStoryEvents() {
   ev.on('questDone', (id) => { if (id === 'ruth_watch') checkPrepared(); });
   ev.on('recovered', () => {
     if (G.s.story.step === 'probe' && !G.s.world.siege) scheduleProbe();
+    if (/^ch\d_probe$/.test(G.s.story.step) && !G.s.world.siege && !lifeCh().watch.after) scheduleWatchProbe();
   });
+  ev.on('siegeWon', (sg) => { if (sg.plan.kind === 'probe' && /^ch\d_probe$/.test(G.s.story.step)) onProbeWon(); });
   ev.on('siegeWon', (sg) => {
     if (sg.plan.kind !== 'probe' || G.s.story.step !== 'probe') return;
     setTimeout(() => {
@@ -577,9 +621,9 @@ export function initStoryEvents() {
     if (G.s.story.step === 'ch5_trust') checkTrust5();
     if (G.s.story.step === 'town_trust') checkTrust();
     if (G.s.story.step === 'first_job') setStep('see_dee');
-    if (G.s.story.step === 'ch2_job') setStep('ch2_rosa');
-    if (G.s.story.step === 'ch3_job') setStep('ch3_deputy');
-    if (G.s.story.step === 'ch4_job') setStep('ch4_reyes');
+    if (G.s.story.step === 'ch2_job') toLifeStep(2);
+    if (G.s.story.step === 'ch3_job') toLifeStep(3);
+    if (G.s.story.step === 'ch4_job') toLifeStep(4);
   });
   ev.on('defenseInstalled', () => {
     const st = G.s.story;
@@ -778,11 +822,9 @@ function readBurner() {
 function checkTrust() {
   if (G.s.story.step !== 'town_trust') return;
   if (jobsSinceTrust() < 3 || townErrandsDone() < 2) { banner(`New objective: ${objectiveText()}`, 'objective', 3); return; }
-  const f = G.s.story.flags;
-  f.trailDay = G.s.time.day + 1;
   playDialogue([
-    { who: 'Gus Okafor', text: '(Gus catches you on Main Street.) Folks are talking about you, Frank. Good things, for once. Go home and get some sleep — you look like a man who hasn\'t slept in a year.' },
-  ], () => setStep('rest'));
+    { who: 'Gus Okafor', text: '(Gus catches you on Main Street.) Folks are talking about you, Frank. Good things, for once. You\'re one of us now, whether you like it or not.' },
+  ], () => toLifeStep(1));
 }
 
 function scheduleProbe() {
@@ -825,9 +867,27 @@ function checkTrust5() {
   if (jobsSinceTrust() < 3 || townErrandsDone() < 2) { banner(`New objective: ${objectiveText()}`, 'objective', 3); return; }
   playDialogue([
     { who: 'Angie Marchetti', text: '(Angie catches you outside the deli.) The whole avenue\'s talking, Frankie. Old Vito says you\'re the only Corsetti who ever fixed anything. From Vito, that\'s a love letter.' },
-    { who: 'Angie Marchetti', text: 'Whatever you\'re planning — and you\'re planning something — you\'ll want to look at that house first. The railing on the ravine has a view of everything.' },
-  ], () => { startErrand('recon', true); setStep('ch5_recon'); });
+  ], () => toLifeStep(5));
 }
+
+/** When a chapter's "make it home" step is done, the story moves on. */
+function afterLife(n) {
+  const st = G.s.story;
+  if (n === 1 && st.step === 'ch1_life') {
+    st.flags.trailDay = G.s.time.day + 1;
+    playDialogue([{ who: 'Gus Okafor', text: '(Gus, on Main Street.) You look like a man who finally slept. Keep doing whatever it is. Go home early tonight — Ruth says you never do.' }], () => setStep('rest'));
+  }
+  if (n === 2 && st.step === 'ch2_life') setStep('ch2_rosa');
+  if (n === 3 && st.step === 'ch3_life') setStep('ch3_deputy');
+  if (n === 4 && st.step === 'ch4_life') setStep('ch4_reyes');
+  if (n === 5 && st.step === 'ch5_life') {
+    playDialogue([
+      { who: 'Angie Marchetti', text: 'Whatever you\'re planning, Frankie — and you\'re planning something — you\'ll want to look at that house first. The railing on the ravine has a view of everything.' },
+    ], () => afterLifeHooks.ch5());
+  }
+}
+/** The watcher phase plugs in here (see watch.js); by default go straight to recon. */
+export const afterLifeHooks = { ch5: () => toWatch() };
 
 /** Who answers when Frank calls in his favors. */
 function decideAllies() {
@@ -914,6 +974,7 @@ function finishGame() {
   G.s.world.siege = null;
   G.s.world.quietUntilDay = G.s.time.day + 9999;
   G.s.finaleQuiet = !!G.assault && !G.assault.alarm;
+  G.s.life.post = { ending: G.s.ending || 'walk', day: G.s.time.day };
   G.assault = null;
   if (G.s.ending !== 'walk') G.npcs = G.npcs.filter((n) => n.id !== 'leo');
   for (const e of G.enemies) if (!e.dead) { e.retreating = true; e.alerted = false; }
@@ -961,7 +1022,10 @@ function reyesTalk(n) {
     G.npcs = G.npcs.filter((x) => x !== n);
     st.flags.metReyes = true;
     addXP(30, 'Met Agent Reyes');
-    toRatCase();
+    playDialogue([
+      { who: R, text: '(Over her shoulder, at the gate.) One more thing. You keep buying houses with cash, Mr. Corsetti. Every cash closing in this country runs through a handful of title underwriters.' },
+      { who: R, text: 'One of them — Keystone — has a Vescari in-law on its board. Think about that the next time you want to disappear.' },
+    ], () => { addEvidence('t4_reyes', true); toWatch(); });
   });
 }
 
@@ -1001,7 +1065,7 @@ function deputyTalk(n) {
     st.flags.metDeputy = true;
     toast('Deputy Mott drives off in a truck far too new for a deputy\'s salary.', 'info', 3.5);
     addXP(30, 'Met the deputy');
-    toRatCase();
+    toWatch();
   });
 }
 
@@ -1014,6 +1078,7 @@ function readLedger() {
     { who: ME, text: 'Page forty-one: "C. Mott — $2,000/mo." Page fifty: a judge in Newark. A state senator.' },
     { who: ME, text: 'Leo didn\'t send Vinnie to kill me. He sent him to find out what I took. Now I have it for real.' },
   ], onEnd: () => {
+    addEvidence('t3_ledger');
     addXP(40, 'The ledger'); addJP('shadow', 15);
     const s = G.s.story.step;
     if (s === 'ch3_ledger' || s === 'ch3_siege') setStep('ch3_ingrid_truth');
@@ -1028,7 +1093,7 @@ export function storyMail() {
     { who: 'Back of the photo', text: '"Nice place you had. Nicer place you got. — S.B."' },
     { who: ME, text: 'Sal Benedetto. Leo\'s cleanup man. He doesn\'t do warnings unless he wants you scared.' },
     { who: ME, text: 'Fine. Let him come to a house that\'s ready for him.' },
-  ], () => { addJP('shadow', 8); addThreat(10); toRatCase(); });
+  ], () => { addJP('shadow', 8); addThreat(10); toWatch(); });
   return true;
 }
 
@@ -1166,6 +1231,7 @@ export function answerPhone() {
   }
   if (st.step === 'ch5_allies') return callAllies();
   if (!G.s.home.phoneLine) { toast('Dead line. The phone wire by the road must be damaged.', 'warn', 3); return true; }
+  if (answerCall()) return true;
   playDialogue([{ who: ME, text: 'Just a dial tone. Nobody to call who wouldn\'t ask questions.' }]);
   return true;
 }

@@ -37,6 +37,8 @@ const browser = await chromium.launch();
 const errors = [];
 
 function watch(page, label) {
+  // The older sections test the classic systems: switch off optional drop-ins and extra conversations there.
+  if (!label.startsWith('life')) page.addInitScript(() => { window.__cusNoEvents = true; });
   page.on('console', (m) => { if (m.type() === 'error') errors.push(`[${label}] console: ${m.text()}`); });
   page.on('pageerror', (e) => errors.push(`[${label}] pageerror: ${e.message}`));
 }
@@ -81,6 +83,33 @@ async function solveRat(page) {
   }
   await sleep(300); await skipDialogues(page);
 }
+/** Phase B ("make it home"): three different everyday moments. */
+async function passLife(page) {
+  await page.evaluate(() => { const e = window.__cus.G.events; e.emit('cooked', 'stew'); e.emit('gift', 'x'); e.emit('supper'); });
+  await sleep(1200); await skipDialogues(page); await sleep(400); await skipDialogues(page);
+}
+/** Phase C/D: look into the watcher signs, survive the probe, inspect what they left. */
+async function passWatch(page) {
+  const sign = () => page.evaluate(() => Promise.all([import('./src/game/watch.js'), import('./src/game/npcs.js'), import('./src/data/watch.js')]).then(([w, n, d]) => {
+    const c = window.__cus, G = c.G; const W = d.WATCH[G.s.chapter]; if (!w.inWatch()) return 'done';
+    const found = G.s.life.ch[G.s.chapter].watch.found;
+    const [id, sg] = Object.entries(W.signs).find(([k]) => !found[k]);
+    if (G.map.id !== c.dbg.homeMapId()) c.loadMap(c.dbg.homeMapId());
+    if (sg.visitor) { G.s.time.minute = sg.visitor.hours[0] * 60 + 30; c.loadMap(G.map.id); const v = G.npcs.find((x) => x.watchSign === id); n.interactNpc(v); }
+    else if (sg.talk) { G.s.time.minute = 12 * 60; c.loadMap(G.map.id); w.visitorTalk({ watchSign: id }); }
+    else w.watchPropAction(w.watchProps(G.map.id).find((p) => p.watch === id));
+    return id;
+  }));
+  for (let i = 0; i < 4; i++) { const r = await sign(); await sleep(150); await skipDialogues(page); await sleep(500); await skipDialogues(page); if (r === 'done') break; }
+  await page.evaluate(() => { const c = window.__cus; const sg = c.G.s.world.siege; if (!sg) return; c.G.s.time.day = sg.day; c.G.s.time.minute = sg.minute - 2; c.loadMap(c.dbg.homeMapId()); const p = c.G.map.points.cabin_in; c.G.player.x = p.x; c.G.player.y = p.y; c.G.player.invuln = 99999; });
+  for (let i = 0; i < 100 && !(await page.evaluate(() => window.__cus.G.siegeActive)); i++) await sleep(100);
+  for (let i = 0; i < 200; i++) { await sleep(150); await page.evaluate(() => { const c = window.__cus; if (c.G.cutscene) c.dbg.skipCutscene(); if (c.G.siege) c.G.siege.t += 30; for (const e of c.G.enemies) if (!e.dead && !e.gone) c.dbg.damageEnemy(e, 9999, 0, 'bullet'); }); if (!(await page.evaluate(() => window.__cus.G.siegeActive))) break; }
+  await sleep(2400); await page.locator('#modal-root button', { hasText: 'Continue' }).click().catch(() => {}); await sleep(3200); await skipDialogues(page);
+  await page.evaluate(() => import('./src/game/watch.js').then((w) => { const p = w.watchProps(window.__cus.G.map.id).find((x) => x.watch === '_after'); if (p) w.watchPropAction(p); }));
+  await sleep(200); await skipDialogues(page); await sleep(500); await skipDialogues(page);
+  await page.evaluate(() => { window.__cus.G.player.invuln = 0; });
+}
+
 const tp = (page, x, y, map) => ev(page, ([x, y, map]) => {
   const c = window.__cus; if (map && c.G.map.id !== map) c.loadMap(map);
   c.G.player.x = x * 32; c.G.player.y = y * 32;
@@ -300,7 +329,11 @@ if (want('desktop')) {
   for (let i = 0; i < 11; i++) { await ev(page, () => { window.__cus.G.player.stamina = 100; }); await pressE(page); }
   await skipDialogues(page);
   await folk('folk11'); await sleep(300); await skipDialogues(page);
-  check('Errand: split Old Man Tibbs\'s firewood -> go home and sleep', await ev(page, () => window.__cus.G.s.errands.tibbs_wood.state === 'done') && (await step(page)) === 'rest');
+  check('Errand: split Old Man Tibbs\'s firewood -> make Pine Hollow home', await ev(page, () => window.__cus.G.s.errands.tibbs_wood.state === 'done') && (await step(page)) === 'ch1_life', await step(page));
+  // Phase B: a few everyday moments (here: a meal, a gift, Sunday supper) and the story moves on.
+  await ev(page, () => { const e = window.__cus.G.events; e.emit('cooked', 'stew'); e.emit('gift', 'dee'); e.emit('supper'); });
+  await sleep(1200); await skipDialogues(page); await sleep(400); await skipDialogues(page);
+  check('Story: three everyday moments -> go home and sleep', (await step(page)) === 'rest', await step(page));
   // Next morning at the cabin: boot prints, the hunting blind.
   await ev(page, () => { const c = window.__cus; c.G.s.time.day += 1; c.G.s.time.minute = 7 * 60; });
   await tp(page, 24.5, 30, 'cabin'); await sleep(700); await skipDialogues(page);
@@ -632,7 +665,7 @@ if (want('desktop')) {
     const old = JSON.parse(localStorage.getItem('cabinUnderSiege.save'));
     delete old.home.upgrades; delete old.world.discovered; delete old.jpEarned; old.version = 0; old.inv.bogus = 5;
     const d = m.migrate(old);
-    return d.home.upgrades && Array.isArray(d.world.discovered) && d.jpEarned && d.version === 2 && d.chapter === 1 && d.player.mags && !d.inv.bogus;
+    return d.home.upgrades && Array.isArray(d.world.discovered) && d.jpEarned && d.version === 3 && d.chapter === 1 && d.player.mags && !d.inv.bogus && d.life && d.visit === null;
   });
   check('Older/partial saves migrate safely', mig);
   await ctx.close();
@@ -798,11 +831,15 @@ if (want('v2')) {
   const need2 = await ev(page, () => window.__cus.G.s.job.need);
   await ev(page, (n) => window.__cus.dbg.addItem('wood', n, true), need2);
   await tp(page, 34.5, 15.6); await sleep(150); await pressE(page); await sleep(300); await skipDialogues(page);
-  check('Ch2: job at Kowalski Moving pays and advances story', (await step(page)) === 'ch2_rosa');
+  check('Ch2: job at Kowalski Moving pays and advances story (make Larch Street home)', (await step(page)) === 'ch2_life');
+  await passLife(page);
+  check('Ch2: a few everyday moments -> Rosa wants a word', (await step(page)) === 'ch2_rosa');
   await talk('rosa'); await skipDialogues(page);
   check('Ch2: Rosa -> check the mailbox (+2 shutters)', (await step(page)) === 'ch2_letter');
   await tp(page, 21.5, 32.4); await faceTo(page, 20.5, 32.5); await sleep(150); await pressE(page); await sleep(200); await skipDialogues(page);
-  check('Ch2: letter -> find who\'s watching the house', (await step(page)) === 'ch2_rat');
+  check('Ch2: letter -> who\'s been looking at the house?', (await step(page)) === 'ch2_watch');
+  await passWatch(page);
+  check('Ch2: signs, a probe, the aftermath -> find who\'s watching the house', (await step(page)) === 'ch2_rat', await step(page));
   await solveRat(page);
   check('Ch2: the rat is caught -> fortify', (await step(page)) === 'ch2_fortify' && await ev(page, () => window.__cus.G.s.choices.rat2 === 'expose'));
   // two defenses: shutters on the front-left window, then a trap
@@ -814,7 +851,7 @@ if (want('v2')) {
   await page.click('[data-act="place"][data-id="bear_trap"]'); await sleep(200); await skipDialogues(page);
   check('Ch2: two defenses -> Sal\'s siege scheduled', (await step(page)) === 'ch2_siege' && await ev(page, () => !!window.__cus.G.s.world.siege));
   await tp(page, 24.5, 36.5);
-  await setTime(page, 21 * 60 + 50);
+  await ev(page, () => { const t = window.__cus.G.s.time, sg = window.__cus.G.s.world.siege; t.day = sg.day; t.minute = 21 * 60 + 50; });
   for (let i = 0; i < 80 && !(await ev(page, () => window.__cus.G.siegeActive)); i++) await sleep(150);
   check('Ch2: story siege starts', await ev(page, () => window.__cus.G.siegeActive));
   await ev(page, () => { window.__cus.G.player.invuln = 999; });
@@ -874,13 +911,15 @@ if (want('v2')) {
     await C(() => { const c = window.__cus; const d = c.G.npcs.find((n) => n.id === 'deputy'); c.G.player.x = d.x; c.G.player.y = d.y + 26; c.dbg.input.mouse.inside = false; c.G.player.angle = -Math.PI / 2; }); await sleep(200);
     await pressE(page); await sleep(200); await skipDialogues(page, 1);
     const dep = await C(() => ({ choice: window.__cus.G.s.choices.deputy, step: window.__cus.G.s.story.step }));
-    check('Ch3: deputy visit is a choice with consequences', dep.choice === 'refuse' && dep.step === 'ch3_rat', JSON.stringify(dep));
+    check('Ch3: deputy visit is a choice with consequences', dep.choice === 'refuse' && dep.step === 'ch3_watch', JSON.stringify(dep));
+    await passWatch(page);
+    check('Ch3: cut wire, a probe on the windbreak -> who\'s talking to Chicago?', (await step(page)) === 'ch3_rat', await step(page));
     await solveRat(page);
     check('Ch3: Hank the trucker is caught -> fortify', (await step(page)) === 'ch3_fortify');
     await C(() => { const c = window.__cus; const o = c.G.s.home.openings; for (const k of ['gate_l', 'gate_r']) o[k].hp = o[k].baseHp; c.G.s.story.flags.fortified = 1; c.G.events.emit('defenseInstalled'); }); await sleep(300); await skipDialogues(page);
     const plan = await C(() => window.__cus.G.s.world.siege && window.__cus.G.s.world.siege.plan.waves.map((w) => w.types));
     check('Ch3: gate + defenses -> Vinnie\'s siege (truck, snipers; refusing the deputy adds a sniper)', plan && plan[0].includes('truck') && plan[1].filter((t) => t === 'sniper').length === 2, JSON.stringify(plan));
-    await C(() => { const c = window.__cus; c.G.player.x = 20.5 * 32; c.G.player.y = 25 * 32; c.G.player.invuln = 99999; c.G.s.time.minute = 21 * 60 + 58; });
+    await C(() => { const c = window.__cus; c.G.player.x = 20.5 * 32; c.G.player.y = 25 * 32; c.G.player.invuln = 99999; c.G.s.time.minute = 21 * 60 + 58; if (c.G.s.world.siege) c.G.s.time.day = c.G.s.world.siege.day; });
     for (let i = 0; i < 80 && !(await C(() => window.__cus.G.siegeActive)); i++) await sleep(150);
     let rammed = false, ruthFought = false;
     for (let i = 0; i < 70 && !rammed; i++) {
@@ -1111,15 +1150,19 @@ if (want('v4')) {
   check('Ch4: Eleanor (vouched for by Ingrid) gives a safe room kit', (await step(page)) === 'ch4_find_work' && await C(() => window.__cus.G.s.inv.safe_room_kit >= 1));
   await talk4('walt');
   await C(() => { window.__cus.G.events.emit('jobDone', 'woodcut'); }); await sleep(300); await skipDialogues(page);
+  await passLife(page);
   await sleep(200);
   await talk4('reyes', 1);
-  check('Ch4: Agent Reyes and the ledger choice', (await step(page)) === 'ch4_rat' && await C(() => window.__cus.G.s.choices.reyes === 'copy'));
+  await skipDialogues(page);
+  check('Ch4: Agent Reyes and the ledger choice', (await step(page)) === 'ch4_watch' && await C(() => window.__cus.G.s.choices.reyes === 'copy'));
+  await passWatch(page);
+  check('Ch4: the boathouse, the gate box, a boat in the night -> who told Nico?', (await step(page)) === 'ch4_rat', await step(page));
   await solveRat(page);
   check('Ch4: June Tremblay is caught -> fortify', (await step(page)) === 'ch4_fortify');
   await C(() => { const c = window.__cus; const o = c.G.s.home.openings; for (const k of ['gate_l', 'gate_r']) o[k].hp = o[k].baseHp; c.G.s.story.flags.fortified = 2; c.G.events.emit('defenseInstalled'); }); await sleep(300); await skipDialogues(page);
   const plan4 = await C(() => window.__cus.G.s.world.siege && window.__cus.G.s.world.siege.plan.waves.map((w) => w.dir));
   check('Ch4: iron gate + three defenses -> Nico\'s attack by road and by water', plan4 && plan4.includes('lake') && plan4.includes('shore'), JSON.stringify(plan4));
-  await C(() => { const c = window.__cus; c.G.player.x = 34 * 32; c.G.player.y = 25 * 32; c.G.player.invuln = 99999; c.G.s.time.minute = 21 * 60 + 58; });
+  await C(() => { const c = window.__cus; c.G.player.x = 34 * 32; c.G.player.y = 25 * 32; c.G.player.invuln = 99999; c.G.s.time.minute = 21 * 60 + 58; if (c.G.s.world.siege) c.G.s.time.day = c.G.s.world.siege.day; });
   for (let i = 0; i < 80 && !(await C(() => window.__cus.G.siegeActive)); i++) await sleep(150);
   await skipDialogues(page);
   await C(() => { window.__cus.G.siege.t = 49; }); await sleep(800);
@@ -1165,7 +1208,11 @@ if (want('v5')) {
   check('Ch5: Mickey Doyle hires you', (await step(page)) === 'ch5_trust', await step(page));
   for (let i = 0; i < 3; i++) { await C(() => { const c = window.__cus; c.G.s.jobsDone = (c.G.s.jobsDone || 0) + 1; c.G.events.emit('jobDone', 'tow'); }); await sleep(120); await skipDialogues(page); }
   for (const id of ['ferraro_rosary', 'vito_bocce']) { await C((id) => { const c = window.__cus; c.G.s.errands[id] = { state: 'done' }; c.G.events.emit('errandDone', id); }, id); await sleep(150); await skipDialogues(page); }
-  check('Ch5: the avenue trusts you -> recon', (await step(page)) === 'ch5_recon', await step(page));
+  check('Ch5: the avenue trusts you -> make Short Hills home', (await step(page)) === 'ch5_life', await step(page));
+  await passLife(page);
+  check('Ch5: at home on the avenue -> who\'s on the ridge?', (await step(page)) === 'ch5_watch', await step(page));
+  await passWatch(page);
+  check('Ch5: photos, Richie Bruno, the probe, Carlo\'s list -> recon', (await step(page)) === 'ch5_recon', await step(page));
   await C(() => { const c = window.__cus; c.G.s.errands.recon = { state: 'done' }; c.G.events.emit('errandDone', 'recon'); }); await sleep(200); await skipDialogues(page);
   check('Ch5: recon -> who\'s feeding Leo?', (await step(page)) === 'ch5_rat', await step(page));
   await solveRat(page);
@@ -1175,7 +1222,7 @@ if (want('v5')) {
   const al = await C(() => window.__cus.G.s.allies || []);
   check('Ch5: the phone calls bring allies (Ruth, Marcus, Ingrid, Walt, Mickey, Reyes)', (await step(page)) === 'ch5_siege' && ['ruth', 'marcus', 'ingrid', 'walt', 'mickey', 'reyes'].every((a) => al.includes(a)), JSON.stringify(al));
   // Leo strikes first: the siege at the watch house
-  await C(() => { const c = window.__cus; c.G.player.x = 49 * 32; c.G.player.y = 10 * 32; c.G.player.invuln = 99999; c.G.s.time.minute = 21 * 60 + 58; });
+  await C(() => { const c = window.__cus; c.G.player.x = 49 * 32; c.G.player.y = 10 * 32; c.G.player.invuln = 99999; c.G.s.time.minute = 21 * 60 + 58; if (c.G.s.world.siege) c.G.s.time.day = c.G.s.world.siege.day; });
   for (let i = 0; i < 80 && !(await C(() => window.__cus.G.siegeActive)); i++) await sleep(150);
   await skipDialogues(page);
   check('Ch5: Carlo Bruno attacks the watch house', await C(() => window.__cus.G.siegeActive && window.__cus.G.siege.plan.bossName === 'Carlo Bruno'));
@@ -1302,7 +1349,10 @@ if (want('town')) {
 
   // Journal: case board, storylines, the week, perks.
   await ev(page, () => window.__cus.dbg.openMenu('journal')); await sleep(300);
-  const jt = await ev(page, () => document.querySelector('.modal-body').innerText);
+  // The journal is split into sections now: read them all.
+  let jt = '';
+  for (const sub of ['story', 'cases', 'side', 'people', 'cal']) { await page.click(`.subtab[data-id="${sub}"]`); await sleep(120); jt += await ev(page, () => document.querySelector('.modal-body').innerText); }
+  await page.click('.subtab[data-id="cases"]'); await sleep(120);
   check('Town: Journal shows the case board, storylines, the week and perks', ['Case board', 'Storylines', 'This week in town', 'Perks'].every((k) => jt.includes(k)));
   await page.screenshot({ path: OUT + 'town-journal.png' });
   await ev(page, () => window.__cus.dbg.closeAll());
@@ -1734,6 +1784,264 @@ if (want('mobile')) {
   await page.screenshot({ path: OUT + 'mobile-night.png' });
   await ctx.close();
 }
+
+/* ================================================================== */
+/* The Longer Life (v0.11): phases, watchers, evidence, counter-moves, */
+/* visits, letters, projects, tier-2 skills, post-game, old saves      */
+/* ================================================================== */
+if (want('life')) {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const page = await ctx.newPage();
+  watch(page, 'life');
+  await page.goto(URL); await page.waitForSelector('#t-new');
+  const C = (fn, a) => ev(page, fn, a);
+  const mod = (path, fn, a) => page.evaluate(([p, f, a]) => import(p).then((m) => (new Function('m', 'a', 'return (' + f + ')(m, a)'))(m, a)), [path, fn.toString(), a]);
+  const waitTransition = async () => { for (let i = 0; i < 40 && await C(() => !!window.__cus.G.transition); i++) await sleep(100); await sleep(200); };
+  const toChapter = async (n) => { await C((n) => { const c = window.__cus; const d = {}; for (let i = 1; i < n; i++) d[i] = true; c.G.s.story.done = d; c.G.s.story.chapterComplete = true; c.G.s.world.siege = null; c.dbg.moveToChapter(n); }, n); await sleep(500); await page.click('[data-go]').catch(() => {}); await sleep(300); await skipDialogues(page); await C(() => { const c = window.__cus; if (c.G.cutscene) c.dbg.skipCutscene(); c.dbg.closeAll(); }); await skipDialogues(page); };
+  const siegeNow = async () => {
+    await C(() => { const c = window.__cus; const sg = c.G.s.world.siege; c.G.s.time.day = sg.day; c.G.s.time.minute = sg.minute - 2; const p = c.G.map.points.cabin_in; c.G.player.x = p.x; c.G.player.y = p.y; c.G.player.invuln = 99999; });
+    for (let i = 0; i < 100 && !(await C(() => window.__cus.G.siegeActive)); i++) await sleep(100);
+  };
+  const winSiege = async () => {
+    for (let i = 0; i < 200; i++) { await sleep(150); await C(() => { const c = window.__cus; if (c.G.cutscene) c.dbg.skipCutscene(); if (c.G.siege) c.G.siege.t += 30; for (const e of c.G.enemies) if (!e.dead && !e.gone) c.dbg.damageEnemy(e, 9999, 0, 'bullet'); }); if (!(await C(() => window.__cus.G.siegeActive))) break; }
+    await sleep(2400); await page.locator('#modal-root button', { hasText: 'Continue' }).click().catch(() => {}); await sleep(3200); await skipDialogues(page);
+  };
+
+  // --- 1–3: old saves migrate without losing anything or replaying anything ---
+  await C(() => window.__cus.newGame('normal')); await sleep(500); await skipDialogues(page);
+  const m1 = await mod('./src/game/save.js', (m) => {
+    const G = window.__cus.G;
+    const v2 = JSON.parse(JSON.stringify(G.s)); v2.version = 2; delete v2.life; delete v2.visit;
+    v2.chapter = 3; v2.player.map = 'farm'; v2.story = { step: 'ch3_rat', flags: { townOpen: true, rat: { clues: { tess: 4 }, wrong: [], deadline: 9 } }, done: { 1: true, 2: true }, chapterComplete: true };
+    v2.stats.level = 7; v2.stats.xp = 33; v2.jp.shadow = 41; v2.skills = ['keen_eye', 'quiet_steps']; v2.money = 777; v2.rel.ingrid = 64; v2.rel.dee = 55;
+    v2.choices = { marcusHelp: true, deputy: 'bribe', rat: 'feed', rat2: 'expose' }; v2.home = { ...v2.home, id: 'farm' };
+    v2.home.projects = { workshop: { progress: 2, lastDay: 3, done: true } };
+    const d = m.migrate(v2);
+    const done = JSON.parse(JSON.stringify(G.s)); done.version = 2; delete done.life; done.chapter = 5; done.player.map = 'shorthills'; done.story = { step: 'ch5_free', flags: {}, done: { 1: true, 2: true, 3: true, 4: true, 5: true } }; done.ending = 'blood';
+    const p = m.migrate(done);
+    const v1 = { version: 1, chapter: 'cabin', player: { map: 'cabin', x: 784, y: 1072, hp: 80, stamina: 100, mag: 6 }, stats: { level: 3, xp: 10, attrPoints: 0, attrs: { vit: 2, end: 1, pre: 1, awa: 1, res: 1 } }, jp: { survivor: 5 }, inv: { ammo: 20 }, home: { openings: {} }, story: { step: 'town_trust', flags: {} }, time: { day: 4, minute: 600 }, world: {} };
+    const o = m.migrate(v1);
+    return {
+      v: d.version, ch: d.chapter, step: d.story.step, lvl: d.stats.level, jp: d.jp.shadow, skills: d.skills.join(','), money: d.money, rel: d.rel.ingrid, choices: d.choices.deputy + d.choices.rat2, proj: d.home.projects.workshop.done,
+      legacy: d.life.legacy, visit: d.visit, siege: d.world.siege, postEnding: p.life.post && p.life.post.ending, postStep: p.story.step, v1ok: o.version === 3 && o.story.step === 'town_trust' && o.life && Array.isArray(o.life.mail),
+    };
+  });
+  check('Life: a v2 Chapter 3 save migrates to v3 with level, JP, skills, money, friends, choices and projects intact', m1.v === 3 && m1.ch === 3 && m1.step === 'ch3_rat' && m1.lvl === 7 && m1.jp === 41 && m1.skills === 'keen_eye,quiet_steps' && m1.money === 777 && m1.rel === 64 && m1.choices === 'bribeexpose' && m1.proj === true, JSON.stringify(m1));
+  check('Life: a save already in Chapter 3 stays there — earlier chapters are marked as played, no attack is scheduled', m1.legacy[1] && m1.legacy[2] && !m1.legacy[3] && m1.visit === null && m1.siege == null, JSON.stringify(m1.legacy));
+  check('Life: a finished-story save enters life after the story with its ending', m1.postEnding === 'blood' && m1.postStep === 'ch5_free');
+  check('Life: a version-1 save still migrates (to v3)', m1.v1ok);
+  // A migrated Chapter 3 save actually loads and plays.
+  const loaded = await mod('./src/game/save.js', (m) => {
+    const G = window.__cus.G;
+    const v2 = JSON.parse(JSON.stringify(G.s)); v2.version = 2; delete v2.life; v2.chapter = 3; v2.player.map = 'farm'; v2.player.x = 21 * 32; v2.player.y = 17 * 32; v2.home = { ...v2.home, id: 'farm', openings: {} }; v2.story = { step: 'ch3_fortify', flags: { townOpen: true }, done: { 1: true, 2: true } };
+    m.writeSaveData(v2);
+    return true;
+  });
+  await C(() => window.__cus.continueGame()); await sleep(800); await skipDialogues(page);
+  check('Life: the migrated Chapter 3 save loads on the farm, mid-chapter', await C(() => window.__cus.G.map.id === 'farm' && window.__cus.G.s.story.step === 'ch3_fortify' && window.__cus.G.s.version === 3));
+
+  // --- Phase B: make it home ---
+  await C(() => window.__cus.newGame('normal')); await sleep(500); await skipDialogues(page);
+  await C(() => { const c = window.__cus; c.G.s.story.step = 'town_trust'; c.G.s.story.flags.jobsBase = 0; c.G.s.story.flags.townOpen = true; c.G.s.jobsDone = 3; c.G.s.errands.abe_pies = { state: 'done' }; c.G.s.errands.jenny_cat = { state: 'done' }; c.G.events.emit('jobDone'); });
+  await sleep(300); await skipDialogues(page); await sleep(300); await skipDialogues(page);
+  check('Life: earning the town\'s trust opens "Make Pine Hollow home" (phase B)', (await step(page)) === 'ch1_life' && /Make Pine Hollow home \(0\/3\)/.test(await C(() => document.getElementById('objective').textContent)));
+  await C(() => { window.__cus.G.events.emit('cooked', 'stew'); window.__cus.G.events.emit('cooked', 'stew'); });
+  check('Life: the same kind of moment only counts once', await mod('./src/game/life.js', (m) => m.lifeMomentsDone().length) === 1);
+  await C(() => { window.__cus.G.events.emit('gift', 'dee'); window.__cus.G.events.emit('supper'); });
+  await sleep(1200); await skipDialogues(page); await sleep(400); await skipDialogues(page);
+  check('Life: three different everyday moments complete the step and the story moves on', (await step(page)) === 'rest');
+
+  // --- Quiet-day events never interrupt an attack ---
+  const ev1 = await C(() => import('./src/game/life.js').then((m) => { const c = window.__cus; c.G.s.life.eventDay = -1; c.G.siegeActive = true; const q = m.quietMoment(); c.G.siegeActive = false; return q; }));
+  check('Life: quiet-day events wait while an attack is on', ev1 === false);
+  await C(() => { const c = window.__cus; c.G.s.story.step = 'town_trust'; c.G.s.time.minute = 8 * 60; c.G.s.life.eventDay = -1; c.loadMap('cabin', c.G.maps.cabin.points.porch); });
+  await sleep(2500);
+  const gusCame = await C(() => !!(window.__cus.G.s.life.ch[1].events || {}).c1_gus_coffee);
+  await skipDialogues(page);
+  check('Life: a quiet morning brings a drop-in (Gus with coffee), once', gusCame);
+
+  // --- Chapter 2: watcher phase, the probe, its aftermath, a counter-move ---
+  await toChapter(2);
+  await C(() => { const c = window.__cus; c.G.s.story.step = 'ch2_letter'; c.G.s.time.minute = 11 * 60; c.G.player.invuln = 99999; c.G.s.rel.marcus = 50; });
+  await mod('./src/game/story.js', (m) => m.storyMail()); await sleep(200); await skipDialogues(page); await sleep(300); await skipDialogues(page);
+  check('Life: Sal\'s photo starts "Who\'s been looking at the house?" (phase C)', (await step(page)) === 'ch2_watch');
+  await C(() => window.__cus.loadMap('millbrook'));
+  const vis = await C(() => window.__cus.G.npcs.some((n) => n.visitor));
+  await mod('./src/game/npcs.js', (m) => { const n = window.__cus.G.npcs.find((x) => x.visitor); m.interactNpc(n); }); await sleep(200); await skipDialogues(page, 1); await sleep(500); await skipDialogues(page);
+  check('Life: a watcher sign can be a person (the fake meter reader) — and asking for ID turns up evidence', vis && await C(() => !!window.__cus.G.s.life.evidence.t2_parcel));
+  check('Life: one sign is not enough on its own', (await step(page)) === 'ch2_watch');
+  await mod('./src/game/npcs.js', (m) => { const n = window.__cus.G.npcs.find((x) => x.id === 'folk6'); window.__cus.G.s.time.minute = 11 * 60; m.interactNpc(n); }); await sleep(200); await skipDialogues(page); await sleep(600); await skipDialogues(page);
+  check('Life: two of three signs (the box on the porch never looked at) schedule a probe — a missed clue doesn\'t block anything', (await step(page)) === 'ch2_probe' && await C(() => window.__cus.G.s.world.siege && window.__cus.G.s.world.siege.plan.kind === 'probe'));
+  await page.screenshot({ path: OUT + 'life-watch.png' });
+  await siegeNow();
+  check('Life: the probe is a small attack', await C(() => window.__cus.G.siegeActive && window.__cus.G.siege.total === 3));
+  await winSiege(); await sleep(800); await skipDialogues(page);
+  const after = await mod('./src/game/watch.js', (m) => m.watchProps('millbrook').find((p) => p.watch === '_after'));
+  check('Life: after the probe, they left something behind to inspect', !!after);
+  await mod('./src/game/watch.js', (m) => { m.watchPropAction(m.watchProps('millbrook').find((p) => p.watch === '_after')); }); await sleep(200); await skipDialogues(page); await sleep(500); await skipDialogues(page);
+  check('Life: the aftermath leads to the rat case and opens a counter-move', (await step(page)) === 'ch2_rat' && await C(() => (window.__cus.G.s.errands.k2_lot || {}).state === 'active'));
+  // Counter-move: the blue Pontiac, at night.
+  await mod('./src/game/errands.js', (m) => { window.__cus.G.s.time.minute = 12 * 60; m.errandPropAction(m.errandProps('millbrook').find((p) => p.errand === 'k2_lot')); });
+  check('Life: the counter-move waits for its hour', await C(() => window.__cus.G.s.errands.k2_lot.stage === 0 && !window.__cus.G.modal));
+  await mod('./src/game/errands.js', (m) => { window.__cus.G.s.time.minute = 21 * 60; m.errandPropAction(m.errandProps('millbrook').find((p) => p.errand === 'k2_lot')); }); await sleep(200); await skipDialogues(page, 0); await sleep(300); await skipDialogues(page);
+  check('Life: the counter-move completes (flat tires)', await C(() => window.__cus.G.s.errands.k2_lot.state === 'done' && window.__cus.G.s.errands.k2_lot.choice === 'tires'));
+  // Ask Marcus for help in the last days.
+  await C(() => { window.__cus.G.s.time.minute = 12 * 60; });
+  // Marcus may have something to say about the evidence first; keep talking until you can ask him.
+  for (let k = 0; k < 3 && !(await C(() => (window.__cus.G.s.life.ch[2].help || {}).marcus)); k++) {
+    await mod('./src/game/npcs.js', (m) => { const n = window.__cus.G.npcs.find((x) => x.id === 'marcus'); m.interactNpc(n); }); await sleep(200);
+    await skipDialogues(page, 0); await C(() => window.__cus.dbg.closeAll());
+  }
+  const helped = await C(() => (window.__cus.G.s.life.ch[2].help || {}).marcus);
+  const plan = await mod('./src/game/watch.js', (m) => { const p = m.adaptPlan(JSON.parse(JSON.stringify(window.__cus.dbg.storyPlan()))); window.__cus.G.s.life.ch[2].siegeStarted = null; return { d0: p.waves[0].delay, spot: !!p.waves[0].spot, lead: m.leadBonus({ kind: 'story' }) }; });
+  check('Life: investigation choices change the real attack (late first wave, Marcus marks it, an hour more warning)', helped === 'yes' && plan.d0 >= 15 && plan.spot && plan.lead >= 60, JSON.stringify({ helped, ...plan }));
+  // Counter-moves lapse once the attack has happened.
+  await C(() => { const c = window.__cus; c.G.s.story.step = 'ch2_phone'; c.G.s.errands.k2_lot.state = 'active'; });
+  await sleep(1200);
+  check('Life: an unfinished counter-move lapses after the attack (no dead ends)', await C(() => window.__cus.G.s.errands.k2_lot.state === 'expired'));
+  await C(() => { window.__cus.G.s.errands.k2_lot.state = 'done'; });
+
+  // --- Journal sections ---
+  await C(() => window.__cus.dbg.openMenu('journal')); await sleep(300);
+  const subs = await C(() => [...document.querySelectorAll('.subtab')].map((b) => b.textContent.replace(/[!✉]/g, '').trim()));
+  await page.click('.subtab[data-id="cases"]'); await sleep(200);
+  const casesTxt = await C(() => document.querySelector('.modal-body').innerText);
+  check('Life: Journal has Story, Cases, Side stories, People, Home, Calendar and Log sections', ['Story', 'Cases', 'Side stories', 'People', 'Home', 'Calendar', 'Log'].every((k) => subs.includes(k)), subs.join(','));
+  check('Life: found clues and the Paper Trail can be reviewed in the Journal', /meter reader/i.test(casesTxt) && /Paper Trail/.test(casesTxt));
+  await page.screenshot({ path: OUT + 'life-journal-cases.png' });
+  await page.click('.subtab[data-id="log"]'); await sleep(300);
+  const logTxt = await C(() => document.querySelector('.tab-body').innerText);
+  check('Life: the Log lists important choices', /Important choices/.test(logTxt) && /Larch Street\'s rat|Deputy|Dee|choices/.test(logTxt), logTxt.slice(0, 120));
+  await C(() => window.__cus.dbg.closeAll());
+
+  // --- Relationships survive moves; travel to an old town and back ---
+  const relBefore = await C(() => JSON.stringify(window.__cus.G.s.rel));
+  await C(() => { const c = window.__cus; c.G.s.home.openings.front_door.reinforced = true; c.G.s.home.projects.radio = { progress: 1, lastDay: 2, done: true }; });
+  await toChapter(3);
+  check('Life: relationships come through a chapter move untouched', (await C(() => JSON.stringify(window.__cus.G.s.rel))) === relBefore);
+  check('Life: a finished project stays with the old house', await C(() => !!(window.__cus.G.s.pastHomes.house.projects || {}).radio));
+  const homeSnap = await C(() => { const c = window.__cus; c.G.s.home.openings.front_door.hp = 61; c.G.s.money += 100; c.G.s.time.minute = 10 * 60; return JSON.stringify(c.G.s.home); });
+  await C(() => { const c = window.__cus; const car = c.G.map.props.find((p) => p.kind === 'car'); c.G.player.x = car.x; c.G.player.y = car.y + 30; c.G.player.angle = -Math.PI / 2; });
+  await sleep(300);
+  const carLbl = await C(() => window.__cus.G.interactTarget && window.__cus.G.interactTarget.label);
+  check('Life: the car offers drives back to old towns', /options/.test(carLbl || ''), carLbl);
+  await mod('./src/game/visits.js', (m) => m.startVisit(2)); await waitTransition(); await skipDialogues(page);
+  const v = await C(() => ({ map: window.__cus.G.map.id, visit: window.__cus.G.s.visit && window.__cus.G.s.visit.ch, home: window.__cus.G.s.home.id, marcus: window.__cus.G.npcs.some((n) => n.id === 'marcus'), obj: document.getElementById('objective').textContent }));
+  check('Life: driving back to Millbrook — old friends are there, the farm is still home', v.map === 'millbrook' && v.visit === 2 && v.home === 'farm' && v.marcus && /Visiting Millbrook/.test(v.obj), JSON.stringify(v));
+  const locked = await C(() => { const m = window.__cus.G.map; const b = m.blockers.get(m.idx(24, 33)) || [...m.blockers.values()].find((x) => x.id === 'front_door'); return b && b.rec.locked; });
+  check('Life: the old house belongs to someone else now (locked)', locked === true);
+  await mod('./src/game/npcs.js', (m) => { const n = window.__cus.G.npcs.find((x) => x.id === 'marcus'); m.interactNpc(n); }); await sleep(200);
+  const reunion = await C(() => document.getElementById('dlg-text').textContent.length > 0 && !document.getElementById('dialogue').classList.contains('hidden'));
+  await skipDialogues(page);
+  check('Life: an old friend reacts to Frank coming back', reunion && await C(() => window.__cus.G.s.visit.met.marcus === true));
+  await C(() => window.__cus.saveGame('test', { force: true })); await C(() => window.__cus.continueGame()); await sleep(800); await skipDialogues(page);
+  check('Life: save and reload during a visit puts you back in the old town', await C(() => window.__cus.G.map.id === 'millbrook' && window.__cus.G.s.visit && window.__cus.G.s.visit.ch === 2 && !!window.__cus.G.maps.farm));
+  await mod('./src/game/visits.js', (m) => m.endVisit()); await waitTransition(); await skipDialogues(page);
+  const back = await C(() => { const s = window.__cus.G.s; return { map: window.__cus.G.map.id, visit: s.visit, door: s.home.openings.front_door.hp, id: s.home.id }; });
+  check('Life: driving home returns to the farm with the house exactly as it was', back.map === 'farm' && back.visit === null && back.door === 61 && back.id === 'farm', JSON.stringify(back));
+  await C(() => { const c = window.__cus; const at = c.G.s.time.day * 1440 + c.G.s.time.minute + 600; c.G.s.world.siege = { day: Math.floor(at / 1440), minute: at % 1440, plan: { kind: 'raid', waves: [{ dir: 'west', types: ['scout'], delay: 0 }] }, warned: false }; });
+  const blocked = await mod('./src/game/visits.js', (m) => m.travelBlocker());
+  check('Life: you can\'t leave town with an attack coming', !!blocked, String(blocked));
+  await C(() => { window.__cus.G.s.world.siege = null; });
+
+  // --- Letters ---
+  await C(() => { const s = window.__cus.G.s; s.life.mailDrop = true; s.rel.dee = 40; s.life.lastMailDay = -1; s.life.read.l_dee_1 = 1; });
+  await mod('./src/game/letters.js', (m) => m.deliverMail());
+  const mail = await C(() => window.__cus.G.s.life.mail.map((x) => x.id));
+  await mod('./src/game/letters.js', (m) => m.readMail()); await sleep(200); await skipDialogues(page);
+  check('Life: an old friend\'s letter arrives in the mailbox and can be read', mail.includes('l_dee_2') && await C(() => !!window.__cus.G.s.life.read.l_dee_2), mail.join(','));
+
+  // --- Projects: progress over days, survive save/load, cancel refunds ---
+  await C(() => { const s = window.__cus.G.s; s.inv.toolkit = 1; s.inv.wood = 30; s.money = 1000; window.__cus.loadMap('farm'); });
+  const spot = await C(() => !!(window.__cus.G.map.homeInfo.projectSpots.generator && window.__cus.G.map.homeInfo.projectSpots.garden));
+  check('Life: new projects get build sites at the farm', spot);
+  const pr = await mod('./src/game/projects.js', (m) => m.projectProps('farm').find((p) => p.project === 'generator'));
+  await mod('./src/game/projects.js', (m) => { const p = m.projectProps('farm').find((x) => x.project === 'generator'); m.projectAction(p).action(); });
+  for (let i = 0; i < 4; i++) { await C(() => window.__cus.G.repairGameHit && window.__cus.G.repairGameHit()); await sleep(40); }
+  await C(() => { const z = document.querySelector('.rg-zone'); if (z) { for (let i = 0; i < 6 && window.__cus.G.repairGameHit; i++) window.__cus.G.repairGameHit(); } });
+  // The minigame needs timing; drive it directly.
+  await C(() => window.__cus.dbg.closeAll());
+  const p1 = await C(() => { const r = window.__cus.G.s.home.projects.generator; return r && { p: r.progress, paid: r.paid }; });
+  await mod('./src/game/projects.js', (m) => { m.work('generator', { free: true }); m.work('generator', { free: true }); });
+  await C(() => window.__cus.saveGame('t', { force: true })); await C(() => window.__cus.continueGame()); await sleep(700); await skipDialogues(page);
+  check('Life: a project is paid for up front, worked over days, finished — and survives a reload', !!pr && !!p1 && p1.paid.money === 120 && await C(() => window.__cus.G.s.home.projects.generator.done === true), JSON.stringify(p1));
+  const cancel = await mod('./src/game/projects.js', (m) => { const s = window.__cus.G.s; s.home.projects.comfort = { progress: 1, lastDay: -1, done: false, paid: { wood: 8, money: 60 } }; const w = s.inv.wood, $ = s.money; const p = m.projectProps('farm').find((x) => x.project === 'comfort'); const a = m.projectAction(p); return { w, $, a: !!a }; });
+  await C(() => window.__cus.dbg.closeAll());
+  check('Life: an unfinished project shows work and cancel options', cancel.a);
+  // Generator answers a power cut.
+  const gen = await C(() => import('./src/game/watch.js').then((w) => { const c = window.__cus; c.G.s.home.upgrades.floodlight = true; return w.predictAdapt().map((a) => a.id + ':' + /generator will/.test(a.counter)); }));
+  check('Life: with a floodlight they plan to cut the power — and the journal says the generator answers it', gen.includes('power:true'), gen.join(','));
+
+  // --- Tier-2 skills ---
+  const sk = await C(() => import('./src/game/progression.js').then((p) => { const s = window.__cus.G.s; s.jp.gunhand = 500; s.jp.shadow = 500; s.skills = s.skills.filter((x) => !['steady_hands', 'quick_reload', 'controlled_fire', 'misdirection'].includes(x)); const locked = !p.canBuySkill('controlled_fire'); p.buySkill('steady_hands'); p.buySkill('quick_reload'); const ok = p.buySkill('controlled_fire'); const twice = p.buySkill('controlled_fire'); return { locked, ok, twice, n: s.skills.filter((x) => x === 'controlled_fire').length }; }));
+  check('Life: a tier-2 skill needs two from its path, works once and can\'t be bought twice', sk.locked && sk.ok && !sk.twice && sk.n === 1, JSON.stringify(sk));
+  const steady = await C(() => import('./src/game/progression.js').then((p) => { const before = p.derived().spreadMult; window.__cus.G.player.steadyT = 0; return before; }));
+  await page.keyboard.press('KeyG'); await sleep(150);
+  const steady2 = await C(() => import('./src/game/progression.js').then((p) => ({ s: p.derived().spreadMult, t: window.__cus.G.player.steadyT, cd: (window.__cus.G.abilityCd || {}).controlled_fire })));
+  check('Life: Controlled Fire (G) tightens aim for a few seconds, then cools down', steady2.t > 4 && steady2.s < steady * 0.5 && steady2.cd > 50, JSON.stringify({ steady, ...steady2 }));
+  await sleep(500);
+  check('Life: the ability shows on the HUD', /STEADY/.test(await C(() => document.getElementById('ability-tag').textContent)));
+  const toss = await C(() => import('./src/game/enemies.js').then((en) => { const c = window.__cus; const p = c.G.player; c.G.enemies = []; const e = c.dbg.spawnEnemy('scout', p.x + 230, p.y); e.angle = 0; const n = en.distract(p.x + 200, p.y + 40); return { n, inv: !!e.investigate }; }));
+  check('Life: Misdirection sends an unaware attacker to look at the noise', toss.n === 1 && toss.inv, JSON.stringify(toss));
+  await C(() => { window.__cus.G.enemies = []; });
+
+  // --- Side stories and farewells ---
+  await C(() => { const s = window.__cus.G.s; s.story.flags.townOpen = true; s.rel.bo = 30; s.time.minute = 10 * 60; s.errands.bo_1 = { state: 'done', doneDay: 1 }; s.errands.bo_2 = { state: 'done', doneDay: 1 }; window.__cus.loadMap('farm'); });
+  const side = await mod('./src/game/errands.js', (m) => m.offerErrand('bo')); await sleep(150); await skipDialogues(page, 0);
+  check('Life: a side story is offered by its person (Bo: The Johansson Place)', side && await C(() => (window.__cus.G.s.errands.sd_land || {}).state === 'active'));
+  await C(() => { const s = window.__cus.G.s; s.story.done[3] = true; s.story.step = 'ch3_free'; });
+  await mod('./src/game/npcs.js', (m) => { const n = window.__cus.G.npcs.find((x) => x.id === 'bo'); m.interactNpc(n); }); await sleep(200); await skipDialogues(page);
+  check('Life: after the chapter, friends say goodbye (once)', await C(() => !!window.__cus.G.s.life.ch[3].farewell.bo));
+
+  // --- Ruth and Duke still behave ---
+  await C(() => { const s = window.__cus.G.s; s.companion.ruth.joined = true; s.rel.ruth = 70; s.companion.dog = { owned: true, name: 'Duke', hurtDay: -1 }; window.__cus.loadMap('farm', window.__cus.G.maps.farm.points.porch); });
+  check('Life: Ruth still lives with you and Duke still follows you at home', await C(() => window.__cus.G.npcs.some((n) => n.id === 'ruth') && !!window.__cus.G.dog));
+  const trained = await C(() => import('./src/game/projects.js').then((p) => { window.__cus.G.s.home.projects.kennel = { progress: 3, done: true }; return p.dogTrained(); }));
+  check('Life: a finished kennel trains Duke', trained === true);
+
+  // --- Post-game respects the ending ---
+  await toChapter(5);
+  await C(() => { const s = window.__cus.G.s; s.story.done[5] = true; s.story.step = 'ch5_free'; s.ending = 'crown'; s.life.post = { ending: 'crown', day: s.time.day }; s.life.romance = { stage: 4, path: 'romance', invited: true }; s.world.quietUntilDay = s.time.day + 9999; });
+  await mod('./src/game/letters.js', (m) => { m.romancePostgame(); });
+  await C(() => { window.__cus.G.s.time.minute = 11 * 60; window.__cus.G.s.life.eventDay = window.__cus.G.s.time.day; window.__cus.loadMap('shorthills', window.__cus.G.maps.shorthills.points.porch); });
+  await sleep(3500);
+  const crownTxt = await C(() => document.getElementById('dlg-text').textContent);
+  await skipDialogues(page);
+  check('Life: after the story, the ending matters (as head of the family, Dee writes that she can\'t)', /what you are now/.test(crownTxt) && await C(() => window.__cus.G.s.life.romance.path === 'friend'), crownTxt.slice(0, 60));
+  check('Life: life after the story has an objective and no attacks scheduled', /Life after the story/.test(await C(() => document.getElementById('objective').textContent)) && await C(() => !window.__cus.G.s.world.siege));
+  const vis5 = await mod('./src/game/visits.js', (m) => m.visitableChapters());
+  check('Life: every old town can be visited after the story', vis5.join(',') === '1,2,3,4');
+
+  // --- Every investigation and errand spot is reachable on its map ---
+  const bad = await C(() => import('./src/world/mapgen.js').then(async (mg) => {
+    const { newHome } = await import('./src/game/state.js');
+    const { ERRANDS } = await import('./src/game/errands.js');
+    const { WATCH } = await import('./src/data/watch.js');
+    const maps = { cabin: mg.buildCabinMap(newHome('cabin')), town: mg.buildTownMap(), millbrook: mg.buildMillbrookMap(newHome('house')), farm: mg.buildFarmMap(newHome('farm')), estate: mg.buildEstateMap(newHome('estate')), shorthills: mg.buildShortHillsMap(newHome('watchhouse')) };
+    const out = [];
+    const chk = (map, [x, y], what) => { const m = maps[map]; if (!m) return; const cx = Math.floor(x), cy = Math.floor(y); let ok = false; for (let oy = -1; oy <= 1 && !ok; oy++) for (let ox = -1; ox <= 1; ox++) { const s = m.getSolid(cx + ox, cy + oy); if (s === 0 || s === 6) { ok = true; break; } } if (!ok) out.push(`${what}@${map}:${x},${y}`); };
+    for (const [id, e] of Object.entries(ERRANDS)) for (const st of e.stages) { if (st.at) chk(st.map, st.at, id); for (const sp of st.spots || []) chk(st.map, sp, id); }
+    const hm = { 1: 'cabin', 2: 'millbrook', 3: 'farm', 4: 'estate', 5: 'shorthills' };
+    for (const [n, w] of Object.entries(WATCH)) { for (const [id, sg] of Object.entries(w.signs || {})) if (sg.at) chk(hm[n], sg.at, id); if (w.aftermath) chk(hm[n], w.aftermath.at, 'after' + n); }
+    return out;
+  }));
+  check('Life: every errand, side story, watcher and aftermath spot is on open ground', bad.length === 0, bad.join(' '));
+  await ctx.close();
+
+  // --- Touch: the ability button on a phone ---
+  const tctx = await browser.newContext({ ...devices['iPhone 13 landscape'] });
+  const tp2 = await tctx.newPage(); watch(tp2, 'life-touch');
+  await tp2.goto(URL); await tp2.waitForSelector('#t-new');
+  await tp2.evaluate(() => window.__cus.newGame('normal')); await sleep(600);
+  await tp2.evaluate(() => { const c = window.__cus; c.dbg.closeAll(); for (let i = 0; i < 20; i++) document.getElementById('dlg-skip').click(); c.G.s.skills.push('misdirection'); });
+  await sleep(500);
+  const shown = await tp2.isVisible('#btn-skill');
+  await tp2.tap('#btn-skill'); await sleep(200);
+  check('Life (touch): the ability button appears once you have one, and tapping it fires it', shown && await tp2.evaluate(() => (window.__cus.G.abilityCd || {}).misdirection > 0));
+  await tp2.screenshot({ path: OUT + 'life-touch.png' });
+  await tctx.close();
+}
+
 
 await browser.close();
 server.kill();

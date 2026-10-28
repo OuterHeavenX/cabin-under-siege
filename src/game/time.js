@@ -7,6 +7,8 @@ import { toast, banner } from '../ui/hud.js';
 import { saveGame } from './save.js';
 import { fmtClock } from '../util.js';
 import { inCombat } from './player.js';
+import { atHome } from './chapters.js';
+import { projectDone } from './projects.js';
 
 const SLEEP_RATE = 240; // game minutes per real second while sleeping
 
@@ -77,6 +79,8 @@ export function finishSleep(interrupted, reason) {
   } else {
     banner(`Day ${G.s.time.day} — ${fmtClock(G.s.time.minute)}. You feel rested.`, 'info', 4);
     if (slept >= 240) addJP('survivor', 6, 'sleep', 1);
+    // Make It a Home: a full night in your own bed leaves you well rested.
+    if (slept >= 360 && atHome() && projectDone('comfort')) { p.regenBuff = 600; toast('Well rested — your own bed, your own roof.', 'good', 3); }
     G.events.emit('slept', slept);
   }
   saveGame('rest');

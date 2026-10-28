@@ -104,6 +104,7 @@ function play({ now, down, val, L, R }) {
   if (down(BTN.RB)) press('melee');
   if (down(BTN.MENU)) press('pause');
   if (down(BTN.VIEW)) press('journal');
+  if (down(BTN.RS)) press('ability');
 }
 
 function releaseGame() {

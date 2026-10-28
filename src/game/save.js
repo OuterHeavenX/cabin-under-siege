@@ -1,5 +1,5 @@
 // Versioned local save with migration, export and validated import.
-import { G, newSave } from './state.js';
+import { G, newSave, newHome } from './state.js';
 import { SAVE_KEY, SAVE_VERSION, SETTINGS_KEY, DEFAULT_SETTINGS } from '../config.js';
 import { fillDefaults, deepClone } from '../util.js';
 import { ITEMS } from '../data/items.js';
@@ -101,7 +101,22 @@ export function migrate(data) {
     if (d.home) d.home.id = d.home.id || 'cabin';
     if (d.story) { d.story.done = d.story.done || {}; if (d.story.chapterComplete) { d.story.done[1] = true; if (d.story.step === 'free') d.story.step = 'leave_town'; } }
   }
+  if (v < 3) {
+    // v3 (the Longer Life expansion): chapters already behind you keep their history
+    // and skip the new content; the chapter you're in picks it up from where you are.
+    d.life = d.life || {};
+    d.life.legacy = d.life.legacy || {};
+    const ch = typeof d.chapter === 'number' ? d.chapter : 1;
+    for (let n = 1; n < ch; n++) d.life.legacy[n] = true;
+    d.life.legacy.from = ch;
+    if (d.story && d.story.done && d.story.done[5]) d.life.post = { ending: d.ending || 'walk', day: (d.time && d.time.day) || 1, legacy: true };
+    d.visit = null;
+  }
   fillDefaults(d, newSave());
+  // Every door and window the home's map expects must have a record (damaged or hand-edited saves).
+  const fresh = newHome(d.home.id || 'cabin');
+  d.home.openings = d.home.openings && typeof d.home.openings === 'object' ? d.home.openings : {};
+  for (const [k, o] of Object.entries(fresh.openings)) if (!d.home.openings[k] || typeof d.home.openings[k] !== 'object') d.home.openings[k] = o;
   // Make sure every opening record has all current fields.
   for (const o of Object.values(d.home.openings || {})) {
     if (o.kind === 'window') { if (o.shutters === undefined) o.shutters = false; if (o.shutterHp === undefined) o.shutterHp = 0; }
@@ -115,7 +130,13 @@ export function migrate(data) {
   d.skills = Array.isArray(d.skills) ? [...new Set(d.skills.filter((s) => SKILLS[s]))] : [];
   const mapsByChapter = { 1: ['cabin', 'town'], 2: ['millbrook'], 3: ['farm'], 4: ['estate'], 5: ['shorthills', 'mansion'] };
   if (!mapsByChapter[d.chapter]) d.chapter = 1;
-  if (!mapsByChapter[d.chapter].includes(d.player.map)) d.player.map = mapsByChapter[d.chapter][0];
+  // A visit to an earlier town only makes sense to a town you've already left.
+  if (d.visit && !(Number.isInteger(d.visit.ch) && d.visit.ch >= 1 && d.visit.ch < d.chapter && d.visit.ch <= 4)) d.visit = null;
+  const okMaps = [...mapsByChapter[d.chapter], ...(d.visit ? mapsByChapter[d.visit.ch] : [])];
+  if (!okMaps.includes(d.player.map)) { d.player.map = mapsByChapter[d.chapter][0]; d.visit = null; }
+  if (d.visit && !mapsByChapter[d.visit.ch].includes(d.player.map)) d.visit = null;
+  if (!d.life || typeof d.life !== 'object') d.life = newSave().life;
+  for (const k of ['mail', 'calls', 'news', 'wrongGuesses']) if (!Array.isArray(d.life[k])) d.life[k] = [];
   // Saves from before town life (v0.9): open the town once you're past meeting your job contact.
   if ([2, 3, 4].includes(d.chapter) && d.story && d.story.flags && !d.story.flags.townOpen && !/_(arrive|meet_\w+|find_work)$/.test(d.story.step || '')) d.story.flags.townOpen = true;
   if (!Array.isArray(d.home.traps)) d.home.traps = [];

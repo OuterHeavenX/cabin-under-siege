@@ -1,8 +1,8 @@
 // Global tuning constants.
 
-export const GAME_VERSION = '0.10.1';
+export const GAME_VERSION = '0.11.0';
 export const TILE = 32;
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 export const SAVE_KEY = 'cabinUnderSiege.save';
 export const SETTINGS_KEY = 'cabinUnderSiege.settings';
 /** Where the desktop app finds cloud saves and the leaderboard (the deployed website). */

@@ -7,7 +7,7 @@ You are Frank Lowe — formerly Frankie Corsetti of the Vescari crime family —
 to build an honest life in a cabin outside the small town of Pine Hollow. By day you
 work, meet people and fix up the place. Some nights, the family comes for you.
 
-This build (v0.10) contains **the complete story — five playable chapters with four endings** — plus a prequel episode, New Game+ and an arcade mode. It runs in the browser and as an installable Steam Deck / PC game:
+This build (v0.11, *The Longer Life*) contains **the complete story — five playable chapters with four endings**, each chapter now a stretch of Frank's life rather than a stop between sieges — plus a prequel episode, New Game+ and an arcade mode. It runs in the browser and as an installable Steam Deck / PC game:
 
 1. **The Cabin** — Pine Hollow, a remote cabin and a small town.
 2. **Larch Street** — Millbrook, Ohio: a house on a quiet street, a neighbor with secrets, and Sal Benedetto.
@@ -39,6 +39,77 @@ than using simple beeps:
 `audio/manifest.json` — each listed sound replaces the generated one (music files
 loop per mood). See [`audio/README.md`](audio/README.md) for the sound names and
 recommended free sources.
+
+### The Longer Life (v0.11)
+
+A major expansion of the existing campaign — same five chapters, same endings, much more life in each.
+
+- **Every chapter has phases** (shown in Journal → Story): *A — Arrival*, *B — Building a life*,
+  *C — Something is wrong*, *D — The threat closes in*, *E — Final preparation*, *F — Aftermath*.
+- **Make it home (phase B).** After you've found work, each chapter asks you to settle into a routine:
+  any three of eleven everyday things — cards, Sunday supper, the Friday market, the fair, fishing or
+  hunting, a home-cooked meal, picking a garden, bringing someone food, a day on a home project,
+  helping someone, saying yes to an invitation. No timers, no grind: do them whenever.
+- **Quiet days have things in them.** One unscripted moment a day at most, never during a fight, a
+  conversation or with an attack due: Gus with coffee, Ruth's rhubarb pie, a summer storm that flattens
+  her fence, Pete's cookout, chess on Marcus's porch, a Millbrook blackout, haying before the rain, loose
+  heifers, Tess turning fifty, tea with Eleanor, the regatta, a nor'easter, Sunday gravy at Angie's,
+  Thursday boxing with Father Dom's kids, the Feast of St. Rose, car trouble (until you fix the car).
+  Invitations wait a day or two in the Journal and simply lapse if you miss them.
+- **The watcher phase (C) and a probing attack (D) in Chapters 2–5.** Each home gets its own signs to
+  look into — some deliberately ambiguous: a box on the porch with a baby monitor in it, a "meter reader"
+  with no truck, a cut fence and surveyor's stakes, a transmitter on the iron gate, a rope burn on the
+  boathouse cleat, photographs on your doormat, an old friend parked on the ridge. Any two of three are
+  enough. Then a small crew tests the house at night; afterwards you look around for what they dropped.
+- **The real attack adapts — fairly.** A floodlight means someone cuts the power (a backup generator
+  answers it); a braced front door sends one crew round another side; cameras mean the first crew keeps
+  out of their sight. The game tells you in advance (Home tab and Journal → Cases).
+- **Counter-moves and asking for help (E).** What you find opens optional missions — catch the spotter
+  at the hunting blind, deal with the scouts' car behind the library, block the creek ford, chain the
+  boathouse channel, talk Richie Bruno out of driving. And in the last days you can ask Gus, Marcus,
+  Ingrid or Walt to help. Each has a visible, limited effect (one fewer attacker, a later wave, more
+  warning, a crew marked); none makes the night trivial, and they lapse harmlessly if you skip them.
+- **The Paper Trail.** A mystery that runs across all five chapters: *how do they keep finding you?*
+  Thirteen pieces of evidence turn up in watcher signs, aftermaths, ledgers, side stories and
+  conversations; with any five you can try to put it together (Journal → Cases → Connect the dots).
+  Guessing wrong costs a friend's trust for a while, never the campaign.
+- **Friends stay in your life.** Letters (through Marcus's three-hop mail drop) and evening phone calls
+  from the people you left; Marcus and Ruth can come to stay for a couple of days; farewells before a
+  move; Ruth gets new conversations at every home. **Dee Marsh** has an optional, slow-burning romance
+  that can settle into friendship at any point — declining it is never punished.
+- **Going back.** From your car, drive back to any town you've left (hours on the road, a little gas).
+  Old friends react to your return; your old house belongs to someone else (Millbrook), or a friend keeps
+  it for you (Pine Hollow, the farm, the estate); shops, jobs, card tables and unfinished side stories work
+  again; and some stories only happen on a return visit. Your active home stays exactly as you left it.
+- **Side stories.** *The Missing Delivery*, *The Wrong Man*, *The Johansson Place*, *The Night
+  Fisherman*, *The Old Friend*, *Mrs. Ferraro's Son*, and on return visits *The Harvest Supper*, *The
+  Pond Day*, *Dale Purcell, Again*, *Barn Raising* and *The Boathouse*. Most are ordinary people with
+  ordinary problems.
+- **Ten Tier-2 skills** (two per path, each needing two skills from its path first): Trail Sense,
+  Prepared, Controlled Fire (ability), Ready Reload, Emergency Repair (ability), Efficient Construction,
+  Trusted Friend, Local Knowledge, Misdirection (ability), Vanish. Abilities fire with **G**, the right
+  stick click (**R3**) or the purple button on touch. Three new perks are taught in side stories
+  (Mechanic, Surveillance Eye, Night Eyes).
+- **More home projects:** Backup Generator, Kitchen Garden (a Greenhouse at the farm), Kennel & Training
+  Yard for Duke, Hidden Supply Cache, Make It a Home — plus **restoring your car**, which travels with you.
+  Projects never decay; cancel for half the materials back. Moving out lists what you packed, what
+  stays with the house and what was taken apart.
+- **Life after the story.** After the finale the save keeps going in Short Hills with endings that
+  matter: optional loose ends shaped by the ending, letters from old friends, a visit (or a letter) from
+  Dee, every old town open for visits. New Game+ and Endless Siege are unchanged.
+- **The Journal** is split into Story · Cases · Side stories · People · Home · Calendar · Log.
+- **Saves:** format v3. Older saves (v1/v2) migrate automatically; see *Saves and the expansion* below.
+
+#### Saves and the expansion
+
+- Nothing is lost: level, XP, JP, skills, attributes, money, inventory, weapons and mods, friendships,
+  choices, chapter progress, projects, trophies and cloud-save links carry over.
+- Chapters you finished before updating are marked as played; their new content is skipped, and no old
+  attack or introduction replays. Their side stories can still be done on a return visit.
+- The chapter you're in picks up the new content from where you are: if you're past the point where a
+  new phase would sit, you simply continue (e.g. a save already in a rat case keeps its rat case).
+- A save that already finished the story goes straight into life after the story with its ending.
+- Cloud saves sync as before; an older copy of the game will refuse a v3 save instead of damaging it.
 
 ### Visual polish (v0.10)
 
@@ -329,6 +400,7 @@ directly from disk (`file://`) won't work because browsers block ES modules ther
 | Melee shove | F or right click | MELEE |
 | Dodge roll (brief invulnerability) | Space | DODGE |
 | Use quick item (bandage/food) | Q | USE (shows the item & count) |
+| Ability (Tier-2 skill: Controlled Fire, Emergency Repair, Misdirection) | G (controller: click the right stick, R3) | the purple ability button (appears once you have one) |
 | Pause menu | Esc / P | ☰ (top right) |
 | Menu tabs | I items · C character · K skills · V home · M map · J journal · H help | Tabs inside the menu |
 
@@ -440,7 +512,7 @@ validation/migration, simultaneous two-finger touch (joystick + aim) in an iPhon
 landscape viewport, rotation to portrait and back, and pausing when backgrounded. It fails
 on any console error. Screenshots go to `test-output/`.
 
-Current result: **all checks pass** (see the count printed at the end of `npm test`). Run one part with `ONLY=desktop|v2|audio|v3|v4|v5|v7|stealth|town|pad|electron|mobile npm test` (comma-separate several). The town block plays the Chapter 1 rat mystery (clues, a wrong accusation, turning the rat and the lighter siege that follows), the rat cases of Chapters 2–5, Dee's whole storyline (a Thursday, tailing Earl, the choice, the woodlot fight, the perk), a hand of poker, a deer hunt at dawn, the fair's shooting gallery and the new Journal sections. The v7 block covers cloud save between two browsers (code pad, newer-save offer, conflict refusal), trophies, New Game+, the whole Newark episode (including a restart after falling) and the daily challenge posting to the leaderboard; the local server runs the real API Worker against SQLite. The pad block drives the desktop build with a simulated controller (title, difficulty, dialogue, move, aim, fire, pause menu, tabs, settings, back); the electron block launches the packaged app (after `node tools/build-desktop.mjs`, under a display such as `xvfb-run`). The v5 block plays Chapter 5 end to end: the move to Short Hills, chores, Mickey's jobs, recon, the ally phone calls, Carlo's siege, the floor plans, the night-only drive, guards holding posts, the locked study, Ruth's rescue, Dante's key and the justice ending. The v0.4 block covers portraits, rain, cutscenes and skipping, lasting damage, Duke, the safe room, dog handlers, loot drops and the full Chapter 4 story; the v0.3 block covers Ruth's move, Chapter 3, farm life, difficulty and Endless Siege. The v0.2 block covers buying/switching/firing the shotgun and rifle, rifle pierce, favors, shutters, traps, cameras, arsonist fire, the lieutenant's rally, weakest-point targeting, the move to Chapter 2, the full Chapter 2 story and siege, saving in Chapter 2 and migrating a version-1 save.
+Current result: **all checks pass** (see the count printed at the end of `npm test`). Run one part with `ONLY=desktop|v2|audio|v3|v4|v5|v7|stealth|town|life|pad|electron|mobile npm test` (comma-separate several). The **life** block covers the v0.11 expansion: migrating v1/v2 saves (mid-Chapter 3, finished story), phase B ("make it home"), quiet-day events and that they never interrupt attacks, the Chapter 2 watcher phase (a sign that's a person, evidence, two-of-three), the probe and its aftermath, a counter-move (its hour, completion, lapsing after the attack), asking Marcus for help and the effect on the real attack, the Journal sections and Paper Trail, relationships across a move, driving back to Millbrook and home again (old house locked, reunions, save/reload mid-visit, the farm unchanged), travel blocked with an attack due, letters, home projects (build sites, paying, working over days, reload, cancel), the generator answering a power cut, tier-2 skills (locks, buying once, Controlled Fire via G, the HUD, Misdirection), a side story and a farewell, Ruth and Duke, life after the story (crown ending, Dee's letter, no attacks, all towns visitable), that every errand/watcher/aftermath spot is on open ground, and the touch ability button on an iPhone-sized screen. The older sections run with the expansion's optional drop-ins and extra conversations switched off (`window.__cusNoEvents`) so they keep testing what they were written for; they do play through the new required phases (make it home, the watcher phase and the probe). The town block plays the Chapter 1 rat mystery (clues, a wrong accusation, turning the rat and the lighter siege that follows), the rat cases of Chapters 2–5, Dee's whole storyline (a Thursday, tailing Earl, the choice, the woodlot fight, the perk), a hand of poker, a deer hunt at dawn, the fair's shooting gallery and the new Journal sections. The v7 block covers cloud save between two browsers (code pad, newer-save offer, conflict refusal), trophies, New Game+, the whole Newark episode (including a restart after falling) and the daily challenge posting to the leaderboard; the local server runs the real API Worker against SQLite. The pad block drives the desktop build with a simulated controller (title, difficulty, dialogue, move, aim, fire, pause menu, tabs, settings, back); the electron block launches the packaged app (after `node tools/build-desktop.mjs`, under a display such as `xvfb-run`). The v5 block plays Chapter 5 end to end: the move to Short Hills, chores, Mickey's jobs, recon, the ally phone calls, Carlo's siege, the floor plans, the night-only drive, guards holding posts, the locked study, Ruth's rescue, Dante's key and the justice ending. The v0.4 block covers portraits, rain, cutscenes and skipping, lasting damage, Duke, the safe room, dog handlers, loot drops and the full Chapter 4 story; the v0.3 block covers Ruth's move, Chapter 3, farm life, difficulty and Endless Siege. The v0.2 block covers buying/switching/firing the shotgun and rifle, rifle pierce, favors, shutters, traps, cameras, arsonist fire, the lieutenant's rally, weakest-point targeting, the move to Chapter 2, the full Chapter 2 story and siege, saving in Chapter 2 and migrating a version-1 save.
 
 ### iPhone / iPad checklist (real device testing still needed)
 
@@ -555,6 +627,14 @@ src/world/                    Map class (collision, LOS, A*), map generation, do
 src/game/                     Systems: player & weapons, combat, fire, enemy AI, siege & threat, time,
                               jobs, favors (quests), NPCs, story, chapters, home defense, inventory,
                               progression, saves
+  life.js                     Chapter phases, "make it home", quiet-day events, guests, farewells, Ruth's talks
+  watch.js                    Watcher signs, the probe, aftermath, counter-moves, friends' help, adaptive attacks
+  evidence.js                 The Paper Trail and the deduction
+  letters.js                  Letters, phone calls and Dee
+  visits.js                   Driving back to old towns (the active home stays put)
+  abilities.js                Tier-2 active skills (one ability slot)
+src/data/life.js, watch.js, counter.js, evidence.js, letters.js, sidestories.js, reunions.js
+                              The expansion's content (dialogue, signs, missions, letters, side stories)
 src/ui/                       HUD, dialogue, menus/modals
 tools/                        Dev server, smoke test, icon generator
 ```
@@ -597,6 +677,13 @@ tools/                        Dev server, smoke test, icon generator
   Export to back it up.
 - Service-worker offline caching only activates over HTTPS (deployed site), not on
   `http://` LAN testing.
+- **The Longer Life (v0.11):** after the story, Frank's home stays the Short Hills watch house in every
+  ending (that's where the epilogue leaves him); old towns can be visited for as long as you like and you
+  can sleep at an old place a friend keeps for you (or a friend's couch / a motel), but you can't move your
+  active home back to an earlier chapter's map. Quiet-day events, letters and calls are authored (about 30
+  events, 20 letters/calls) and each happens once per playthrough, so a very long post-game eventually
+  runs out of new ones. The Paper Trail's deduction is offered from the Journal rather than staged in a
+  scene. Watcher signs and aftermath clues are props (a pulsing ? marker), not new sprites.
 
 ## Future ideas (not playable yet)
 

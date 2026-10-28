@@ -6,7 +6,10 @@ import { count } from './inventory.js';
 import { interactNpc, npcPresent } from './npcs.js';
 import { chopTree, jobProps, onDeliver, onCourier, onLogDrop, onRepairTarget, onShed, onStoreCounter, onSupplyDrop } from './jobs.js';
 import { installBoards, installBrace, installShutters, pickUpCover, repairNeed, startRepair, trapAt, rearmTrap, pickUpTrap } from './home.js';
-import { atHome, chapter, LAST_CHAPTER } from './chapters.js';
+import { atHome, chapter, LAST_CHAPTER, here } from './chapters.js';
+import { isVisitMap, visitCarOptions, visitOptions } from './visits.js';
+import { watchProps, watchPropAction } from './watch.js';
+import { readMail, unreadMail, pendingCall } from './letters.js';
 import { questProps, questPropAction } from './quests.js';
 import { errandProps, errandPropAction, errandState } from './errands.js';
 import { answerPhone, storyMail } from './story.js';
@@ -23,7 +26,7 @@ import { prequelProp } from './prequel.js';
 import { deerTargets, fieldDress } from './hunting.js';
 import { townLifeProp } from './townlife.js';
 import { ratProps, ratPropAction } from './rat.js';
-import { projectProps, projectAction } from './projects.js';
+import { projectProps, projectAction, carProjectOption } from './projects.js';
 import { openPoker } from '../ui/poker.js';
 import { eventOn } from './calendar.js';
 
@@ -50,7 +53,7 @@ function candidates() {
     add(n.x, n.y, n.folk ? 50 : 64, `Talk to ${n.def.name}`, 'TALK', () => interactNpc(n), n.folk ? -1 : 2);
   }
 
-  const props = [...m.props, ...jobProps(m.id), ...questProps(m.id), ...errandProps(m.id), ...projectProps(m.id), ...ratProps(m.id)];
+  const props = [...m.props, ...jobProps(m.id), ...questProps(m.id), ...errandProps(m.id), ...projectProps(m.id), ...ratProps(m.id), ...watchProps(m.id)];
   for (const pr of props) {
     const a = propAction(pr);
     if (a) add(pr.x, pr.y, pr.r, a.label, a.short, a.action, a.prio || 0);
@@ -77,7 +80,7 @@ function candidates() {
         const wtr = waterNear(p);
         if (wtr) {
           if (count('fishing_rod') > 0) add(wtr.x, wtr.y, 60, 'Go fishing (15 min per catch)', 'FISH', () => openFishingGame({ onCatch: landFish }), 0);
-          else add(wtr.x, wtr.y, 60, 'Water — you\'d need a Fishing Rod', 'LOOK', () => toast(`${chapter().storeName} sells fishing rods.`, 'info'), -2);
+          else add(wtr.x, wtr.y, 60, 'Water — you\'d need a Fishing Rod', 'LOOK', () => toast(`${here().storeName} sells fishing rods.`, 'info'), -2);
         }
       }
       if (t && !t.chopped) add(cx * TILE + 16, cy * TILE + 16, 42, `Chop tree (${3 - t.chops} swings left)`, 'CHOP', () => chopTree(t), -1);
@@ -89,8 +92,13 @@ function candidates() {
 function propAction(pr) {
   const s = G.s;
   if (pr.rat) return { label: pr.label, short: 'LOOK', action: () => ratPropAction(pr), prio: 3 };
+  if (pr.watch) return { label: pr.label, short: 'LOOK', action: () => watchPropAction(pr), prio: 3 };
   if (pr.errand) return { label: pr.label, short: pr.kind === 'quest_chop' ? 'CHOP' : pr.kind === 'quest_repair' ? 'FIX' : pr.kind === 'quest_find' ? 'LOOK' : 'ACT', action: () => errandPropAction(pr), prio: 3 };
   if (G.prequel && (pr.kind === 'car' || pr.kind === 'prequel')) return prequelProp(pr);
+  if (isVisitMap() && ['phone', 'mailbox', 'phonepole'].includes(pr.kind)) {
+    if (pr.kind === 'phonepole') return null;
+    return { label: pr.kind === 'phone' ? 'Old telephone (disconnected)' : 'Mailbox (not yours anymore)', short: 'LOOK', prio: -2, action: () => toast(pr.kind === 'phone' ? 'The line was cut off when you moved out.' : 'Somebody else\'s mail now.', 'info') };
+  }
   if (pr.kind === 'project') return G.endless ? null : projectAction(pr);
   if (['market', 'supper', 'gallery', 'pie_stand'].includes(pr.kind)) return G.endless ? null : townLifeProp(pr, { openShop });
   if (pr.kind === 'poker') return G.endless ? null : { label: eventOn('poker') ? 'Sit in on poker night ($10 ante)' : 'Poker table (Wed & Sat, 7–11 PM)', short: 'POKER', prio: eventOn('poker') ? 2 : -3, action: () => openPoker() };
@@ -99,13 +107,13 @@ function propAction(pr) {
     case 'bed': return { label: 'Use bed (sleep / save)', short: 'REST', action: () => openBedMenu() };
     case 'workbench': return { label: 'Use workbench (craft)', short: 'CRAFT', action: () => openCraft() };
     case 'stove': return { label: 'Use the stove (cook)', short: 'COOK', action: () => openCook() };
-    case 'phone': return { label: s.story.step === 'phone_call' ? 'Answer the ringing phone' : 'Use telephone', short: 'PHONE', action: () => answerPhone(), prio: s.story.step === 'phone_call' ? 3 : 0 };
+    case 'phone': { const ring = s.story.step === 'phone_call' || (pendingCall() && s.time.minute >= 17 * 60); return { label: ring ? 'Answer the ringing phone' : 'Use telephone', short: 'PHONE', action: () => answerPhone(), prio: ring ? 3 : 0 }; }
     case 'car': return carAction();
     case 'exit': return { label: G.map.id === 'cabin' ? 'Walk to Pine Hollow (1 hr)' : 'Walk home (1 hr)', short: 'WALK', action: () => travelFn && travelFn(pr.target, 'walk') };
     case 'phonepole':
       if (s.home.phoneLine) return { label: 'Phone line (working)', short: 'LOOK', action: () => toast('The phone line hums. All good.', 'info') };
       return { label: 'Repair the cut phone line (Toolkit + 1 wood)', short: 'FIX', action: () => startRepair(null, 'phone'), prio: 2 };
-    case 'mailbox': return { label: 'Check mailbox', short: 'MAIL', action: () => checkMail(), prio: G.s.story.step === 'ch2_letter' ? 4 : 0 };
+    case 'mailbox': return { label: unreadMail() ? `Check mailbox (${unreadMail()} letter${unreadMail() > 1 ? 's' : ''})` : 'Check mailbox', short: 'MAIL', action: () => checkMail(), prio: G.s.story.step === 'ch2_letter' || unreadMail() ? 4 : 0 };
     case 'jobboard': return { label: 'Read the job board', short: 'JOBS', action: () => openJobBoard() };
     case 'logdrop': {
       const it = s.job && { woodcut: 'wood', harvest: 'vegetables', fishing: 'fish' }[s.job.type];
@@ -119,7 +127,7 @@ function propAction(pr) {
     case 'counter': {
       const j = s.job;
       if (j && j.type === 'delivery' && j.stage === 'pickup') return { label: 'Pick up the parcel', short: 'TAKE', action: () => onStoreCounter(), prio: 3 };
-      const sk = chapter().shopkeeper;
+      const sk = here().shopkeeper;
       const keeper = G.npcs.find((n) => n.id === sk && n.present && n.spot === `${sk}_store`);
       const open = s.time.minute >= 8 * 60 && s.time.minute < 20 * 60;
       return { label: keeper && open ? 'Shop at the counter' : 'Counter (closed)', short: 'SHOP', action: () => { if (keeper && open) openShop(sk); else toast('The store is closed. Open 8 AM – 8 PM.', 'info'); } };
@@ -138,13 +146,20 @@ function propAction(pr) {
   }
 }
 
+function carMenu(opts, base, prio = 0) {
+  if (!opts.length) return base;
+  if (opts.length === 1) return { label: opts[0].label, short: 'DRIVE', action: opts[0].action, prio };
+  return { label: `Your car: ${opts.length} options`, short: 'DRIVE', action: () => openActions('Your Car', opts), prio: Math.max(prio, 1) };
+}
+
 function carAction() {
+  if (isVisitMap()) return carMenu(visitCarOptions(), null, 2);
   const ch = chapter();
   const drive = errandState('chore_drive');
   if (G.s.chapter === 1 && G.map.id === 'cabin' && drive && drive.state === 'active') {
     return { label: 'A fallen pine blocks the driveway — chop it, or walk the east road to town', short: 'CAR', action: () => toast('The pine across the driveway has to go before the car can. (Or walk: the road east leads to Pine Hollow.)', 'warn', 3.5) };
   }
-  if (G.s.chapter === 5) return mansionCar();
+  if (G.s.chapter === 5) { const mc = mansionCar(); const cw = G.map.id === 'shorthills' ? carProjectOption() : null; return mc.drive ? mc : carMenu([...(cw ? [cw] : []), ...visitOptions()], mc); }
   const opts = [];
   if (ch.maps.length > 1) {
     const toWork = G.map.id === ch.homeMap;
@@ -152,9 +167,10 @@ function carAction() {
   }
   const canLeave = ((G.s.story.done || {})[G.s.chapter] || (G.s.chapter === 1 && G.s.story.chapterComplete)) && G.s.chapter < LAST_CHAPTER && G.map.id === ch.homeMap;
   if (canLeave) opts.push({ label: 'Leave for good — start the next chapter', action: () => G.events.emit('requestMove') });
-  if (!opts.length) return { label: 'Your car (everything here is within walking distance)', short: 'CAR', action: () => toast(`Everything in ${ch.place} is within walking distance.`, 'info') };
-  if (opts.length === 1) return { label: opts[0].label, short: 'DRIVE', action: opts[0].action, prio: canLeave ? 3 : 0 };
-  return { label: 'Your car: 2 options', short: 'DRIVE', action: () => openActions('Your Car', opts), prio: 3 };
+  const carWork = carProjectOption();
+  if (carWork && G.map.id === ch.homeMap) opts.push(carWork);
+  opts.push(...visitOptions());
+  return carMenu(opts, { label: 'Your car (everything here is within walking distance)', short: 'CAR', action: () => toast(`Everything in ${ch.place} is within walking distance.`, 'info') }, canLeave ? 3 : 0);
 }
 
 /** Chapter 5: the only drive that matters is up the ridge. */
@@ -163,16 +179,16 @@ function mansionCar() {
   const h = Math.floor(G.s.time.minute / 60);
   const dark = h >= 21 || h < 4;
   if (G.map.id === 'mansion') {
-    if (G.assault && G.assault.alarm && G.enemies.some((e) => !e.dead && !e.gone && e.alerted)) return { label: 'Not with the whole house shooting at you', short: 'CAR', action: () => toast('They\'d shoot out the tires. Deal with them first.', 'danger') };
-    return { label: 'Drive back to the watch house (20 min)', short: 'DRIVE', prio: 2, action: () => {
+    if (G.assault && G.assault.alarm && G.enemies.some((e) => !e.dead && !e.gone && e.alerted)) return { drive: true, label: 'Not with the whole house shooting at you', short: 'CAR', action: () => toast('They\'d shoot out the tires. Deal with them first.', 'danger') };
+    return { drive: true, label: 'Drive back to the watch house (20 min)', short: 'DRIVE', prio: 2, action: () => {
       endAssault();
       for (const e of G.enemies) { e.gone = true; e.alerted = false; }
       travelFn && travelFn('shorthills', 'car');
     } };
   }
   if (st.step === 'ch5_assault') {
-    if (!dark) return { label: 'Wait for dark (after 9 PM) to drive up to the Vescari house', short: 'CAR', action: () => toast('Not in daylight. Sleep or wait until after 9 PM.', 'warn', 3) };
-    return { label: 'Drive up the ridge to the Vescari mansion', short: 'DRIVE', prio: 3, action: () => travelFn && travelFn('mansion', 'car') };
+    if (!dark) return { drive: true, label: 'Wait for dark (after 9 PM) to drive up to the Vescari house', short: 'CAR', action: () => toast('Not in daylight. Sleep or wait until after 9 PM.', 'warn', 3) };
+    return { drive: true, label: 'Drive up the ridge to the Vescari mansion', short: 'DRIVE', prio: 3, action: () => travelFn && travelFn('mansion', 'car') };
   }
   if ((st.done || {})[5]) return { label: 'Your car. Short Hills is home now.', short: 'CAR', action: () => toast('No more running. Short Hills is home.', 'info') };
   return { label: 'Your car (everything in Short Hills is within walking distance)', short: 'CAR', action: () => toast('Everything in Short Hills is within walking distance. The ridge can wait.', 'info') };
@@ -208,6 +224,7 @@ function blockerAction(b) {
 
 function toggleDoor(b) {
   if (b.broken) return;
+  if (b.rec.locked && b.rec.lockedMsg) { toast(b.rec.lockedMsg, 'info', 4); return; }
   if (b.rec.locked && tryStudyDoor(b)) return;
   if (b.rec.open) {
     // Don't close a door on top of someone.
@@ -255,6 +272,7 @@ const MAIL = [
 
 function checkMail() {
   if (storyMail()) return;
+  if (readMail()) return;
   const day = G.s.time.day;
   if (G.s.world.mailDay === day) { toast('Nothing new today.', 'info'); return; }
   G.s.world.mailDay = day;

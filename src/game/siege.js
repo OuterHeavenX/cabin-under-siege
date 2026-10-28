@@ -11,13 +11,14 @@ import { endlessWaveCleared, endlessDefeat } from './endless.js';
 import { sfx, setMusic } from '../audio.js';
 import { saveGame } from './save.js';
 import { fmtClock } from '../util.js';
-import { chapter, homeMap, homeMapId, atHome } from './chapters.js';
+import { chapter, homeMap, homeMapId, atHome, visiting } from './chapters.js';
 import { NPCS } from '../data/npcs.js';
 import { allyStartSiege, allyEndSiege } from './ally.js';
 import { diff } from './difficulty.js';
 import { playCutscene } from '../ui/cutscene.js';
 import { prequelDefeat } from './prequel.js';
-import { projectDone } from './projects.js';
+import { projectDone, cacheProtects } from './projects.js';
+import { adaptPlan, leadBonus, updatePower } from './watch.js';
 
 export const absNow = () => G.s.time.day * 1440 + G.s.time.minute;
 export const absOf = (s) => s.day * 1440 + s.minute;
@@ -157,7 +158,7 @@ export function dailyProcess() {
 
   if (free) {
     w.threat = clamp(w.threat + 3, 0, 100);
-    if (!w.siege && day >= w.quietUntilDay) {
+    if (!w.siege && day >= w.quietUntilDay && !visiting()) {
       const p = (0.12 + w.threat / 160) * diff().raid;
       if (chance(p)) {
         const size = 2 + Math.floor(w.threat / 25) + Math.floor(G.s.stats.level / 3) + randInt(0, 1);
@@ -242,7 +243,7 @@ export function updateThreatClock() {
   const now = absNow();
   const at = absOf(s);
   const d = derived();
-  const lead = d.warnLead + (s.extraLead || 0);
+  const lead = d.warnLead + (s.extraLead || 0) + leadBonus(s.plan);
   if (!s.warned && now >= at - lead && now < at) {
     s.warned = true;
     warn(s, d);
@@ -268,7 +269,7 @@ function warn(s, d) {
 function missedSiege(s) {
   const w = G.s.world;
   w.siege = null;
-  if (s.plan.kind === 'story') {
+  if (s.plan.kind === 'story' || s.plan.retry) {
     // The story attack waits for you: they come back the next night.
     scheduleSiege(s.plan, G.s.time.day, 22 * 60);
     G.s.world.siege.warned = false;
@@ -288,6 +289,7 @@ export function startSiege(s, immediate = false) {
     const extra = ['gunman', 'enforcer', 'scout'].slice(0, ng);
     s = { ...s, plan: { ...s.plan, waves: s.plan.waves.map((w) => ({ ...w, types: [...w.types, ...extra] })) } };
   }
+  if (s.plan.kind === 'story' || s.plan.kind === 'probe') s = { ...s, plan: adaptPlan(JSON.parse(JSON.stringify(s.plan))) };
   G.siegeActive = true;
   clearBanners('danger');
   allyStartSiege();
@@ -320,6 +322,7 @@ export function updateSiege(dt) {
   if (!G.siegeActive) return;
   const sg = G.siege;
   sg.t += dt;
+  updatePower(dt);
   const map = G.map;
   while (sg.waveIdx < sg.plan.waves.length && sg.t >= sg.plan.waves[sg.waveIdx].delay) {
     const wave = sg.plan.waves[sg.waveIdx];
@@ -333,6 +336,8 @@ export function updateSiege(dt) {
       const e = spawnEnemy(t, pos.x, pos.y, opts);
       if (opts.carriesNote && sg.plan.kind === 'story') bossEntrance(e);
       if (projectDone('watchtower') && !G.endless) e.spotted = 25; // seen from the tower
+      if (wave.spot) e.spotForever = true; // a friend is calling them out
+      if (wave.noCam) e.camBlind = true; // keeping out of the cameras' sight
       if (sg.plan.kind === 'ambush') e.alerted = true;
       sg.spawned++;
     });
@@ -488,7 +493,8 @@ export function handleDefeat() {
     return;
   }
   const story = G.siege && G.siege.plan.kind === 'story';
-  const lost = Math.min(150, Math.floor(G.s.money * diff().loss));
+  // A hidden supply cache at home: the cash you keep there is safe.
+  const lost = atHome() && cacheProtects() ? 0 : Math.min(150, Math.floor(G.s.money * diff().loss));
   sfx('defeat');
   setMusic('night');
   const onCabin = atHome();

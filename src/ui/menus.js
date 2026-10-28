@@ -5,7 +5,7 @@ import { ITEMS, SHOPS, RECIPES, COOK_RECIPES } from '../data/items.js';
 import { cook, canCook } from '../game/activities.js';
 import { DIFFICULTY } from '../game/difficulty.js';
 import { endlessData, ENDLESS_SITES, MODIFIERS, dailyChallenge } from '../game/endless.js';
-import { ERRANDS, errandState, errandDone, stageLabel, activeErrands, arcSummary, errandOffer, offerErrand } from '../game/errands.js';
+import { ERRANDS, errandState, errandDone, stageLabel, activeErrands, arcSummary, errandOffer, offerErrand, arcReady } from '../game/errands.js';
 import { caseBoard } from '../game/rat.js';
 import { weekAhead } from '../game/townlife.js';
 import { ownedPerks, PERKS } from '../game/perks.js';
@@ -15,7 +15,7 @@ import { ATTRIBUTES, MAX_ATTR, PATHS, SKILLS, xpForLevel } from '../data/skills.
 import { NPCS, relLevel } from '../data/npcs.js';
 import { HOMES } from '../data/homes.js';
 import { escapeHtml, fmtClock } from '../util.js';
-import { derived, spendAttr, buySkill, canBuySkill, shopDiscount, addMoney, addRel } from '../game/progression.js';
+import { derived, spendAttr, buySkill, canBuySkill, shopDiscount, addMoney, addRel, skillLocked } from '../game/progression.js';
 import { addItem, count, removeItem, useConsumable } from '../game/inventory.js';
 import { installUpgrade, placeCover, homeStatus, craft, recipeCost, MAX_COVERS, MAX_TRAPS } from '../game/home.js';
 import { boardOffers, acceptJob, abandonJob, jobHint, JOB_TYPES, jobOpenHours, repTier } from '../game/jobs.js';
@@ -23,7 +23,7 @@ import { heatLabel } from '../game/siege.js';
 import { chatWith, giveGift, npcAvailableServices } from '../game/npcs.js';
 import { objectiveText } from '../game/story.js';
 import { offerQuest, activeQuests, questHint, QUESTS } from '../game/quests.js';
-import { chapter } from '../game/chapters.js';
+import { chapter, here, hereN, visiting, CHAPTERS } from '../game/chapters.js';
 import { restBlocker, startSleep } from '../game/time.js';
 import { saveGame, canSaveNow, exportSave, readImportFile, writeSaveData, saveSettings } from '../game/save.js';
 import { sfx, setVolumes } from '../audio.js';
@@ -35,6 +35,16 @@ import { WEAPONS } from '../data/weapons.js';
 import { GAME_VERSION } from '../config.js';
 import { ACHIEVEMENTS, isUnlocked, unlockedCount, achievementData } from '../game/achievements.js';
 import { projectDone } from '../game/projects.js';
+import { romanceEpilogue } from '../game/letters.js';
+import { lifeCh, PHASES, phaseOf, inLifeStep, lifeIdeas, LIFE_NEED, farewellPending, farewellsSaid, farewellPeople, eventLog } from '../game/life.js';
+import { WATCH } from '../data/watch.js';
+import { travelHours, visitableChapters, oldHomeStatus, travelBlocker } from '../game/visits.js';
+import { inWatch, helpOptions, predictAdapt } from '../game/watch.js';
+import { trailBoard, canDeduce, connectTheDots } from '../game/evidence.js';
+import { letterLog, unreadMail, rereadLetter } from '../game/letters.js';
+import { setAbility, currentAbility } from '../game/abilities.js';
+import { fmtWindow } from '../game/calendar.js';
+import { helpOnProject, projectList } from '../game/projects.js';
 import { cloudCode, cloudState, cloudAvailable, cloudEnable, cloudPeek, cloudLink, cloudUnlink, cloudPush, cloudCheck, cloudTake, deviceName, playerName, getDailyScores, postDailyScore } from '../game/cloud.js';
 
 const root = () => document.getElementById('modal-root');
@@ -183,6 +193,10 @@ function handleMenuClick(e, entry) {
     case 'equipPistol': equipWeapon(G.player, 'pistol'); break;
     case 'attr': spendAttr(id); break;
     case 'skill': if (canBuySkill(id)) confirmBox(`Spend ${SKILLS[id].cost} ${PATHS[SKILLS[id].path].name} JP to learn ${SKILLS[id].name}?`, 'Learn', () => { buySkill(id); refreshMenu(); }, 'Not yet'); return;
+    case 'jsub': journalSub = id; break;
+    case 'deduce': closeAllModals(); connectTheDots(); return;
+    case 'reread': closeAllModals(); rereadLetter(id); return;
+    case 'ability': setAbility(id); break;
     case 'abandon': confirmBox('Abandon your current job? You won\'t be paid.', 'Abandon', () => { abandonJob(); refreshMenu(); }); return;
     case 'save': {
       const why = canSaveNow();
@@ -283,11 +297,14 @@ function skillsTab() {
     const skills = Object.entries(SKILLS).filter(([, s]) => s.path === pk).map(([sid, s]) => {
       const owned = hasSkill(sid);
       const can = canBuySkill(sid);
-      return `<div class="skill ${owned ? 'owned' : ''}"><div><b>${escapeHtml(s.name)}</b> <span class="muted">${owned ? '✓ Learned' : s.cost + ' JP'}</span><div class="skill-desc">${escapeHtml(s.desc)}</div></div>${owned ? '' : `<button class="btn sm" data-act="skill" data-id="${sid}" ${can ? '' : 'disabled'}>Learn</button>`}</div>`;
+      const lock = !owned && skillLocked(sid);
+      const tag = s.tier === 2 ? `<span class="tag tier">Tier 2${s.active ? ' · ability' : ''}</span>` : '';
+      const slot = owned && s.active ? `<button class="btn sm ${currentAbility() === sid ? 'on' : ''}" data-act="ability" data-id="${sid}">${currentAbility() === sid ? '★ Ability' : 'Use as ability'}</button>` : '';
+      return `<div class="skill ${owned ? 'owned' : ''} ${lock ? 'locked' : ''}"><div><b>${escapeHtml(s.name)}</b> ${tag} <span class="muted">${owned ? '✓ Learned' : s.cost + ' JP'}</span><div class="skill-desc">${escapeHtml(s.desc)}</div>${lock ? `<div class="small muted">🔒 ${escapeHtml(lock)}</div>` : ''}</div>${owned ? slot : `<button class="btn sm" data-act="skill" data-id="${sid}" ${can ? '' : 'disabled'}>Learn</button>`}</div>`;
     }).join('');
     return `<div class="path" style="--pc:${path.color}"><div class="path-head"><span class="path-icon">${path.icon}</span><b>${path.name}</b><span class="jp">${G.s.jp[pk]} JP</span><span class="muted small">(${G.s.jpEarned[pk]} earned)</span></div><div class="path-earn">Earn by: ${escapeHtml(path.earn)}</div>${skills}</div>`;
   }).join('');
-  return `<p class="hint"><b>JP (Job Points)</b> are earned in each path by doing that kind of activity, and spent on that path's skills. You can learn from every path — no permanent class. Repeating trivial actions has daily limits.</p>${paths}`;
+  return `<p class="hint"><b>JP (Job Points)</b> are earned in each path by doing that kind of activity, and spent on that path's skills. You can learn from every path — no permanent class. Repeating trivial actions has daily limits. <b>Tier 2</b> skills open once you know two skills of their path; the ones marked <i>ability</i> go in your ability slot — press <b>G</b>, click the right stick (<b>R3</b>) or tap the purple button.</p>${paths}`;
 }
 
 /* ---- Home ---- */
@@ -307,7 +324,9 @@ function homeTab() {
     <div class="def-row wide"><div class="def-name">💡 Lights</div><div class="def-stat">Porch light ${G.s.home.porchLight ? 'on' : 'off'} · Floodlight ${up.floodlight ? 'installed' : `not installed (${chapter().hardwareName})`}</div></div>
     <div class="def-row wide"><div class="def-name">🔔 Early warning</div><div class="def-stat">${up.alarm ? 'Tripwire alarm installed (+45 min warning, shows directions)' : `No alarm (${chapter().hardwareName} sells a tripwire kit)`}</div></div>
     <div class="def-row wide"><div class="def-name">📷 Cameras</div><div class="def-stat">${up.camera ? 'Installed — every attacker on the property is marked during an attack' : `None (${chapter().hardwareName} sells a camera kit)`}</div></div>
-    <p class="hint">Repair doors and windows by walking up to them and pressing ACT/E when no attackers are around. Repairs cost wood. Board kits and door braces are installed the same way.</p>`;
+    <p class="hint">Repair doors and windows by walking up to them and pressing ACT/E when no attackers are around. Repairs cost wood. Board kits and door braces are installed the same way.</p>
+    ${predictAdapt().length ? `<h3>What a crew would notice</h3>${predictAdapt().map((a) => `<div class="small">⚠ ${escapeHtml(a.text)} <span class="muted">${escapeHtml(a.counter)}</span></div>`).join('')}` : ''}
+    <h3>Projects</h3><p class="small muted">Walk to a build site at home (or your car, for the car) and press ACT. One day's work per project per day; nothing decays.</p>${projectsHtml()}`;
 }
 
 /* ---- Map ---- */
@@ -319,16 +338,115 @@ function mapTab() {
   const travel = G.s.chapter === 1 ? 'Travel between the cabin and Pine Hollow with your car (or walk the road).'
     : G.s.chapter === 5 ? 'Everything on Millburn Avenue is in walking distance. The Vescari house is up the ridge (by car, after dark).'
       : `Everything in ${escapeHtml(chapter().place)} is within walking distance.`;
-  return `<div class="stat-line">You are at: <b>${escapeHtml(m.name)}</b>. ${G.endless || G.prequel ? '' : travel}</div>
+  const vis = G.endless || G.prequel ? '' : visiting()
+    ? `<div class="objective-box visit small">🚗 Visiting <b>${escapeHtml(here().place)}</b>. Home: <b>${escapeHtml(chapter().place)}</b> (${CHAPTERS[G.s.chapter].name}). Use your car to drive home (${travelHours(G.s.visit.ch, G.s.chapter)} h).</div>`
+    : G.s.chapter > 1 ? `<div class="small muted">Home: <b>${escapeHtml(chapter().place)}</b>. Old towns you can drive back to from your car: ${visitableChapters().map((n) => `${escapeHtml(CHAPTERS[n].place)} (${travelHours(G.s.chapter, n)} h${oldHomeStatus(n).open ? ', your old place is open to you' : ''})`).join(' · ')}${travelBlocker() ? ` — <span class="hl">${escapeHtml(travelBlocker())}</span>` : ''}</div>` : '';
+  return `<div class="stat-line">You are at: <b>${escapeHtml(m.name)}</b>. ${G.endless || G.prequel || visiting() ? '' : travel}</div>${vis}
     <canvas id="minimap" class="minimap"></canvas>
     <div class="legend"><span><i style="background:#fff"></i>You</span><span><i style="background:#5bc0de"></i>People</span><span><i style="background:#ffd166"></i>Objective</span><span><i style="background:#e74c3c"></i>Attackers</span><span><i style="background:#9b7b55"></i>Buildings</span></div>
     <div class="places">${all.map((d) => `<span class="${disc.includes(d.id) ? '' : 'muted'}">${disc.includes(d.id) ? '✓' : '?'} ${disc.includes(d.id) ? escapeHtml(d.name) : 'Undiscovered'}</span>`).join('')}</div>`;
 }
 
 /* ---- Journal ---- */
+// The journal is split into sections so a phone screen never has to scroll
+// through everything at once: Story · Cases · Side stories · People · Home · Calendar · Log.
+let journalSub = 'story';
+const JSUB = [['story', 'Story'], ['cases', 'Cases'], ['side', 'Side stories'], ['people', 'People'], ['homep', 'Home'], ['cal', 'Calendar'], ['log', 'Log']];
 function journalTab() {
+  const pips = { cases: caseAlert(), side: sideAlert(), people: unreadMail() ? '✉' : '' };
+  const subs = JSUB.map(([k, l]) => `<button class="subtab ${k === journalSub ? 'on' : ''}" data-act="jsub" data-id="${k}">${l}${pips[k] ? ` <span class="pip">${pips[k]}</span>` : ''}</button>`).join('');
+  const body = { story: jStory, cases: jCases, side: jSide, people: jPeople, homep: jHome, cal: jCalendar, log: jLog }[journalSub]();
+  return `<div class="subtabs" role="tablist">${subs}</div>${body}`;
+}
+const caseAlert = () => (G.s.story.flags.rat && caseBoard() && caseBoard().open) || inWatch() || canDeduce() === null ? '!' : '';
+const sideAlert = () => (activeErrands().some((e) => e.event || e.counter) ? '!' : '');
+
+function jStory() {
   const j = G.s.job;
   const ch = chapter();
+  const ph = PHASES[phaseOf()];
+  const post = G.s.life && G.s.life.post;
+  const visit = visiting() ? `<div class="objective-box visit"><b>🚗 Visiting ${escapeHtml(here().place)}</b><br>Your home is in ${escapeHtml(ch.place)}. Old friends, a job or old business here — then drive home from your car.</div>` : '';
+  const chores = Object.entries(ERRANDS).filter(([id, e]) => e.chore && e.chapter === G.s.chapter && errandState(id));
+  const choreBox = chores.length && !visiting() ? `<div class="objective-box chores"><b>🏠 Settling in</b> <span class="muted">(${chores.filter(([id]) => errandDone(id)).length}/${chores.length} — ${chapter().choresNeeded || 4} are enough)</span>${chores.map(([id, e]) => `<div class="chore ${errandDone(id) ? 'done' : ''}">${errandDone(id) ? '☑' : '☐'} <b>${escapeHtml(e.title)}</b> — ${escapeHtml(errandDone(id) ? e.desc : stageLabel(id))}</div>`).join('')}</div>` : '';
+  const life = inLifeStep() ? `<div class="objective-box chores"><b>🏡 Making it home</b> <span class="muted">— any ${LIFE_NEED} of these, at your own pace</span>${lifeIdeas().map((m) => `<div class="chore ${m.done ? 'done' : ''}">${m.done ? '☑' : '☐'} ${escapeHtml(m.label)}</div>`).join('')}</div>` : '';
+  const story = activeErrands().filter((e) => e.story).map((e) => `<div class="objective-box favor"><b>🔎 ${escapeHtml(e.title)}</b><br>${escapeHtml(stageLabel(e.id))}</div>`).join('');
+  const fw = farewellPending() && !visiting() ? `<div class="objective-box"><b>👋 Goodbyes</b> <span class="muted">(optional)</span> — ${farewellsSaid()}/${farewellPeople().length} said. Talk to ${farewellPeople().filter((id) => !lifeCh().farewell[id]).map((id) => escapeHtml(NPCS[id].name.split(' ')[0].replace(/"/g, ''))).join(', ')} before you go.</div>` : '';
+  const postBox = post ? `<div class="objective-box"><b>🌅 Life after the story</b><br>${postSummary().map(escapeHtml).join('<br>')}</div>` : '';
+  return `<h3>Chapter ${ch.id} — ${escapeHtml(ch.name)}</h3>
+    ${post ? '' : `<div class="phase-line"><span class="phase-tag">${phaseOf()}</span> <b>${escapeHtml(ph.name)}</b> <span class="muted small">— ${escapeHtml(ph.desc)}</span></div>`}
+    ${visit}
+    <div class="objective-box"><b>Objective:</b> ${escapeHtml(objectiveText())}</div>
+    ${postBox}${life}${choreBox}${story}${fw}
+    ${j ? `<div class="objective-box job"><b>${JOB_TYPES[j.type].icon} Job: ${JOB_TYPES[j.type].name}</b> ($${j.pay})<br>${escapeHtml(jobHint())}<div class="row-btns"><button class="btn sm" data-act="abandon">Abandon job</button></div></div>` : `<p class="muted small">No active job. Visit the job board at ${escapeHtml(here().jobPlace)} (7 AM – 5 PM).</p>`}
+    <p class="hint small">Main objectives move the story. Everything in Side stories, People, Home and the Calendar is optional — do as much or as little as you like.</p>`;
+}
+
+function jCases() {
+  const parts = [caseHtml(), watchHtml(), counterHtml(), trailHtml()].filter(Boolean);
+  return parts.length ? parts.join('') : '<p class="muted">Nothing to investigate yet. Live your life — you\'ll know when something\'s wrong.</p>';
+}
+
+function watchHtml() {
+  const n = G.s.chapter, w = WATCH[n];
+  const c = (G.s.life.ch[n] || {}).watch || {};
+  if (!w || !w.signs || (!c.found && !inWatch())) return '';
+  const found = c.found || {};
+  const rows = Object.entries(w.signs).map(([id, sg]) => `<div class="chore ${found[id] ? 'done' : ''}">${found[id] ? '🔎 ' + escapeHtml(sg.note) : '· ' + escapeHtml(sg.talk ? sg.label : `${sg.label}${sg.visitor ? ` (${fmtWindow(sg.visitor.hours)})` : ''}`)}</div>`).join('');
+  const after = c.after === 'pending' ? '<div class="chore">· They left something behind after the test attack — look around the property.</div>' : '';
+  return `<h3>🔎 ${escapeHtml(w.title)}</h3><div class="objective-box case">${inWatch() ? `<span class="muted">${Object.keys(found).length}/${w.need} noticed — that's enough to know</span>` : '<span class="muted">What you noticed</span>'}${rows}${after}</div>`;
+}
+
+function counterHtml() {
+  const rows = Object.entries(ERRANDS).filter(([, e]) => e.counter && e.chapter === G.s.chapter).map(([id, e]) => {
+    const st = errandState(id);
+    if (!st) return '';
+    const label = st.state === 'done' ? '✓ Done' : st.state === 'expired' ? 'Didn\'t get to it' : stageLabel(id);
+    return `<div class="chore ${st.state === 'done' ? 'done' : ''}"><b>${escapeHtml(e.title)}</b> — ${escapeHtml(label)}<br><span class="muted small">${escapeHtml(e.effect || '')}</span></div>`;
+  }).join('');
+  const help = helpOptions().map((h) => `<div class="chore ${h.asked === 'yes' ? 'done' : ''}"><b>${escapeHtml(h.name)}</b> — ${h.asked === 'yes' ? '✓ will help' : h.asked === 'no' ? 'you told them to stay out of it' : !h.ok ? `get closer first (♥${h.minRel})` : h.open ? 'talk to them and ask' : 'you can ask in the last days before the attack'}<br><span class="muted small">${escapeHtml(h.effect)}</span></div>`).join('');
+  const adapt = (/_siege$|^first_siege$|_rat$|_fortify$|^reinforce$|_allies$/.test(G.s.story.step) ? predictAdapt() : []).map((a) => `<div class="chore">⚠ ${escapeHtml(a.text)} <span class="muted small">${escapeHtml(a.counter)}</span></div>`).join('');
+  if (!rows && !help && !adapt) return '';
+  return `<h3>🛡 Counter-moves & help</h3><div class="objective-box">${rows}${help}${adapt ? `<div class="small" style="margin-top:6px"><b>What they know about the house:</b></div>${adapt}` : ''}</div>`;
+}
+
+function trailHtml() {
+  const t = trailBoard();
+  if (!t.found.length) return '';
+  const btn = t.solved ? '<span class="hl">Solved: they find you through Carmine Ventura\'s title company — every cash closing.</span>'
+    : t.status ? `<span class="muted small">${escapeHtml(t.status)}</span>` : '<button class="btn sm primary" data-act="deduce">Connect the dots…</button>';
+  return `<h3>📎 The Paper Trail <span class="muted small">${t.found.length}/${t.total} pieces · ${t.need} needed</span></h3>
+    <div class="objective-box case"><div class="small muted">How does the family keep finding you? Pieces turn up in every chapter.</div>${t.found.map((x) => `<div class="chore done">📎 <b>Ch.${x.ch} — ${escapeHtml(x.title)}</b><br><span class="small">${escapeHtml(x.text)}</span></div>`).join('')}<div class="row-btns">${btn}</div></div>`;
+}
+
+function jSide() {
+  const favors = activeQuests().map((q) => `<div class="objective-box favor"><b>🙋 ${escapeHtml(q.title)}</b> <span class="muted">for ${escapeHtml(NPCS[q.npc].name)}</span><br>${escapeHtml(questHint(q))}</div>`).join('');
+  const act = activeErrands().filter((e) => !e.chore && !e.story && !e.counter);
+  const inv = act.filter((e) => e.event).map((e) => `<div class="objective-box favor"><b>✉ ${escapeHtml(e.title)}</b> <span class="muted">— an invitation${e.rec.expires != null ? `, ${Math.max(0, e.rec.expires - G.s.time.day + 1)} day(s) left` : ''}</span><br>${escapeHtml(stageLabel(e.id))}</div>`).join('');
+  const side = act.filter((e) => !e.event).map((e) => `<div class="objective-box favor"><b>${e.side ? '📖' : '🤝'} ${escapeHtml(e.title)}</b>${e.giver ? ` <span class="muted">for ${escapeHtml(errandGiverName(e.giver))}</span>` : ''}<br>${escapeHtml(stageLabel(e.id))}</div>`).join('');
+  const old = visitable().map((x) => `<div class="small">🚗 <b>${escapeHtml(x.title)}</b> <span class="muted">— in ${escapeHtml(x.place)} (drive back to visit)</span></div>`).join('');
+  return `${inv ? `<h3>Invitations</h3>${inv}` : ''}${side || favors ? `<h3>In progress</h3>${side}${favors}` : '<p class="muted small">Nothing in progress. People bring things up when you talk to them; a "📖" button means they have a story for you.</p>'}
+    ${storylinesHtml()}${sideStoriesHtml()}
+    ${old ? `<h3>Back in old towns</h3>${old}` : ''}`;
+}
+
+function sideStoriesHtml() {
+  const rows = Object.entries(ERRANDS).filter(([, e]) => e.side && (e.chapter === hereN() || errandState(Object.keys(ERRANDS).find((k) => ERRANDS[k] === e)))).map(([id, e]) => {
+    const st = errandState(id);
+    const status = !st ? (arcReady(e) ? 'Ready — talk to them' : 'Not yet') : st.state === 'done' ? '✓ Complete' : st.state === 'expired' ? 'Missed' : stageLabel(id);
+    return `<div class="arc-row"><b>📖 ${escapeHtml(e.title)}</b> <span class="muted small">${escapeHtml(errandGiverName(e.giver))}${e.visitOnly ? ' · return visit' : ''}</span><div class="small ${st && st.state === 'done' ? 'muted' : ''}">${escapeHtml(status)}</div></div>`;
+  }).join('');
+  return rows ? `<h3>Side stories</h3>${rows}` : '';
+}
+
+/** Return-visit stories whose conditions are met but which haven't started. */
+function visitable() {
+  if (visiting()) return [];
+  return Object.entries(ERRANDS).filter(([id, e]) => e.visitOnly && e.chapter < G.s.chapter && !errandState(id) && (!e.needs || e.needs(G.s))).map(([, e]) => ({ title: e.title, place: CHAPTERS[e.chapter].place }));
+}
+
+function jPeople() {
+  const ch = here();
   const roleBenefits = {
     neighbor: ['Lv1: takes you in if you fall', 'Lv2: warns you when an attack is coming', 'Lv3: shares medical supplies'],
     companion: ['Lv3: fights beside you in attacks', 'Lv3: patches you up once per attack', 'Lv3: offers to come when you move'],
@@ -336,7 +454,7 @@ function journalTab() {
     jobContact: ['Lv1: reads the town\'s mood', 'Lv2: +10% job pay', 'Lv3: friendly advice'],
   };
   const people = [ch.neighbor, ch.shopkeeper, ch.jobContact];
-  if (ch.id > 1 && G.s.companion && G.s.companion.ruth.joined) people.unshift('ruth');
+  if (ch.id > 1 && !visiting() && G.s.companion && G.s.companion.ruth.joined) people.unshift('ruth');
   const rel = people.map((id) => {
     const n = NPCS[id];
     const lv = relLevel(G.s.rel[id] || 0);
@@ -344,28 +462,88 @@ function journalTab() {
     const extra = id === 'ruth' && ch.id === 1 ? roleBenefits.companion : [];
     return `<div class="rel-row"><div class="rel-main"><b>${escapeHtml(n.name)}</b> <span class="muted">${escapeHtml(n.title)}</span><div class="small muted">${escapeHtml(n.bio)}</div><div class="small">${[...roleBenefits[role], ...extra].map((b) => `<span class="${lv >= Number(b[2]) ? 'hl' : 'muted'}">${b}</span>`).join(' · ')} · <span class="${lv >= 1 ? 'hl' : 'muted'}">Lv1: asks you for a favor</span></div></div><div class="hearts" aria-label="Friendship ${lv} of 5">${'♥'.repeat(lv)}${'♡'.repeat(5 - lv)}</div></div>`;
   }).join('');
-  const favors = activeQuests().map((q) => `<div class="objective-box favor"><b>🙋 ${escapeHtml(q.title)}</b> <span class="muted">for ${escapeHtml(NPCS[q.npc].name)}</span><br>${escapeHtml(questHint(q))}</div>`).join('');
-  const chores = Object.entries(ERRANDS).filter(([id, e]) => e.chore && e.chapter === G.s.chapter && errandState(id));
-  const choreBox = chores.length ? `<div class="objective-box chores"><b>🏠 Settling in</b> <span class="muted">(${chores.filter(([id]) => errandDone(id)).length}/${chores.length} — ${chapter().choresNeeded || 4} are enough)</span>${chores.map(([id, e]) => `<div class="chore ${errandDone(id) ? 'done' : ''}">${errandDone(id) ? '☑' : '☐'} <b>${escapeHtml(e.title)}</b> — ${escapeHtml(errandDone(id) ? e.desc : stageLabel(id))}</div>`).join('')}</div>` : '';
-  const errands = activeErrands().filter((e) => !e.chore).map((e) => `<div class="objective-box favor"><b>${e.story ? '🔎' : '🤝'} ${escapeHtml(e.title)}</b>${e.giver && !e.story ? ` <span class="muted">for ${escapeHtml(errandGiverName(e.giver))}</span>` : ''}<br>${escapeHtml(stageLabel(e.id))}</div>`).join('');
-  const doneFavors = Object.entries(G.s.quests || {}).filter(([id, st]) => st.state === 'done' && QUESTS[id]).map(([id]) => QUESTS[id].title);
+  const oldIds = [];
+  for (let n = 1; n < G.s.chapter && n <= 4; n++) { const c = CHAPTERS[n]; for (const id of [c.neighbor, c.shopkeeper, c.jobContact]) if (!people.includes(id) && !oldIds.includes(id)) oldIds.push(id); }
+  const old = oldIds.map((id) => { const lv = relLevel(G.s.rel[id] || 0); return `<div class="small"><b>${escapeHtml(NPCS[id].name)}</b> <span class="muted">${escapeHtml(CHAPTERS[Object.keys(CHAPTERS).find((k) => [CHAPTERS[k].neighbor, CHAPTERS[k].shopkeeper, CHAPTERS[k].jobContact].includes(id))].place)}</span> <span class="hearts">${'♥'.repeat(lv)}${'♡'.repeat(5 - lv)}</span>${id === 'dee' && G.s.life.romance.path ? ` <span class="muted">· ${G.s.life.romance.path === 'romance' ? (G.s.life.romance.stage >= 4 ? 'together' : 'writing — and more') : 'friends'}</span>` : ''}</div>`; }).join('');
+  const ll = letterLog();
+  const letters = ll.read.length || ll.waiting || ll.calling ? `<h3>Letters & calls</h3>${ll.waiting ? `<p class="small hl">📬 ${ll.waiting} letter${ll.waiting > 1 ? 's' : ''} waiting in your mailbox.</p>` : ''}${ll.calling ? '<p class="small hl">📞 Someone will call the house this evening (5–11 PM).</p>' : ''}${ll.read.slice(0, 8).map((l) => `<div class="small">${l.kind === 'call' ? '📞' : '✉'} <b>${escapeHtml(l.title)}</b> <span class="muted">day ${l.day}</span> <button class="btn sm" data-act="reread" data-id="${l.id}">Read again</button></div>`).join('')}` : '';
+  const g = G.s.life.guest;
+  const guest = g ? `<p class="small hl">🏠 ${escapeHtml(NPCS[GUESTS_NPC(g.id)] ? NPCS[GUESTS_NPC(g.id)].name : 'A friend')} is staying with you until day ${g.until}. They're out on the porch.</p>` : '';
+  return `<h3>${visiting() ? `People in ${escapeHtml(ch.place)}` : 'People here'}</h3>${guest}${rel}
+    ${old ? `<h3>Old friends</h3>${old}<p class="small muted">They write through Marcus's mail drop, call the house in the evening, and you can drive back to see them.</p>` : ''}
+    ${letters}${perksHtml()}`;
+}
+
+function jHome() {
+  return `<p class="small">Projects for <b>${escapeHtml(chapter().place)}</b>. Nothing decays — work a day at a time, stop whenever you like, or cancel for half the materials back. The full list (with build sites) is on the <b>Home</b> tab.</p>${projectsHtml(true)}`;
+}
+
+function jCalendar() {
+  if (G.endless || G.prequel) return '';
+  const ev = eventLog().map((e) => `<div class="small">· Day ${e.day}: ${escapeHtml(e.title)}</div>`).join('');
+  return `${weekHtml()}${ev ? `<h3>Recently</h3>${ev}` : ''}<p class="hint small">Quiet days bring their own things — friends dropping by, invitations, weather. Invitations wait a day or two in Side stories; nothing important is lost if you miss one.</p>`;
+}
+
+function jLog() {
   const homes = HOMES.map((h) => {
     const done = (G.s.story.done || {})[h.chapter] || (h.chapter === 1 && G.s.story.chapterComplete);
-    const status = !h.playable ? 'Planned for a future update (not playable yet)' : done ? 'Complete ✓' : G.s.chapter === h.chapter ? 'Now playing' : G.s.chapter > h.chapter ? 'Moved on' : 'Ahead';
-    return `<div class="home-row ${h.playable ? '' : 'muted'}"><b>Ch.${h.chapter} ${escapeHtml(h.name)}</b> — ${status}</div>`;
+    const status = !h.playable ? 'Planned' : done ? 'Complete ✓' : G.s.chapter === h.chapter ? 'Now playing' : G.s.chapter > h.chapter ? 'Moved on' : 'Ahead';
+    return `<div class="home-row"><b>Ch.${h.chapter} ${escapeHtml(h.name)}</b> — ${status}</div>`;
   }).join('');
-  return `<h3>Chapter ${ch.id} — ${escapeHtml(ch.name)}</h3>
-    <div class="objective-box"><b>Objective:</b> ${escapeHtml(objectiveText())}</div>
-    ${j ? `<div class="objective-box job"><b>${JOB_TYPES[j.type].icon} Job: ${JOB_TYPES[j.type].name}</b> ($${j.pay})<br>${escapeHtml(jobHint())}<div class="row-btns"><button class="btn sm" data-act="abandon">Abandon job</button></div></div>` : `<p class="muted">No active job. Visit the job board at ${escapeHtml(ch.jobPlace)} (7 AM – 5 PM).</p>`}
-    ${choreBox}${errands}
-    ${favors || '<p class="muted small">No favors in progress. Friends (♥1+) sometimes ask for help — talk to them.</p>'}
-    ${doneFavors.length ? `<p class="small muted">Favors done: ${doneFavors.map(escapeHtml).join(', ')}</p>` : ''}
-    ${caseHtml()}
-    ${storylinesHtml()}
-    ${weekHtml()}
-    <h3>People</h3>${rel}
-    ${perksHtml()}
-    <h3>The road ahead</h3>${homes}`;
+  const doneFavors = Object.entries(G.s.quests || {}).filter(([id, st]) => st.state === 'done' && QUESTS[id]).map(([id]) => QUESTS[id].title);
+  const doneStories = Object.entries(G.s.errands || {}).filter(([id, r]) => r && r.state === 'done' && ERRANDS[id] && !ERRANDS[id].chore && ERRANDS[id].offer).map(([id]) => ERRANDS[id].title);
+  const ch = choicesLog();
+  return `<h3>Important choices</h3>${ch.length ? ch.map((c) => `<div class="small">· <b>${escapeHtml(c[0])}:</b> ${escapeHtml(c[1])}</div>`).join('') : '<p class="small muted">None yet.</p>'}
+    <h3>Completed</h3>${doneStories.length ? `<p class="small">${doneStories.map(escapeHtml).join(' · ')}</p>` : '<p class="small muted">No stories finished yet.</p>'}
+    ${doneFavors.length ? `<p class="small muted">Favors: ${doneFavors.map(escapeHtml).join(', ')}</p>` : ''}
+    <h3>The road</h3>${homes}`;
+}
+
+function choicesLog() {
+  const c = G.s.choices || {}, out = [];
+  const M = {
+    stranger: ['The man in the grey coat', { deny: 'you played dumb', ask: 'you asked who was asking', threaten: 'you threatened him' }],
+    rat: ['Pine Hollow\'s rat', { feed: 'Henderson feeds them lies', expose: 'Henderson left town', missed: 'never caught' }],
+    rat2: ['Larch Street\'s rat', { feed: 'Danny feeds them lies', expose: 'Danny went to his aunt\'s', missed: 'never caught' }],
+    rat3: ['Kettle Crossing\'s rat', { feed: 'Hank feeds them lies', expose: 'Hank drove south for good', missed: 'never caught' }],
+    rat4: ['Port Whitcombe\'s rat', { feed: 'June feeds them lies', expose: 'June turned herself in', missed: 'never caught' }],
+    rat5: ['The avenue\'s rat', { feed: 'Vito feeds them lies', expose: 'Vito went to Florida', missed: 'never caught' }],
+    marcusHelp: ['Marcus\'s call to Ingrid', { true: 'you trusted him', false: 'you found your own way' }],
+    deputy: ['Deputy Mott', { cooperate: 'you showed him your license', refuse: 'you ran him off', bribe: 'you paid him $100' }],
+    reyes: ['Vinnie\'s ledger', { give: 'given to the FBI', copy: 'copies for the FBI', keep: 'kept as insurance' }],
+    rosaStore: ['Rosa\'s store', { keep: 'you told her to keep it', sell: 'you told her to sell' }],
+    benny: ['Benny Lucchese', { money: 'you gave him money and a road north', reyes: 'you handed him to Agent Reyes', away: 'you sent him away' }],
+    paulie: ['Paulie\'s question', { no: 'you told him no', job: 'you got him a job at Mickey\'s' }],
+  };
+  for (const [k, [label, vals]] of Object.entries(M)) if (c[k] != null && vals[String(c[k])]) out.push([label, vals[String(c[k])]]);
+  const r = G.s.life.romance;
+  if (r.path) out.push(['Dee', r.path === 'romance' ? (r.stage >= 4 ? 'together' : 'more than friends') : 'friends']);
+  if (G.s.life.deduced === 'title') out.push(['The Paper Trail', 'solved: Keystone Title, every cash closing']);
+  if (G.s.ending) out.push(['Leo\'s study', { justice: 'The Long Arm', walk: 'The Empty House', blood: 'Father and Son', crown: 'The Head of the Table' }[G.s.ending] || G.s.ending]);
+  return out;
+}
+
+/** Post-game: what's still out there. */
+function postSummary() {
+  const out = [];
+  const e = G.s.life.post.ending;
+  out.push(e === 'crown' ? 'Short Hills is yours now — the watch house and everything that came with the chair. Old friends will react to that.' : 'Short Hills is home: the watch house on the ridge. Nobody is coming for you anymore.');
+  const vis = visitable();
+  if (vis.length) out.push(`Old towns are calling: ${vis.map((x) => x.title).join(', ')}.`);
+  const open = Object.entries(ERRANDS).filter(([id, x]) => x.side && !x.visitOnly && x.chapter < 5 && !errandState(id)).length;
+  if (open) out.push(`${open} side stor${open === 1 ? 'y' : 'ies'} from earlier towns can still be done on a visit.`);
+  const proj = projectList().filter((p) => !p.done).length;
+  if (proj) out.push(`${proj} home project${proj === 1 ? '' : 's'} left to build.`);
+  if (unreadMail()) out.push('Letters are waiting in the mailbox.');
+  out.push('Endless Siege and New Game+ are on the title screen whenever you want them — this save keeps going.');
+  return out;
+}
+const GUESTS_NPC = (id) => ({ marcus3: 'marcus', ruth4: 'ruth', dee5: 'dee' }[id]);
+
+/** Project rows for the Home tab and the Journal. */
+function projectsHtml(compact = false) {
+  return projectList().map((p) => `<div class="def-row wide proj ${p.done ? 'done' : ''}"><div class="def-name">${p.icon} ${escapeHtml(p.name)} ${p.done ? '<span class="tag">Built</span>' : p.started ? `<span class="tag">${p.progress}/${p.days} days${p.today ? ' · done today' : ''}</span>` : ''}</div>
+    <div class="def-stat">${p.done ? '' : `${escapeHtml(p.cost)} · ${p.days} day${p.days > 1 ? 's' : ''} · `}${escapeHtml(p.desc)}${compact ? '' : ` <span class="muted">(${escapeHtml(p.home)}${p.site ? '' : ' — no room for it at this home'})</span>`}</div></div>`).join('');
 }
 
 function caseHtml() {
@@ -380,7 +558,7 @@ function caseHtml() {
 }
 
 function storylinesHtml() {
-  const arcs = arcSummary();
+  const arcs = arcSummary().filter((a) => !(ERRANDS[a.arc] && ERRANDS[a.arc].side));
   if (!arcs.length) return '';
   return `<h3>Storylines</h3>${arcs.map((a) => `<div class="arc-row"><b>${escapeHtml(errandGiverName(a.giver))}</b> <span class="muted small">${a.count}/${a.total}${a.finished ? ' ✓ complete' : ''}</span>
     ${a.done.length ? `<div class="small muted">${a.done.map((t) => `✓ ${escapeHtml(t)}`).join(' · ')}</div>` : ''}
@@ -566,14 +744,14 @@ export function openHelp() {
         <li><kbd>R</kbd> Reload · <kbd>E</kbd> Interact / talk / open doors</li>
         <li><kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd>, <kbd>Tab</kbd> or <kbd>Mouse wheel</kbd> Switch weapon</li>
         <li><kbd>F</kbd> or <kbd>Right click</kbd> Melee shove</li>
-        <li><kbd>Space</kbd> Dodge roll · <kbd>Q</kbd> Use quick item</li>
+        <li><kbd>Space</kbd> Dodge roll · <kbd>Q</kbd> Use quick item · <kbd>G</kbd> Ability (Tier-2 skills)</li>
         <li><kbd>Esc</kbd>/<kbd>P</kbd> Pause menu · <kbd>I</kbd> Items · <kbd>C</kbd> Character · <kbd>K</kbd> Skills · <kbd>V</kbd> Home · <kbd>M</kbd> Map · <kbd>J</kbd> Journal · <kbd>H</kbd> Help</li>
       </ul></div>
       <div><h3>Controller / Steam Deck</h3><ul>
         <li><kbd>L stick</kbd> Move (full tilt or <kbd>LT</kbd> / <kbd>L3</kbd> sprints) · <kbd>R stick</kbd> Aim</li>
         <li><kbd>RT</kbd> Fire · <kbd>X</kbd> Reload · <kbd>Y</kbd> Switch weapon</li>
         <li><kbd>A</kbd> Interact / talk / continue · <kbd>B</kbd> Dodge roll</li>
-        <li><kbd>RB</kbd> Melee shove · <kbd>LB</kbd> Use quick item</li>
+        <li><kbd>RB</kbd> Melee shove · <kbd>LB</kbd> Use quick item · <kbd>R3</kbd> (click the right stick) Ability</li>
         <li>Left stick or D-pad: move · <kbd>☰ Menu</kbd> Pause (Map, Items, Home, Character are tabs there — <kbd>LB</kbd>/<kbd>RB</kbd>) · <kbd>⧉ View</kbd> Journal</li>
         <li>In menus: D-pad / stick to move, <kbd>A</kbd> select, <kbd>B</kbd> back, <kbd>LB</kbd>/<kbd>RB</kbd> tabs, <kbd>R stick</kbd> scroll</li>
       </ul></div>
@@ -582,7 +760,7 @@ export function openHelp() {
         <li>Right stick: aim — push it far to fire</li>
         <li><b>FIRE</b>: shoots where you aim (aim assist picks a target)</li>
         <li><b>ACT</b>: talk, open doors, chop, repair — label shows the action</li>
-        <li><b>RELOAD</b>, <b>MELEE</b>, <b>DODGE</b>, <b>USE</b> (quick item), <b>SWAP</b> (next weapon)</li>
+        <li><b>RELOAD</b>, <b>MELEE</b>, <b>DODGE</b>, <b>USE</b> (quick item), <b>SWAP</b> (next weapon), and a purple ability button once you learn a Tier-2 ability</li>
         <li>☰ top-right: pause menu</li>
       </ul></div>`}
     </div>
@@ -599,6 +777,14 @@ export function openHelp() {
       <li><b>Rest</b> in your bed to sleep until morning. You'll never sleep through an attack.</li>
       <li><b>XP</b> raises your level (attribute points). <b>JP</b> is earned per path and buys skills.</li>
       <li>If you fall, a neighbor finds you. You lose some cash and the cabin takes damage, but keep your progress.</li>
+    </ul>
+    <h3>A longer life</h3><ul>
+      <li><b>Phases</b>: each chapter moves from arriving, to building a life, to things not adding up, to a test attack, to the real one, to the aftermath. The Journal's Story page shows where you are.</li>
+      <li><b>Make it home</b>: when a chapter asks you to settle in, any three everyday things count — cards, supper, the market, fishing, a meal, a gift, a day's work on a project, helping someone.</li>
+      <li><b>Quiet days</b>: friends drop by, invite you places, storms roll in. Invitations wait a day or two in the Journal; nothing important is lost if you miss one.</li>
+      <li><b>Investigate</b>: look into things that don't fit (any two of three signs is enough), inspect what attackers leave behind, and use what you find for optional <b>counter-moves</b>. Ask friends for help in the last days. The Paper Trail (Journal → Cases) asks how they keep finding you.</li>
+      <li><b>Old friends</b> write and call. Your <b>car</b> can drive you back to any town you've left; your home stays as it is.</li>
+      <li><b>Projects</b> at home (and restoring your car) take a day's work at a time and never decay. Cancel for half the materials back.</li>
     </ul>`, { cls: 'wide' });
 }
 
@@ -613,6 +799,7 @@ export function openNpcMenu(n) {
   if (services.includes('jobs')) btns.push(`<button class="btn big" data-npc="jobs">📋 Job board</button>`);
   if (services.includes('favor')) btns.push(`<button class="btn big hl-btn" data-npc="favor">🙋 Ask about a favor</button>`);
   if (services.includes('story')) btns.push(`<button class="btn big hl-btn" data-npc="story">📖 ${escapeHtml(ERRANDS[errandOffer(n.id)].title)}</button>`);
+  if (hasSkill('trusted_friend') && lv >= 3 && !visiting() && !lifeCh().trusted) btns.push(`<button class="btn big hl-btn" data-npc="trusted">🤝 Ask a friend's favor (once this chapter)</button>`);
   btns.push(`<button class="btn big" data-npc="gift" ${count('stew') + count('sandwich') ? '' : 'disabled'}>🎁 Give food</button>`);
   const el = openModal('npc', `<div class="npc-head"><div class="npc-dot" style="background:${def.body}"></div><div><h2>${escapeHtml(def.name)}</h2><div class="muted">${escapeHtml(def.title)}</div></div><div class="hearts">${'♥'.repeat(lv)}${'♡'.repeat(5 - lv)}</div></div>
     ${night ? '<p class="muted">It\'s late. They look tired.</p>' : ''}
@@ -629,7 +816,19 @@ export function openNpcMenu(n) {
     if (a === 'gift') giveGift(n.id);
     if (a === 'favor') offerQuest(n.id);
     if (a === 'story') offerErrand(n.id);
+    if (a === 'trusted') trustedFavor(n);
   });
+}
+
+/** Trusted Friend: one favor per chapter from someone at ♥3+. */
+function trustedFavor(n) {
+  const first = NPCS[n.id].name.split(' ')[0].replace(/"/g, '');
+  const done = (what) => { lifeCh().trusted = n.id; toast(`${first}: ${what}`, 'good', 4); saveGame('favor'); };
+  openActions(`Ask ${first} for a favor`, [
+    { label: 'A day\'s help on a home project', action: () => { const what = helpOnProject(); if (what) done(`"I\'ll give you a day on ${what}. Hand me a hammer."`); else toast('Nothing being built right now — start a project first.', 'info', 3); } },
+    { label: 'A box of supplies (bandages, rounds, food)', action: () => { addItem('bandage', 2, true); addItem('ammo', 12, true); addItem('sandwich', 2, true); done('"Here. Don\'t argue."'); } },
+    { label: 'Keep an eye on the road (+60 min warning next attack)', action: () => { lifeCh().roadWatch = true; done('"If a strange car comes down that road, you\'ll hear about it from me first."'); } },
+  ]);
 }
 
 /* ---------------- shop ---------------- */
@@ -708,7 +907,7 @@ export function openJobBoard() {
         ${o.locked ? '<div class="small hl">Requires the Neighbor skill "Good Reputation".</div>' : o.needs ? `<div class="small hl">Needs a ${escapeHtml(ITEMS[o.needs].name)} (${escapeHtml(chapter().storeName)}).</div>` : `<button class="btn" data-accept="${o.type}" ${j || !open ? 'disabled' : ''}>Accept</button>`}</div>`;
     }).join('');
     const rep = repTier();
-    rerender(entry, `<h2>📋 ${escapeHtml(chapter().jobPlace || 'Job')} — Job Board</h2>
+    rerender(entry, `<h2>📋 ${escapeHtml(here().jobPlace || 'Job')} — Job Board</h2>
       <p class="small">Your reputation: <b>${rep.name}</b>${rep.mult > 1 ? ` (+${Math.round((rep.mult - 1) * 100)}% pay)` : ''}${rep.next ? ` · ${rep.toNext} more job${rep.toNext === 1 ? '' : 's'} to ${rep.next.name}` : ''}</p>
       ${!open ? '<p class="hl">The board is closed. New jobs are handed out 7 AM – 5 PM.</p>' : ''}
       ${j ? `<div class="objective-box job"><b>Current job: ${JOB_TYPES[j.type].name}</b> ($${j.pay})<br>${escapeHtml(jobHint())}</div>` : ''}
@@ -1011,11 +1210,21 @@ export function showChapterEnd(n = 1) {
     <button class="btn big primary" data-close>Keep playing</button></div>`, { cls: 'small chapter' });
 }
 
+function moveSummaryHtml() {
+  const m = G.moveSummary;
+  if (!m) return '';
+  G.moveSummary = null;
+  const li = (t, a) => (a.length ? `<li><b>${t}:</b> ${a.map(escapeHtml).join(', ')}</li>` : '');
+  const body = li('Packed and brought along', m.packed) + li('Left with the old house (you\'ll see it if you visit)', m.stays) + li('Taken apart', m.refunded);
+  return body ? `<ul class="small move-sum">${body}</ul>` : '';
+}
+
 export function showChapterStart(n, onGo) {
   const titles = { 2: ['LARCH STREET', 'Millbrook, Ohio — six hundred miles from Pine Hollow.'], 3: ['THE WISCONSIN FARM', 'Kettle Crossing, Wisconsin — two hundred acres and a broken gate.'], 4: ['THE ESTATE', 'Port Whitcombe, Lake Champlain — a stone wall, an iron gate, and open water.'], 5: ['THE MANSION', 'Short Hills, New Jersey — home. Leo Vescari is a mile up the ridge.'] };
   const [t, sub] = titles[n] || ['', ''];
   const el = openModal('chapterStart', `<div class="chapter-card"><div class="ch-num">CHAPTER ${n}</div><h2>${t}</h2><p class="muted">${escapeHtml(sub)}</p>
     <p class="small">Your level, skills, money, weapons and gear come with you. Installed lights, alarms and cameras are packed back into your inventory; boards, braces and shutters stay behind.</p>
+    ${moveSummaryHtml()}
     <button class="btn big primary" data-go>Begin</button></div>`, { closable: false, cls: 'small chapter' });
   el.querySelector('[data-go]').addEventListener('click', () => { closeModal(); onGo(); });
 }
@@ -1056,6 +1265,9 @@ function epilogue(kind) {
   out.push(r('dom') >= 2 ? 'Father Dom lit a candle at St. Rose for every name in Leo\'s ledger.' : 'St. Rose\'s bell still rings at six. Father Dom still asks about you.');
   if (a.includes('mickey') || r('mickey') >= 2) out.push(kind === 'crown' ? 'Mickey Doyle drives for the family now. He doesn\'t love it.' : 'Mickey Doyle bought a second tow truck and painted "FRANKIE" on the door.');
   if (r('angie') >= 2) out.push('Angie Marchetti keeps your coffee on the house. Forever, she says.');
+  const dee = romanceEpilogue();
+  if (dee) out.push(dee);
+  if (G.s.life && G.s.life.deduced === 'title') out.push('A federal task force raided Keystone Title & Escrow on Broad Street. Carmine Ventura\'s lawyers are still arguing about the word "list."');
   if (G.s.companion && G.s.companion.dog && G.s.companion.dog.owned) out.push('Duke got old and grey on a porch in New Jersey, which is exactly what a good dog deserves.');
   return out;
 }

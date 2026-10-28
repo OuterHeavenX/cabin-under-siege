@@ -58,7 +58,7 @@ export function updateAnimals(dt) {
     const pd = dist(a.x, a.y, p.x, p.y);
     const sees = m.los(a.x, a.y, p.x, p.y);
     // Spook: noise, or being walked up on in plain sight.
-    const spook = (sprint && pd < 260 * shy) || (walking && sees && pd < 150 * shy) || pd < 70;
+    const spook = (sprint && pd < 260 * shy) || (walking && sees && pd < 150 * shy && !G.s.skills.includes('trail_sense')) || pd < 70;
     if (spook && a.state !== 'flee') { a.state = 'flee'; a.fleeT = 4; sfx('dodge', { x: a.x, y: a.y, vol: 0.4 }); }
     a.t -= dt;
     if (a.state === 'flee') {

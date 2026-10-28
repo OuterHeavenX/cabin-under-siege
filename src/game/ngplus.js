@@ -85,6 +85,8 @@ export function makeNewGamePlus(old) {
   s.quick = old.quick || s.quick;
   if (old.companion && old.companion.dog && old.companion.dog.owned) s.companion.dog = { owned: true, name: old.companion.dog.name || 'Duke', hurtDay: -1 };
   s.endingsSeen = [...new Set([...(old.endingsSeen || []), old.ending].filter(Boolean))];
+  // The car you restored is still your car.
+  if (old.life && old.life.car && old.life.car.done) s.life.car = deepClone(old.life.car);
   const tw = NG_TWISTS[s.ngEnding];
   if (tw) {
     if (tw.money) s.money += tw.money;

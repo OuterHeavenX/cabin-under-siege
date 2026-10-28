@@ -8,6 +8,7 @@ import { dist, angleTo } from '../util.js';
 import { homeMapId } from './chapters.js';
 import { damageEnemy, spawnParticles } from './combat.js';
 import { sfx } from '../audio.js';
+import { dogTrained } from './projects.js';
 import { toast } from '../ui/hud.js';
 
 export const DOG_MAX_HP = 90;
@@ -60,7 +61,7 @@ export function updateDog(dt) {
     goal = hi || null; speed = 40;
   } else {
     // Nearest attacker he can reach (within 260 px of him or you).
-    let best = null, bd = 260;
+    let best = null, bd = dogTrained() ? 360 : 260; // a trained dog notices more
     for (const e of G.enemies) {
       if (e.dead || e.gone || e.def.vehicle) continue;
       const de = Math.min(dist(d.x, d.y, e.x, e.y), dist(p.x, p.y, e.x, e.y) + 60);
@@ -74,8 +75,8 @@ export function updateDog(dt) {
       const dd = dist(d.x, d.y, best.x, best.y);
       if (dd < best.radius + d.radius + 6 && d.biteCd <= 0) {
         d.biteCd = 1.1;
-        damageEnemy(best, 16, angleTo(d.x, d.y, best.x, best.y), 'melee', 30);
-        best.stun = Math.max(best.stun || 0, 0.6);
+        damageEnemy(best, dogTrained() ? 22 : 16, angleTo(d.x, d.y, best.x, best.y), 'melee', 30);
+        best.stun = Math.max(best.stun || 0, dogTrained() ? 0.9 : 0.6);
         sfx('growl', { x: d.x, y: d.y });
       }
     } else {

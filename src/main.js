@@ -6,7 +6,8 @@ import { buildCabinMap, buildTownMap, buildMillbrookMap, buildFarmMap, buildEsta
 import { startPrequel, updatePrequel, prequelObjective } from './game/prequel.js';
 import { startAssault, updateAssault, endAssault } from './game/assault.js';
 import { callAllies } from './game/story.js';
-import { chapter, homeMapId, workMapId, atHome, LAST_CHAPTER } from './game/chapters.js';
+import { chapter, homeMapId, workMapId, atHome, LAST_CHAPTER, CHAPTERS, mapChapter, loadedMapIds, visiting } from './game/chapters.js';
+import { setVisitHooks, pastHomeRecord } from './game/visits.js';
 import { QUESTS, questWaypoint } from './game/quests.js';
 import { newHome } from './game/state.js';
 import { showChapterStart, openDifficultyPicker, openEndlessPicker, openCloud, openTrophies } from './ui/menus.js';
@@ -24,7 +25,7 @@ import { createPlayer, updatePlayer, inCombat } from './game/player.js';
 import { updateBullets, updateEffects } from './game/combat.js';
 import { updateEnemies, initEnemyEvents } from './game/enemies.js';
 import { updateSiege, updateThreatClock, initSiegeEvents, handleDefeat, maybeAmbushOnArrival, refreshSignProps, absNow, absOf } from './game/siege.js';
-import { updateTime, initTimeEvents, advanceMinutes } from './game/time.js';
+import { updateTime, initTimeEvents, advanceMinutes, startSleep } from './game/time.js';
 import { spawnNpcs, updateNpcs } from './game/npcs.js';
 import { updateJobs, applyChopped, jobHint, JOB_TYPES } from './game/jobs.js';
 import { initStoryEvents, updateStory, objectiveText, storyWaypoint, newGameIntro } from './game/story.js';
@@ -47,7 +48,11 @@ import { updateTail, tailStatus, cancelTail } from './game/tail.js';
 import { spawnDeer, updateAnimals } from './game/hunting.js';
 import { updateGallery, galleryStatus, updateTownLife } from './game/townlife.js';
 import { updateRat, initRat } from './game/rat.js';
-import { applyProjects } from './game/projects.js';
+import { updateLife, initLifeEvents, farewellPending, farewellsSaid, farewellPeople } from './game/life.js';
+import { initWatchEvents, watchSpots } from './game/watch.js';
+import { updateAbilities, abilityLabel } from './game/abilities.js';
+import { updateLetters, initLetterEvents } from './game/letters.js';
+import { applyProjects, ensureProjectSpots, projectsMorning, PROJECTS, projectName, paidOf } from './game/projects.js';
 import { spawnDog, updateDog, dogMorning } from './game/dog.js';
 import { setWeather } from './game/weather.js';
 import { initAchievementEvents, updateAchievements, unlockedCount, ACHIEVEMENTS, isUnlocked } from './game/achievements.js';
@@ -92,27 +97,34 @@ function resize() {
 
 /* ---------------- maps ---------------- */
 const MAP_BUILDERS = {
-  cabin: () => buildCabinMap(G.s.home),
+  cabin: (h) => buildCabinMap(h),
   town: () => buildTownMap(),
-  millbrook: () => buildMillbrookMap(G.s.home),
-  farm: () => buildFarmMap(G.s.home),
-  estate: () => buildEstateMap(G.s.home),
-  shorthills: () => buildShortHillsMap(G.s.home),
+  millbrook: (h) => buildMillbrookMap(h),
+  farm: (h) => buildFarmMap(h),
+  estate: (h) => buildEstateMap(h),
+  shorthills: (h) => buildShortHillsMap(h),
   mansion: () => buildMansionMap(),
   newark: () => buildNewarkMap(),
 };
 
 function buildMaps() {
   G.maps = {};
-  for (const id of chapter().maps) {
-    const m = MAP_BUILDERS[id]();
+  // The active chapter's maps, plus an old town's while Frank is visiting it.
+  for (const id of loadedMapIds()) {
+    const n = mapChapter(id);
+    const oldHome = visiting() && n === G.s.visit.ch && CHAPTERS[n].homeMap === id;
+    const home = oldHome ? pastHomeRecord(n) : G.s.home;
+    const m = MAP_BUILDERS[id](home);
+    // Favor, errand and investigation spots on this map: kept reachable (no trees, no building sites).
+    const spotsOf = [...Object.values(QUESTS).filter((q) => q.map === id).map((q) => [...(q.spots || []), ...(q.target ? [q.target] : [])]),
+      ...Object.values(ERRANDS).flatMap((e) => e.stages.filter((s) => s.map === id).map((s) => [...(s.spots || []), ...(s.at ? [s.at] : [])])),
+      watchSpots(id)];
+    if (m.homeInfo && (oldHome || id === homeMapId())) ensureProjectSpots(m, spotsOf.flat(), home.projects);
+    if (oldHome) { m.visitHome = home; applyProjects(m, home.projects); }
     if (id === homeMapId()) applyProjects(m);
     m.groundCanvas = buildGroundCanvas(m);
     for (const b of m.buildings) b.roofCanvas = buildRoofCanvas(b);
     G.maps[id] = m;
-    // Keep favor spots reachable: no trees on them.
-    const spotsOf = [...Object.values(QUESTS).filter((q) => q.map === id).map((q) => [...(q.spots || []), ...(q.target ? [q.target] : [])]),
-      ...Object.values(ERRANDS).flatMap((e) => e.stages.filter((s) => s.map === id).map((s) => [...(s.spots || []), ...(s.at ? [s.at] : [])]))];
     for (const spots of spotsOf) {
       for (const [x, y] of spots) {
         const cx = Math.floor(x), cy = Math.floor(y);
@@ -159,6 +171,7 @@ function travel(target, mode) {
     t: 0, fade: 0, text, phase: 'out',
     mid: () => {
       advanceMinutes(mins);
+      if (mode === 'car') G.arrivedByCar = G.time;
       const m = G.maps[target];
       let pos;
       if (mode === 'car') pos = m.points.car;
@@ -171,6 +184,7 @@ function travel(target, mode) {
   };
 }
 setTravel(travel);
+setVisitHooks({ buildMaps: () => buildMaps(), loadMap: (id, pos) => loadMap(id, pos), travel: (t, m) => travel(t, m), confirm: (...a) => confirmBox(...a), sleep: (k) => startSleep(k) });
 
 function updateTransition(dt) {
   const tr = G.transition;
@@ -217,6 +231,7 @@ function update(dt) {
   updateEffects(dt);
   updateNpcs(dt);
   updateDog(dt);
+  updateAbilities(dt);
   updateAssault(dt);
   updateAchievements(dt);
   updateErrands(dt);
@@ -225,6 +240,7 @@ function update(dt) {
   updateGallery(dt);
   updateTownLife(dt);
   updateRat(dt);
+  if (!G.endless && !G.prequel) { updateLife(dt); updateLetters(dt); }
   updateJobs(dt);
   if (!G.endless && !G.prequel) { updateStory(dt); checkDiscovery(); }
 
@@ -308,15 +324,16 @@ function computeHudInfo(dt) {
   else if (s.world.siege && s.world.siege.warned) danger = `Attack expected ~${fmtClock(s.world.siege.minute)}. Get ready!`;
   const q = quickItem();
   // Waypoint
-  let wp = storyWaypoint() || questWaypoint();
+  let wp = storyWaypoint() || (visiting() ? null : questWaypoint());
   if (wp && wp.map !== G.map.id) {
     const car = G.map.props.find((p) => p.kind === 'car');
-    wp = car ? { x: car.x, y: car.y, label: wp.map === homeMapId() ? 'Car → Home' : 'Car → Town' } : null;
+    wp = car && G.maps[wp.map] ? { x: car.x, y: car.y, label: wp.map === homeMapId() ? 'Car → Home' : 'Car → Town' } : null;
   }
   G.waypoint = wp && !G.siegeActive ? wp : null;
   hudInfo = {
     maxHp: d.maxHp, maxStamina: d.maxStamina, reloadTime: reloadTime(G.player.weapon), magSize: magSize(G.player.weapon), weapon: WEAPONS[G.player.weapon], weaponCount: WEAPON_ORDER.filter(ownsWeapon).length, objective: G.prequel ? prequelObjective() : objectiveText(), jobLine, danger,
     quickLabel: q ? `${ITEMS[q].icon}×${count(q)}` : 'USE', night: isNight(), combat: inCombat(), target: null,
+    ability: G.prequel ? null : abilityLabel(), prepared: d.prepared,
   };
 }
 
@@ -426,6 +443,9 @@ function initEvents() {
   initActivityEvents();
   initErrandEvents();
   initRat();
+  initLifeEvents();
+  initWatchEvents();
+  initLetterEvents();
   initAchievementEvents();
   initCloudSync();
   initFxEvents();
@@ -478,10 +498,12 @@ function initEvents() {
     const next = G.s.chapter + 1;
     if (next > LAST_CHAPTER) return;
     if (G.siegeActive || G.enemies.some((e) => !e.dead && !e.gone)) { toast('Not with attackers around!', 'danger'); return; }
-    confirmBox('Leave for good and start the next chapter? You can\'t come back here. Your level, skills, money, weapons and gear come with you.', 'Leave', () => ruthFarewell(next), 'Not yet');
+    const fw = farewellPending() ? ` You haven't said goodbye to everyone yet (${farewellsSaid()}/${farewellPeople().length}) — talk to them first if you'd like.` : '';
+    confirmBox(`Leave for good and start the next chapter? This won't be your home again — you can drive back to visit, but you can't move back. Your level, skills, money, weapons and gear come with you; lights, alarms, cameras, cover and traps are packed; finished projects stay with the house and half-built ones are taken apart for half their materials.${fw}`, 'Leave', () => ruthFarewell(next), 'Not yet');
   });
   G.events.on('newDay', (day) => {
     dogMorning();
+    projectsMorning();
     applyChopped(G.map);
     if (atHome()) refreshSignProps();
     if (!G.sleeping) banner(`Day ${day} begins.`, 'info', 3);
@@ -532,10 +554,25 @@ function moveToChapter(n) {
   const old = s.home;
   // Pack portable upgrades and placed gear back into the inventory.
   const pack = { floodlight: 'floodlight_kit', alarm: 'alarm_kit', camera: 'camera_kit' };
-  for (const [k, item] of Object.entries(pack)) if (old.upgrades[k]) addItem(item, 1, true);
+  const packed = [], stays = [], refunded = [];
+  for (const [k, item] of Object.entries(pack)) if (old.upgrades[k]) { addItem(item, 1, true); packed.push(ITEMS[item].name); }
   for (const c of old.covers) addItem(c.type, 1, true);
+  if (old.covers.length) packed.push(`${old.covers.length} piece${old.covers.length > 1 ? 's' : ''} of placed cover`);
   for (let i = 0; i < (old.traps || []).length; i++) addItem('bear_trap', 1, true);
-  s.pastHomes[old.id || 'cabin'] = { leftOnDay: s.time.day };
+  if ((old.traps || []).length) packed.push(`${old.traps.length} bear trap${old.traps.length > 1 ? 's' : ''}`);
+  // Finished projects stay with the house (you'll see them if you come back); half-built ones are taken apart.
+  const keep = {};
+  for (const [id, r] of Object.entries(old.projects || {})) {
+    if (!PROJECTS[id]) continue;
+    if (r.done) { keep[id] = r; stays.push(projectName(id, old.id)); continue; }
+    const paid = paidOf(r, PROJECTS[id]);
+    const back = { wood: Math.floor(paid.wood / 2), money: Math.floor(paid.money / 2) };
+    if (back.wood) addItem('wood', back.wood, true);
+    if (back.money) s.money += back.money;
+    refunded.push(`${projectName(id, old.id)} (half-built: ${back.wood} wood${back.money ? ` and $${back.money}` : ''} back)`);
+  }
+  s.pastHomes[old.id || 'cabin'] = { leftOnDay: s.time.day, projects: keep };
+  G.moveSummary = { packed, stays, refunded };
   s.chapter = n;
   unlockEndlessFor(n);
   s.home = newHome(n === 5 ? 'watchhouse' : n === 4 ? 'estate' : n === 3 ? 'farm' : n === 2 ? 'house' : 'cabin');

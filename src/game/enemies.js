@@ -1,6 +1,6 @@
 // Enemy AI: approach, notice, take cover, shoot with telegraphs, breach doors
 // and windows, and retreat when hurt or outnumbered.
-import { G, isNight } from './state.js';
+import { G, isNight, hasSkill } from './state.js';
 import { TILE } from '../config.js';
 import { ENEMY_TYPES } from '../data/enemies.js';
 import { angleDiff, angleTo, dist, rand, choose } from '../util.js';
@@ -189,6 +189,7 @@ function goalCellFor(e, p) {
   }
   const cell = (pt) => ({ cx: Math.floor(pt.x / TILE), cy: Math.floor(pt.y / TILE) });
   if (!e.alerted) {
+    if (e.investigate) return cell(e.investigate); // a noise over there (Misdirection)
     if (e.guard) return cell(guardGoal(e));
     if (huntMode()) {
       // First they hit the house. Only when it's empty do they start searching.
@@ -378,7 +379,7 @@ export function updateEnemies(dt) {
   const camera = G.s.home.upgrades.camera && G.map.id === homeMapId() && G.siegeActive;
   for (const e of alive) {
     e.inspired = !e.def.boss && bosses.some((b) => dist(b.x, b.y, e.x, e.y) < 240);
-    if (camera) e.spotted = Math.max(e.spotted, 0.4);
+    if ((camera && !e.camBlind) || e.spotForever) e.spotted = Math.max(e.spotted, 0.4);
     if (!e.def.vehicle) checkTrap(e);
   }
 
@@ -443,13 +444,15 @@ export function updateEnemies(dt) {
       else {
         e.lostT = (e.lostT || 0) + dt;
         const there = e.lastSeen && dist(e.x, e.y, e.lastSeen.x, e.lastSeen.y) < 40;
-        if (e.lostT > 16 || (there && e.lostT > 4)) {
+        const fast = hasSkill('vanish') ? 0.5 : 1; // Vanish: they give up on you twice as fast
+        if (e.lostT > 16 * fast || (there && e.lostT > 4 * fast)) {
           e.alerted = false; e.searching = true; e.cover = null; e.path = null; e.aimT = 0;
           e.searchGoal = null; e.searchGoalT = 0;
         }
       }
     }
     if (e.searchGoalT) e.searchGoalT -= dt;
+    if (e.investigate) { e.investigate.t -= dt; if (e.investigate.t <= 0 || e.alerted) { e.investigate = null; e.path = null; } }
     if (e.alertPop > 0) e.alertPop -= dt;
     e.viaWindow = canSee && (e.alerted || e.sus > 0.1) ? m.throughWindow(e.x, e.y, p.x, p.y) : false;
     // Player spotting unalerted attackers -> Shadow JP
@@ -594,4 +597,30 @@ export function pickSpawnTypes(n, weights) {
     if (out.length < i + 1) out.push(choose(weights)[0]);
   }
   return out;
+}
+
+/** Misdirection: a thrown stone. Attackers who haven't spotted you go to look. Returns how many turned. */
+export function distract(x, y) {
+  let n = 0;
+  for (const e of G.enemies) {
+    if (e.dead || e.gone || e.alerted || e.def.vehicle || e.retreating) continue;
+    if (dist(e.x, e.y, x, y) > 280) continue;
+    e.investigate = { x, y, t: 9 };
+    e.path = null; e.sus = Math.max(0, (e.sus || 0) - 0.3);
+    e.angle = angleTo(e.x, e.y, x, y);
+    n++;
+  }
+  return n;
+}
+
+/** Vanish: a dodge roll out of everyone's sight breaks contact on the spot. */
+export function breakContact() {
+  if (!huntMode()) return 0;
+  let n = 0;
+  for (const e of G.enemies) {
+    if (e.dead || e.gone || !e.alerted || e.canSee || e.def.boss) continue;
+    e.alerted = false; e.searching = true; e.cover = null; e.path = null; e.aimT = 0; e.searchGoal = null; e.searchGoalT = 0;
+    n++;
+  }
+  return n;
 }

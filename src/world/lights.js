@@ -24,8 +24,9 @@ export function activeLights() {
   for (const l of map.lights) out.push(l);
   const h = homeLights();
   if (h) {
-    if (G.s.home.porchLight) out.push(h.porch);
-    if (G.s.home.upgrades.floodlight) out.push(h.flood);
+    const cut = G.siege && G.siege.powerOut; // somebody cut the line
+    if (G.s.home.porchLight && !cut) out.push(h.porch);
+    if (G.s.home.upgrades.floodlight && !cut) out.push(h.flood);
   }
   for (const f of G.fires || []) out.push({ x: f.x, y: f.y, r: 150 * Math.min(1, f.life / 2), fire: true });
   for (const pr of map.props) if (pr.light) out.push(pr.light);
@@ -34,7 +35,7 @@ export function activeLights() {
 
 export function inFloodlight(x, y) {
   const h = homeLights();
-  if (!h || !G.s.home.upgrades.floodlight || darkness() < 0.3) return false;
+  if (!h || !G.s.home.upgrades.floodlight || darkness() < 0.3 || (G.siege && G.siege.powerOut)) return false;
   return (x - h.flood.x) ** 2 + (y - h.flood.y) ** 2 < h.flood.r * h.flood.r;
 }
 

@@ -30,13 +30,17 @@ import { banner, toast } from '../ui/hud.js';
 import { sfx } from '../audio.js';
 import { saveGame } from './save.js';
 import { choose } from '../util.js';
-import { chapter } from './chapters.js';
+import { chapter, here, hereN, visiting } from './chapters.js';
+import { exposedRat } from './rat.js';
 import { hasSkill } from './state.js';
 import { inHours, fmtWindow, weekday, WEEKDAYS } from './calendar.js';
 import { grantPerk } from './perks.js';
 import { startTail } from './tail.js';
 import { spawnEnemy } from './enemies.js';
 import { LATER_ARCS } from '../data/storylines.js';
+import { LIFE_ERRANDS } from '../data/life.js';
+import { COUNTER_ERRANDS } from '../data/counter.js';
+import { SIDE_STORIES } from '../data/sidestories.js';
 
 const T = (x, y) => ({ x: x * TILE, y: y * TILE });
 const FOOD = new Set(['sandwich', 'stew']);
@@ -516,7 +520,9 @@ export const ERRANDS = {
     reward: { money: 80, xp: 40, jp: ['survivor', 6], perk: 'tracker', flag: 'hendersonRoll' },
   },
 
-};Object.assign(ERRANDS, LATER_ARCS);
+};Object.assign(ERRANDS, LATER_ARCS, LIFE_ERRANDS, Object.fromEntries(Object.entries(COUNTER_ERRANDS).filter(([, e]) => !e.help)), SIDE_STORIES);
+// Side stories are one-part arcs: offered by their giver like a storyline.
+for (const [id, e] of Object.entries(SIDE_STORIES)) { e.arc = e.arc || id; e.part = e.part || 1; }
 
 
 const est = () => G.s.errands || (G.s.errands = {});
@@ -527,6 +533,7 @@ export function startErrand(id, quiet = false) {
   const e = ERRANDS[id];
   if (!e || est()[id]) return;
   const rec = { state: 'active', stage: 0, progress: 0, startDay: G.s.time.day };
+  if (e.lasts) rec.expires = G.s.time.day + e.lasts;
   est()[id] = rec;
   prepStage(id);
   if (!quiet) { sfx('blip'); banner(`${e.chore ? 'Chore' : 'Errand'}: ${e.title} — ${stageLabel(id)}`, 'objective', 4.5); }
@@ -554,8 +561,16 @@ export function stageLabel(id) {
   return st.hours ? `${st.label} (${fmtWindow(st.hours)})` : st.label;
 }
 
+/** Errands in progress where Frank is now (on a visit: that town's, minus its chores and story beats). */
 export function activeErrands() {
-  return Object.entries(est()).filter(([id, r]) => ERRANDS[id] && r.state === 'active' && ERRANDS[id].chapter === G.s.chapter).map(([id, r]) => ({ id, ...ERRANDS[id], rec: r }));
+  const n = hereN(), away = n !== G.s.chapter;
+  return Object.entries(est()).filter(([id, r]) => {
+    const e = ERRANDS[id];
+    if (!e || !r || r.state !== 'active' || e.chapter !== n) return false;
+    if (away && (e.chore || e.story || e.counter)) return false;
+    if (e.visitOnly && !away) return false;
+    return true;
+  }).map(([id, r]) => ({ id, ...ERRANDS[id], rec: r }));
 }
 
 export function choresStatus() {
@@ -591,6 +606,7 @@ function complete(id) {
     if (r.jp) addJP(r.jp[0], r.jp[1]);
     if (r.perk) grantPerk(r.perk);
     if (r.flag) G.s.story.flags[r.flag] = rec.choice || true;
+    if (e.after) { try { e.after(G.s, rec.choice); } catch (err) { console.error(err); } }
     if (r.rel2) addRel(r.rel2[0], r.rel2[1]);
     for (const [item, n] of Object.entries(r.items || {})) {
       const got = addItem(item, n, true);
@@ -684,7 +700,9 @@ export function errandPropAction(pr) {
       });
       sfx('warning');
     };
-    if (st.before) playDialogue(choiceLines(id, st.before), go); else go();
+    // Some confrontations can be talked down (`avoidIf` names the choice that does it).
+    const maybe = () => { if (st.avoidIf && rec.choice === st.avoidIf) playDialogue(st.avoidLines || [], () => advance(id)); else go(); };
+    if (st.before) playDialogue(choiceLines(id, st.before), maybe); else go();
   } else if (st.type === 'find') {
     sfx('chime');
     const e = ERRANDS[id];
@@ -715,15 +733,20 @@ export function errandTalk(npcId) {
 
 /** Can this storyline part be brought up right now? */
 export function arcReady(e) {
-  if (e.chapter !== G.s.chapter) return false;
+  const away = e.chapter < G.s.chapter;
+  if (e.chapter !== hereN()) return false;
+  if (e.visitOnly && !visiting()) return false;
+  if (away && (e.chore || e.story || e.counter || e.event)) return false;
   if (G.s.story.flags.ratGone && G.s.story.flags.ratGone === e.giver) return false; // left town
-  if (!e.early && !G.s.story.flags.townOpen) return false;
+  if (exposedRat(e.chapter) === e.giver) return false;
+  if (!away && !e.early && !G.s.story.flags.townOpen) return false;
+  if (e.needs && !e.needs(G.s)) return false;
   for (const req of e.requires || []) {
     const r = est()[req];
     if (!r || r.state !== 'done') return false;
     if (e.waitDays && G.s.time.day - (r.doneDay || 0) < e.waitDays) return false;
   }
-  if (e.needsStep && !e.needsStep.includes(G.s.story.step) && !(G.s.story.done || {})[G.s.chapter]) return false;
+  if (!away && e.needsStep && !e.needsStep.includes(G.s.story.step) && !(G.s.story.done || {})[G.s.chapter]) return false;
   if (e.needsFlag && !G.s.story.flags[e.needsFlag]) return false;
   if (e.needsChoice) { const prev = est()[(e.requires || [])[0]]; if (!prev || prev.choice !== e.needsChoice) return false; }
   if (e.hours && !inHours(e.hours)) return false;
@@ -762,12 +785,32 @@ export function offerErrand(npcId) {
   return true;
 }
 
+/** Like arcReady, but ignoring the hour (for "who has something for me" hints). */
+function arcReadyLoose(e) { return arcReady({ ...e, hours: null }); }
+
+/** Time-limited errands (invitations, counter-moves) that lapse. */
+function checkExpiry() {
+  for (const [id, rec] of Object.entries(est())) {
+    const e = ERRANDS[id];
+    if (!e || !rec || rec.state !== 'active') continue;
+    const late = (rec.expires != null && G.s.time.day > rec.expires) || (e.until && e.until(G.s));
+    if (!late || G.tail || rec.fighting) continue;
+    rec.state = 'expired';
+    rec.doneDay = G.s.time.day;
+    if (e.chapter === hereN() && e.missed) banner(`${e.title}: ${e.missed}`, 'warn', 5);
+    if (e.onExpire) { try { e.onExpire(G.s); } catch (err) { console.error(err); } }
+    G.events.emit('errandExpired', id);
+  }
+}
+export const errandExpired = (id) => (est()[id] || {}).state === 'expired';
+
 /** Per-second checks: waits that run out, fights that are over. */
 let tickT = 0;
 export function updateErrands(dt) {
   tickT -= dt;
   if (tickT > 0) return;
   tickT = 0.5;
+  if (!G.endless && !G.prequel) checkExpiry();
   for (const e of activeErrands()) {
     const st = e.stages[e.rec.stage], rec = e.rec;
     if (!st) continue;
@@ -779,7 +822,7 @@ export function updateErrands(dt) {
       if (ok && !rec.waking) {
         rec.waking = true;
         const go = () => { rec.waking = false; advance(e.id); };
-        if (st.lines) playDialogue(st.lines, go); else go();
+        if (st.lines) playDialogue(choiceLines(e.id, st.lines), go); else go();
       }
     } else if (st.type === 'fight' && rec.fighting) {
       const left = G.enemies.filter((x) => x.errandFight === e.id && !x.dead && !x.gone);
@@ -833,9 +876,9 @@ export function errandWaypoint(filter = () => true) {
       continue;
     }
     if (st.type === 'wait') continue;
-    if (st.type === 'poker') { const wm = chapter().workMap; const pt = G.maps[wm] && G.maps[wm].points.poker_table; if (pt) return { map: wm, ...pt, label: 'Poker table' }; continue; }
-    if (st.type === 'hunt') { const hm = chapter().homeMap; const pt = G.maps[hm] && G.maps[hm].points.hunt_area; if (pt) return { map: hm, ...pt, label: 'Deer in the woods' }; continue; }
-    if (st.type === 'buy') { const wm = chapter().workMap; const pt = G.maps[wm] && G.maps[wm].points.store_door; if (pt) return { map: wm, ...pt, label: chapter().storeName }; continue; }
+    if (st.type === 'poker') { const wm = here().workMap; const pt = G.maps[wm] && G.maps[wm].points.poker_table; if (pt) return { map: wm, ...pt, label: 'Poker table' }; continue; }
+    if (st.type === 'hunt') { const hm = here().homeMap; const pt = G.maps[hm] && G.maps[hm].points.hunt_area; if (pt) return { map: hm, ...pt, label: 'Deer in the woods' }; continue; }
+    if (st.type === 'buy') { const wm = here().workMap; const pt = G.maps[wm] && G.maps[wm].points.store_door; if (pt) return { map: wm, ...pt, label: here().storeName }; continue; }
     const at = st.type === 'find' ? e.rec.spot : st.at;
     if (at) return { map: st.map, ...T(...at), label: e.title };
   }
@@ -845,10 +888,10 @@ export function errandWaypoint(filter = () => true) {
 /** The nearest townsperson who still has an errand to offer. */
 export function errandGiverWaypoint() {
   for (const [id, e] of Object.entries(ERRANDS)) {
-    if (!e.offer || e.chapter !== G.s.chapter || est()[id]) continue;
+    if (!e.offer || e.chapter !== hereN() || est()[id] || !arcReadyLoose(e)) continue;
     const n = G.npcs.find((x) => x.id === e.giver && x.present);
     if (n) return { map: G.map.id, x: n.x, y: n.y, label: shortName(e.giver) };
-    const wm = chapter().workMap;
+    const wm = here().workMap;
     const folk = (TOWNSFOLK[wm] || []).find((f) => f.id === e.giver);
     if (folk && G.maps[wm]) return { map: wm, ...G.maps[wm].points[folk.route[0]], label: folk.name };
   }
@@ -875,7 +918,7 @@ function shortName(id) {
 export function arcSummary() {
   const arcs = {};
   for (const [id, e] of Object.entries(ERRANDS)) {
-    if (!e.arc || e.chapter !== G.s.chapter) continue;
+    if (!e.arc || e.chapter !== hereN() || (e.visitOnly && !visiting())) continue;
     (arcs[e.arc] || (arcs[e.arc] = [])).push({ id, ...e });
   }
   return Object.entries(arcs).map(([arc, parts]) => {

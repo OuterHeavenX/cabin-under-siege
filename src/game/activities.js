@@ -96,6 +96,7 @@ export function cook(id) {
   sfx('fire', { vol: 1 }); sfx('chime');
   toast(`Cooked: ${ITEMS[id].name}`, 'item', 2);
   if (dailyAllow('cook', 3)) { addXP(6, 'Cooking'); addJP('survivor', 3); }
+  G.events.emit('cooked', id);
   return true;
 }
 
