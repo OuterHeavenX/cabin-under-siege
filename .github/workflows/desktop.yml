@@ -48,7 +48,7 @@ jobs:
         run: |
           [ "$HAS_KEY" = true ] || echo "::warning::The BUTLER_API_KEY secret is missing or empty (Settings → Secrets and variables → Actions → Secrets)."
           [ "$HAS_GAME" = true ] || echo "::warning::ITCH_GAME is missing or empty (Settings → Secrets and variables → Actions → Variables, value like yourname/your-game)."
-          echo "::notice::Nothing was uploaded to itch.io. Download the builds from Artifacts.
+          echo "::notice::Nothing was uploaded to itch.io. Download the builds from Artifacts."
       - name: Upload to itch.io
         if: env.HAS_BUTLER == 'true'
         env:
