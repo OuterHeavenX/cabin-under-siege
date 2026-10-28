@@ -259,9 +259,11 @@ function updateCamera(dt) {
   let tx = p.x + Math.cos(p.angle) * lead * (input.aim.active || input.mouse.inside ? 1 : 0.3);
   let ty = p.y + Math.sin(p.angle) * lead * (input.aim.active || input.mouse.inside ? 1 : 0.3);
   if (cs) { tx = cs.x; ty = cs.y; }
+  // At the shooting gallery, frame the duck rail and the shooter together.
+  else if (G.gallery && G.map.gallery) { tx = p.x; ty = (p.y + G.map.gallery.y) / 2 + 10; }
   // Cutscenes drift slowly and push in; afterwards the zoom eases back.
   const base = c.baseZoom || c.zoom;
-  const wantZoom = cs ? base * cs.zoom : base;
+  const wantZoom = cs ? base * cs.zoom : G.gallery ? base * 0.8 : base;
   c.zoom += (wantZoom - c.zoom) * (1 - Math.pow(0.05, dt));
   const k = 1 - Math.pow(cs ? 0.12 : 0.0015, dt);
   c.x += (tx - c.x) * k;

@@ -410,15 +410,67 @@ function drawDecor(g, d) {
       break;
     }
     case 'gallery': {
-      // Shooting gallery booth: a long counter, a painted backboard, a rail the ducks ride on.
-      g.fillStyle = '#5a2a1a'; g.fillRect(x, y, w, 14);
-      for (let i = 0; i < w; i += 16) { g.fillStyle = (i / 16) % 2 ? '#f0c040' : '#b0302a'; g.fillRect(x + i, y - 8, 16, 8); }
-      { const sky = g.createLinearGradient(0, y + 14, 0, y + h); sky.addColorStop(0, '#4f8cb8'); sky.addColorStop(1, '#8cc0dc'); g.fillStyle = sky; g.fillRect(x + 4, y + 14, w - 8, h - 14); }
-      g.fillStyle = 'rgba(255,255,255,0.75)';
-      for (let i = 0; i < 4; i++) { const cxp = x + 24 + i * (w - 48) / 3, cyp = y + 24 + (i % 2) * 6; g.beginPath(); g.arc(cxp, cyp, 5, 0, Math.PI * 2); g.arc(cxp + 6, cyp - 2, 6, 0, Math.PI * 2); g.arc(cxp + 12, cyp, 5, 0, Math.PI * 2); g.fill(); }
-      g.fillStyle = '#3f7a3a'; for (let i = 0; i < w - 8; i += 10) { g.beginPath(); g.moveTo(x + 4 + i, y + h - 4); g.lineTo(x + 9 + i, y + h - 12); g.lineTo(x + 14 + i, y + h - 4); g.fill(); }
-      g.strokeStyle = '#d8c8a8'; g.lineWidth = 2; g.beginPath(); g.moveTo(x + 6, y + h - 6); g.lineTo(x + w - 6, y + h - 6); g.stroke();
-      g.fillStyle = '#7a5634'; g.fillRect(x - 4, y + h + 2, w + 8, 6);
+      // County-fair shooting gallery, seen from the front like the buildings:
+      // marquee sign, striped awning, painted backdrop, the duck rail, a counter with prizes.
+      const top = y - 44, bot = y + 58;
+      g.fillStyle = 'rgba(10,14,8,0.28)'; g.fillRect(x + 8, bot - 2, w, 12); // shadow
+      // backdrop: painted sky, sun, clouds, bullseyes
+      const sky = g.createLinearGradient(0, y - 18, 0, y + 40); sky.addColorStop(0, '#3f7fb2'); sky.addColorStop(1, '#9fd0e6');
+      g.fillStyle = '#4a2c18'; g.fillRect(x, y - 22, w, bot - y + 22);
+      g.fillStyle = sky; g.fillRect(x + 6, y - 18, w - 12, 60);
+      g.fillStyle = '#f6d24a'; g.beginPath(); g.arc(x + w - 34, y - 2, 9, 0, Math.PI * 2); g.fill();
+      g.fillStyle = 'rgba(255,255,255,0.85)';
+      for (const [cx2, cy2] of [[x + 30, y - 4], [x + 92, y + 6], [x + 150, y - 6]]) { g.beginPath(); g.arc(cx2, cy2, 5, 0, Math.PI * 2); g.arc(cx2 + 7, cy2 - 3, 7, 0, Math.PI * 2); g.arc(cx2 + 14, cy2, 5, 0, Math.PI * 2); g.fill(); }
+      for (const bx of [x + 62, x + 128, x + 194]) {
+        for (const [r, col] of [[9, '#f4f1e6'], [6.5, '#c8302a'], [4, '#f4f1e6'], [1.8, '#c8302a']]) { g.fillStyle = col; g.beginPath(); g.arc(bx, y + 18, r, 0, Math.PI * 2); g.fill(); }
+        g.strokeStyle = 'rgba(0,0,0,0.35)'; g.lineWidth = 1; g.beginPath(); g.arc(bx, y + 18, 9, 0, Math.PI * 2); g.stroke();
+      }
+      // tin waves along the rail the ducks ride on
+      for (let row = 0; row < 2; row++) {
+        g.fillStyle = row ? '#2f6f9a' : '#4a92bf';
+        g.beginPath(); g.moveTo(x + 6, bot - 4);
+        for (let xx = x + 6; xx <= x + w - 6; xx += 16) g.quadraticCurveTo(xx + 8, y + 34 + row * 8 - 7, xx + 16, y + 34 + row * 8);
+        g.lineTo(x + w - 6, bot - 4); g.closePath(); g.fill();
+      }
+      g.fillStyle = '#9aa0a6'; g.fillRect(x + 6, y + 52, w - 12, 2); // rail
+      // corner posts, red-and-white like a barber pole
+      for (const px of [x - 2, x + w - 8]) {
+        g.fillStyle = '#f4f1e6'; g.fillRect(px, top + 10, 10, bot - top - 10);
+        g.fillStyle = '#c8302a'; for (let yy = top + 12; yy < bot; yy += 10) g.fillRect(px, yy, 10, 4);
+        g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(px + 7, top + 10, 3, bot - top - 10);
+      }
+      // scalloped striped awning
+      for (let i = 0; i < w; i += 16) {
+        g.fillStyle = (i / 16) % 2 ? '#f4f1e6' : '#c8302a';
+        g.fillRect(x + i, y - 28, 16, 8);
+        g.beginPath(); g.arc(x + i + 8, y - 20, 8, 0, Math.PI); g.fill();
+      }
+      g.fillStyle = 'rgba(0,0,0,0.2)'; g.fillRect(x, y - 28, w, 2);
+      // marquee sign with light bulbs
+      g.fillStyle = '#7a1a14'; g.fillRect(x + 36, top - 2, w - 72, 22);
+      g.strokeStyle = '#e8c15a'; g.lineWidth = 2; g.strokeRect(x + 37, top - 1, w - 74, 20);
+      for (let xx = x + 42; xx < x + w - 40; xx += 9) { g.fillStyle = '#ffe7a0'; g.beginPath(); g.arc(xx, top + 1.5, 1.6, 0, Math.PI * 2); g.arc(xx, top + 16.5, 1.6, 0, Math.PI * 2); g.fill(); }
+      g.fillStyle = '#ffffff'; g.font = 'bold 10px system-ui, sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillText('SHOOTING GALLERY', x + w / 2, top + 9.5);
+      // counter, prizes and the price
+      g.fillStyle = '#8a5a34'; g.fillRect(x - 4, bot - 4, w + 8, 6);
+      g.fillStyle = '#5e3a20'; g.fillRect(x - 4, bot + 2, w + 8, 6);
+      g.fillStyle = 'rgba(255,255,255,0.18)'; g.fillRect(x - 4, bot - 4, w + 8, 1);
+      for (const [bx, col] of [[x + 14, '#a8743e'], [x + w - 16, '#e88fb0'], [x + w - 30, '#7fa8e8']]) {
+        g.fillStyle = col; g.beginPath(); g.arc(bx, bot - 9, 5, 0, Math.PI * 2); g.arc(bx - 4, bot - 14, 2.2, 0, Math.PI * 2); g.arc(bx + 4, bot - 14, 2.2, 0, Math.PI * 2); g.fill();
+        g.beginPath(); g.arc(bx, bot - 13, 3.6, 0, Math.PI * 2); g.fill();
+        g.fillStyle = '#1a1210'; g.fillRect(bx - 1.6, bot - 14, 1, 1); g.fillRect(bx + 0.8, bot - 14, 1, 1);
+      }
+      g.fillStyle = '#f4ecd6'; g.fillRect(x + w / 2 - 14, bot + 1, 28, 9); g.fillStyle = '#7a1a14'; g.font = 'bold 8px system-ui, sans-serif'; g.fillText('$5 A GO', x + w / 2, bot + 5.8);
+      g.textAlign = 'start'; g.textBaseline = 'alphabetic';
+      // bunting from the posts
+      g.strokeStyle = 'rgba(60,40,20,0.7)'; g.lineWidth = 1;
+      g.beginPath(); g.moveTo(x + 2, top + 14); g.quadraticCurveTo(x - 30, top + 30, x - 60, top + 18); g.moveTo(x + w - 2, top + 14); g.quadraticCurveTo(x + w + 30, top + 30, x + w + 60, top + 18); g.stroke();
+      const flags = ['#c8302a', '#f2d43c', '#3f7fb2', '#f4f1e6'];
+      for (let k = 0; k < 5; k++) for (const side of [-1, 1]) {
+        const t2 = (k + 0.5) / 5, fx = side < 0 ? x + 2 - t2 * 62 : x + w - 2 + t2 * 62, fy = top + 14 + Math.sin(t2 * Math.PI) * 9;
+        g.fillStyle = flags[k % 4]; g.beginPath(); g.moveTo(fx - 3, fy); g.lineTo(fx + 3, fy); g.lineTo(fx, fy + 6); g.fill();
+      }
       break;
     }
     case 'irongate':

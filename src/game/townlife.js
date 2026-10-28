@@ -155,9 +155,12 @@ export function drawGallery(ctx) {
   for (const d of gl.ducks) {
     ctx.save(); ctx.translate(d.x, d.y);
     if (d.hit) ctx.rotate(Math.min(1.5, d.hit * 6));
-    ctx.fillStyle = d.gold ? '#f0c040' : '#e8e2d0';
-    ctx.beginPath(); ctx.ellipse(0, 0, 8, 5, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(d.vx > 0 ? 6 : -6, -5, 3.5, 0, Math.PI * 2); ctx.fill();
+    // tin duck on a stick: outlined so it reads against the painted backdrop
+    ctx.fillStyle = '#5a5f66'; ctx.fillRect(-0.8, 3, 1.6, 6);
+    ctx.fillStyle = d.gold ? '#f0c040' : '#f4f1e6'; ctx.strokeStyle = '#2a2018'; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.ellipse(0, 0, 8, 5, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc(d.vx > 0 ? 6 : -6, -5, 3.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#c8302a'; ctx.beginPath(); ctx.arc(-1, 0, 2, 0, Math.PI * 2); ctx.fill();
     ctx.fillStyle = '#d9822b'; ctx.fillRect(d.vx > 0 ? 9 : -12, -6, 3, 2);
     ctx.restore();
   }
