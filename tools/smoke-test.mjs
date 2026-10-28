@@ -372,7 +372,21 @@ if (want('desktop')) {
   await tp(page, 48, 29, 'town'); await sleep(300);
   const g3 = await ev(page, () => { const r = window.__cus.G.npcs.find((n) => n.id === 'gus'); return { x: r.x / 32, y: r.y / 32 }; });
   await tp(page, g3.x - 1, g3.y); await faceTo(page, g3.x, g3.y); await sleep(150); await pressE(page); await sleep(200); await skipDialogues(page); await sleep(300); await skipDialogues(page);
-  check('Ch1: Gus teaches carpentry -> fortify (3 defenses)', (await step(page)) === 'reinforce' && await ev(page, () => window.__cus.G.s.unlocks.carpentry));
+  check('Ch1: Gus teaches carpentry -> find the rat', (await step(page)) === 'ch1_rat' && await ev(page, () => window.__cus.G.s.unlocks.carpentry));
+  // The rat: Dee's tip, Henderson's trash, Tibbs's story — then run Henderson out of town.
+  const ratTalk = (id) => ev(page, (id) => import('./src/game/rat.js').then((m) => m.ratTalk({ id })), id);
+  await ratTalk('dee'); await skipDialogues(page);
+  await ev(page, () => import('./src/game/rat.js').then((m) => m.ratPropAction({ rat: 'trash' }))); await skipDialogues(page);
+  await ratTalk('folk11'); await skipDialogues(page);
+  await ratTalk('folk1');
+  for (let i = 0, picks = 0; i < 40; i++) {
+    const st = await ev(page, () => { const d = document.getElementById('dialogue'); if (d.classList.contains('hidden')) return 'none'; return document.querySelectorAll('#dlg-choices .choice').length && !document.getElementById('dlg-choices').classList.contains('hidden') ? 'choice' : 'text'; });
+    if (st === 'none') break;
+    if (st === 'choice') await page.locator('#dlg-choices .choice').nth(picks++ === 0 ? 0 : 1).click(); else await page.click('#dlg-skip').catch(() => {});
+    await sleep(90);
+  }
+  await sleep(300); await skipDialogues(page);
+  check('Ch1: the rat is run out of town -> fortify (3 defenses)', (await step(page)) === 'reinforce' && await ev(page, () => window.__cus.G.s.choices.rat === 'expose' && !window.__cus.G.npcs.some((n) => n.id === 'folk1')));
   await tp(page, 24.5, 30, 'cabin'); await sleep(200);
 
   // ---- Reinforce the cabin ----
@@ -1176,6 +1190,95 @@ if (want('v5')) {
 /* ================================================================== */
 /* Controller + desktop build (Steam Deck): no touch UI, pad everywhere */
 /* ================================================================== */
+if (want('town')) {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const page = await ctx.newPage();
+  watch(page, 'town');
+  await page.goto(URL); await page.waitForSelector('#t-new');
+  await ev(page, () => window.__cus.newGame('normal')); await sleep(500);
+  await skipDialogues(page);
+  const talk = async (id) => {
+    const ok = await ev(page, (id) => import('./src/game/npcs.js').then((m) => { const n = window.__cus.G.npcs.find((x) => x.id === id); if (!n) return false; m.interactNpc(n); return true; }), id);
+    await sleep(100);
+    if (await page.locator('[data-npc="story"]').count()) await page.click('[data-npc="story"]');
+    else if (await page.locator('[data-npc]').count()) await ev(page, () => window.__cus.dbg.closeAll());
+    return ok;
+  };
+  const erState = (id) => ev(page, (id) => (window.__cus.G.s.errands[id] || {}).state || null, id);
+  const propAct = (id) => ev(page, (id) => import('./src/game/errands.js').then((m) => { const p = m.errandProps(window.__cus.G.map.id).find((x) => x.errand === id); if (!p) return false; window.__cus.G.player.x = p.x; window.__cus.G.player.y = p.y; m.errandPropAction(p); return true; }), id);
+  const setT = (day, h) => ev(page, ([d, h]) => { const t = window.__cus.G.s.time; t.day = d; t.minute = h * 60; }, [day, h]);
+
+  // The rat: clues, a wrong accusation, then the right one.
+  await ev(page, () => { const { G } = window.__cus; window.__cus.dbg.closeAll(); G.s.story.flags.townOpen = true; G.s.time.minute = 12 * 60; G.s.time.day = 2; window.__cus.loadMap('town', G.maps.town.points.start); });
+  await ev(page, () => import('./src/game/rat.js').then((m) => { m.startRatCase(); window.__cus.G.s.story.step = 'ch1_rat'; }));
+  await sleep(800);
+  check('Town: the rat case is an objective', /Find the rat/.test(await ev(page, () => document.getElementById('objective').textContent)));
+  await talk('dee'); await skipDialogues(page);
+  const payphoneDay = await ev(page, () => import('./src/game/rat.js').then((m) => { const p = m.ratProps('town').find((x) => x.rat === 'payphone'); m.ratPropAction(p); return Object.keys(window.__cus.G.s.story.flags.rat.clues).includes('payphone'); }));
+  check('Town: the payphone clue only turns up after dark', !payphoneDay);
+  await ev(page, () => import('./src/game/rat.js').then((m) => m.ratPropAction(m.ratProps('town').find((x) => x.rat === 'trash')))); await skipDialogues(page);
+  await talk('folk11'); await skipDialogues(page);
+  check('Town: clues from talking and searching', (await ev(page, () => Object.keys(window.__cus.G.s.story.flags.rat.clues).length)) === 3);
+  await talk('folk3'); await skipDialogues(page); // Jenny's alibi clue
+  await talk('folk3'); await skipDialogues(page, 0); // accuse Jenny — wrong
+  check('Town: a wrong accusation is remembered', (await ev(page, () => window.__cus.G.s.story.flags.rat.wrong)).includes('folk3'));
+  await talk('folk1'); await skipDialogues(page, 0); await sleep(300); await skipDialogues(page);
+  const rat = await ev(page, () => ({ step: window.__cus.G.s.story.step, choice: window.__cus.G.s.choices.rat }));
+  check('Town: unmasking Henderson and turning him moves the story on', rat.step === 'reinforce' && rat.choice === 'feed', JSON.stringify(rat));
+  check('Town: a turned rat means a lighter first siege', (await ev(page, () => window.__cus.dbg.storyPlan().waves[1].types.length)) === 1);
+
+  // Dee's storyline: wait for Thursday, watch, tail Earl, choose, fight.
+  await ev(page, () => { const { G } = window.__cus; G.s.story.step = 'free'; G.s.story.chapterComplete = true; G.s.money = 500; });
+  await talk('dee'); await skipDialogues(page, 0);
+  check('Town: Dee brings up her storyline', (await erState('dee_1')) === 'active');
+  await setT(4, 14.5); await sleep(1200); await skipDialogues(page);
+  await propAct('dee_1'); await skipDialogues(page); await talk('dee'); await skipDialogues(page);
+  check('Town: "Thursday Visits" finishes on a Thursday', (await erState('dee_1')) === 'done');
+  await setT(5, 13.5); await talk('dee'); await skipDialogues(page);
+  await propAct('dee_2'); await sleep(300);
+  let tailOk = false;
+  for (let i = 0; i < 160; i++) {
+    const s = await ev(page, () => { const { G } = window.__cus; const T = G.tail; if (!T) return 'done'; const n = T.n; G.player.x = n.x - Math.cos(n.angle) * 150; G.player.y = n.y - Math.sin(n.angle) * 150; G.player.vx = G.player.vy = 0; return 'tail'; });
+    if (s === 'done') { tailOk = true; break; }
+    if (i === 10) await page.screenshot({ path: OUT + 'town-tail.png' });
+    await sleep(400);
+  }
+  await skipDialogues(page);
+  check('Town: tailing Earl Pruitt to the woodlot', tailOk && (await ev(page, () => window.__cus.G.s.errands.dee_2.stage)) === 1);
+  await talk('dee'); await skipDialogues(page);
+  await talk('dee'); await skipDialogues(page); await talk('dee'); await skipDialogues(page, 0);
+  await setT(5, 14); await talk('dee'); await skipDialogues(page);
+  await propAct('dee_4'); await skipDialogues(page); await sleep(500);
+  check('Town: the woodlot fight spawns Earl and his nephew', (await ev(page, () => window.__cus.G.enemies.filter((e) => e.errandFight && !e.dead).length)) === 2);
+  await ev(page, () => { for (const e of window.__cus.G.enemies.filter((e) => e.errandFight)) window.__cus.dbg.damageEnemy(e, 999, {}); }); await sleep(1500); await skipDialogues(page);
+  await talk('dee'); await skipDialogues(page);
+  check('Town: finishing Dee\'s storyline earns a perk', await ev(page, () => !!(window.__cus.G.s.perks || {}).store_tab));
+
+  // Poker night (Wednesday), deer at dawn, the fair.
+  await setT(3, 20); await ev(page, () => import('./src/ui/poker.js').then((m) => m.openPoker())); await sleep(300);
+  await page.locator('[data-pk="draw"]').click(); await sleep(150);
+  await page.locator('[data-pk="check"], [data-pk="call"]').first().click(); await sleep(200);
+  check('Town: a hand of poker plays to a showdown', !!(await ev(page, () => document.querySelector('.pk-result') && document.querySelector('.pk-result').textContent)));
+  await page.screenshot({ path: OUT + 'town-poker.png' });
+  await page.locator('[data-pk="leave"]').click(); await sleep(150);
+  await ev(page, () => { const { G } = window.__cus; G.s.time.minute = 6 * 60; window.__cus.loadMap('cabin', G.maps.cabin.points.start); }); await sleep(400);
+  const hunt = await ev(page, () => import('./src/game/hunting.js').then((m) => { const a = (window.__cus.G.animals || [])[0]; if (!a) return null; a.hp = 1; m.animalBulletCheck({ x: a.x, y: a.y, dmg: 5 }); m.fieldDress(a); return window.__cus.dbg.count('pelt'); }));
+  check('Town: deer at dawn, field-dressed for venison and a pelt', hunt >= 1);
+  const fd = await ev(page, () => import('./src/game/calendar.js').then((m) => m.fairDay()));
+  await ev(page, (fd) => { const { G } = window.__cus; G.s.time.day = fd; G.s.time.minute = 11 * 60; window.__cus.loadMap('town', G.maps.town.points.start); }, fd);
+  await ev(page, () => import('./src/game/townlife.js').then((m) => m.startGallery())); await sleep(1500);
+  check('Town: the shooting gallery runs on fair day', await ev(page, () => !!(window.__cus.G.gallery && window.__cus.G.gallery.ducks.length)));
+  await page.screenshot({ path: OUT + 'town-gallery.png' });
+  await ev(page, () => { window.__cus.G.gallery.t = 0; }); await sleep(300);
+
+  // Journal: case board, storylines, the week, perks.
+  await ev(page, () => window.__cus.dbg.openMenu('journal')); await sleep(300);
+  const jt = await ev(page, () => document.querySelector('.modal-body').innerText);
+  check('Town: Journal shows the case board, storylines, the week and perks', ['Case board', 'Storylines', 'This week in town', 'Perks'].every((k) => jt.includes(k)));
+  await page.screenshot({ path: OUT + 'town-journal.png' });
+  await ctx.close();
+}
+
 if (want('pad')) {
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
   const page = await ctx.newPage();

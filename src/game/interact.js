@@ -93,7 +93,7 @@ function propAction(pr) {
   if (G.prequel && (pr.kind === 'car' || pr.kind === 'prequel')) return prequelProp(pr);
   if (pr.kind === 'project') return G.endless ? null : projectAction(pr);
   if (['market', 'supper', 'gallery', 'pie_stand'].includes(pr.kind)) return G.endless ? null : townLifeProp(pr, { openShop });
-  if (pr.kind === 'poker') return G.endless ? null : { label: eventOn('poker') ? 'Sit in on poker night ($10 ante)' : 'Poker table (Wed & Sat, 7–11 PM)', short: 'POKER', prio: eventOn('poker') ? 2 : -1, action: () => openPoker() };
+  if (pr.kind === 'poker') return G.endless ? null : { label: eventOn('poker') ? 'Sit in on poker night ($10 ante)' : 'Poker table (Wed & Sat, 7–11 PM)', short: 'POKER', prio: eventOn('poker') ? 2 : -3, action: () => openPoker() };
   if (G.endless && ['bed', 'car', 'exit', 'jobboard', 'phone', 'mailbox', 'phonepole'].includes(pr.kind)) return null;
   switch (pr.kind) {
     case 'bed': return { label: 'Use bed (sleep / save)', short: 'REST', action: () => openBedMenu() };

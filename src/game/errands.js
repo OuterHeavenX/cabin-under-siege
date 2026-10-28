@@ -714,6 +714,7 @@ export function errandTalk(npcId) {
 /** Can this storyline part be brought up right now? */
 export function arcReady(e) {
   if (e.chapter !== G.s.chapter) return false;
+  if (G.s.story.flags.ratGone && G.s.story.flags.ratGone === e.giver) return false; // left town
   if (!e.early && !G.s.story.flags.townOpen) return false;
   for (const req of e.requires || []) {
     const r = est()[req];

@@ -7,7 +7,7 @@ import { NPCS, relLevel } from '../data/npcs.js';
 import { toast } from '../ui/hud.js';
 import { chapter } from './chapters.js';
 import { sfx } from '../audio.js';
-import { hasPerk } from './perks.js';
+import { perkEff, perkShop } from './perks.js';
 import { eventOn } from './calendar.js';
 import { projectDone } from './projects.js';
 
@@ -18,16 +18,16 @@ export function derived() {
   const fed = G.player && G.player.wellFed > 0;
   return {
     maxHp: Math.round((100 + 12 * lvlBonus(a.vit)) * (fed ? 1.1 : 1)),
-    maxStamina: 100 + 10 * lvlBonus(a.end) + (fed ? 25 : 0),
+    maxStamina: 100 + 10 * lvlBonus(a.end) + (fed ? 25 : 0) + perkEff('stam'),
     staminaMult: 1 - 0.04 * lvlBonus(a.end),
-    spreadMult: (1 - 0.06 * lvlBonus(a.pre)) * (sk('steady_hands') ? 0.7 : 1) * (hasPerk('marksman') ? 0.85 : 1),
+    spreadMult: (1 - 0.06 * lvlBonus(a.pre)) * (sk('steady_hands') ? 0.7 : 1) * perkEff('spread'),
     moveSpreadMult: sk('steady_hands') ? 0.5 : 1,
     reloadTime: 1.45 * (sk('quick_reload') ? 0.7 : 1),
-    healMult: (1 + 0.05 * lvlBonus(a.res)) * (sk('field_recovery') ? 1.35 : 1) * ((G.s.unlocks || {}).firstAid ? 1.15 : 1) * (hasPerk('field_medic') ? 1.5 : 1),
+    healMult: (1 + 0.05 * lvlBonus(a.res)) * (sk('field_recovery') ? 1.35 : 1) * ((G.s.unlocks || {}).firstAid ? 1.15 : 1) * perkEff('heal'),
     regenCap: 0.3 + 0.05 * lvlBonus(a.res),
     graceTime: 0.55 + 0.05 * lvlBonus(a.res),
     seeRadius: (170 + 20 * lvlBonus(a.awa) + (sk('keen_eye') ? 60 : 0)) * weatherMods().see,
-    warnLead: 15 + 4 * lvlBonus(a.awa) + (sk('watchful') ? 30 : 0) + (G.s.home.upgrades.alarm ? 45 : 0) + (projectDone('radio') ? 60 : 0),
+    warnLead: 15 + 4 * lvlBonus(a.awa) + (sk('watchful') ? 30 : 0) + (G.s.home.upgrades.alarm ? 45 : 0) + (projectDone('radio') ? 60 : 0) + perkEff('warn'),
     showDirections: sk('watchful') || G.s.home.upgrades.alarm,
     noticeMult: sk('quiet_steps') ? 0.6 : 1,
     dodgeSpeed: 400 * (sk('escape_artist') ? 1.3 : 1),
@@ -38,14 +38,14 @@ export function derived() {
     woodBonus: sk('resourceful') ? 1 : 0,
     flinchMult: sk('composure') ? 0.25 : 1,
     magSize: (G.s.weaponMods && G.s.weaponMods.extMag) || G.s.home.upgrades.extMag ? 12 : 8,
-    jobPayMult: (sk('good_reputation') ? 1.15 : 1) * (hasPerk('mill_hand') ? 1.1 : 1),
+    jobPayMult: (sk('good_reputation') ? 1.15 : 1) * perkEff('pay'),
   };
 }
 
 export function shopDiscount(owner) {
   let d = 0;
   if (hasSkill('local_discount')) d += 0.1;
-  if (owner === 'dee' && hasPerk('store_tab')) d += 0.1;
+  if (perkShop(owner)) d += 0.1;
   if (owner === chapter().shopkeeper && eventOn('market')) d += 0.2; // market day sale
   if (owner === chapter().shopkeeper) {
     const lv = relLevel(G.s.rel[owner] || 0);

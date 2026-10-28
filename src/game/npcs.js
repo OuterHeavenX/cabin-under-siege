@@ -143,8 +143,9 @@ export function interactNpc(n, skipRat = false) {
   const story = storyDialogue(n.id);
   if (story) { playDialogue(story.lines, story.onEnd); firstTalkBonus(n.id); return; }
   if (errandTalk(n.id)) return;
-  if (autoOfferErrand(n.id)) return;
   if (questTalk(n.id)) return;
+  // People with a counter to run (shop, job board) raise it from their menu instead.
+  if (!npcAvailableServices(n).some((x) => x === 'shop' || x === 'jobs') && autoOfferErrand(n.id)) return;
   openNpcMenu(n);
 }
 

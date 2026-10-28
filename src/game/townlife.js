@@ -46,18 +46,18 @@ export function updateTownLife(dt) {
 export function townLifeProp(pr, { openShop }) {
   switch (pr.kind) {
     case 'market':
-      if (!eventOn('market')) return { label: `Market stalls (empty — market is ${when('market')})`, short: 'LOOK', action: () => toast(`The stalls are bare. Market day is ${when('market')}.`, 'info', 3) };
+      if (!eventOn('market')) return { label: `Market stalls (empty — market is ${when('market')})`, short: 'LOOK', prio: -3, action: () => toast(`The stalls are bare. Market day is ${when('market')}.`, 'info', 3) };
       return { label: 'Browse the market stalls (Friday specials)', short: 'SHOP', prio: 1, action: () => openShop('market') };
     case 'supper':
-      if (!eventOn('supper')) return { label: `Sunday supper (${when('supper')})`, short: 'LOOK', action: () => toast(`Supper's after Sunday service, ${fmtWindow(ev('supper').hours)}. Everybody comes.`, 'info', 3) };
-      if (G.s.world.supperDay === G.s.time.day) return { label: 'Sunday supper (you ate already)', short: 'LOOK', action: () => toast('You\'re stuffed. See you next Sunday.', 'info') };
+      if (!eventOn('supper')) return { label: `Sunday supper (${when('supper')})`, short: 'LOOK', prio: -3, action: () => toast(`Supper's after Sunday service, ${fmtWindow(ev('supper').hours)}. Everybody comes.`, 'info', 3) };
+      if (G.s.world.supperDay === G.s.time.day) return { label: 'Sunday supper (you ate already)', short: 'LOOK', prio: -3, action: () => toast('You\'re stuffed. See you next Sunday.', 'info') };
       return { label: 'Join Sunday supper', short: 'EAT', prio: 2, action: () => joinSupper() };
     case 'gallery':
-      if (G.s.time.day !== fairDay()) return { label: `Shooting gallery (fair on ${weekday(fairDay())}, day ${fairDay()})`, short: 'LOOK', action: () => toast(`The fair opens ${weekday(fairDay())} (day ${fairDay()}), 10 AM–5 PM.`, 'info', 3) };
-      if (!eventOn('fair')) return { label: 'Shooting gallery (fair hours 10 AM–5 PM)', short: 'LOOK', action: () => toast('Fair hours are 10 AM to 5 PM.', 'info') };
+      if (G.s.time.day !== fairDay()) return { label: `Shooting gallery (fair on ${weekday(fairDay())}, day ${fairDay()})`, short: 'LOOK', prio: -3, action: () => toast(`The fair opens ${weekday(fairDay())} (day ${fairDay()}), 10 AM–5 PM.`, 'info', 3) };
+      if (!eventOn('fair')) return { label: 'Shooting gallery (fair hours 10 AM–5 PM)', short: 'LOOK', prio: -3, action: () => toast('Fair hours are 10 AM to 5 PM.', 'info') };
       return { label: 'Shooting gallery — $5 a round', short: 'PLAY', prio: 2, action: () => startGallery() };
     case 'pie_stand':
-      if (!(G.s.time.day === fairDay() && eventOn('fair'))) return { label: 'Pie stand (fair day only)', short: 'LOOK', action: () => toast('Come back on fair day.', 'info') };
+      if (!(G.s.time.day === fairDay() && eventOn('fair'))) return { label: 'Pie stand (fair day only)', short: 'LOOK', prio: -3, action: () => toast('Come back on fair day.', 'info') };
       return { label: 'Buy pie — $4', short: 'BUY', action: () => { if (G.s.money < 4) { toast('Four dollars. You don\'t have it.', 'warn'); return; } addMoney(-4); addItem('pie', 1, true); sfx('coin'); toast('A slice of cherry. Still warm.', 'item'); } };
     default: return null;
   }
