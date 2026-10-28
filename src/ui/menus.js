@@ -571,7 +571,7 @@ export function openHelp() {
         <li><kbd>RT</kbd> Fire · <kbd>X</kbd> Reload · <kbd>Y</kbd> Switch weapon</li>
         <li><kbd>A</kbd> Interact / talk / continue · <kbd>B</kbd> Dodge roll</li>
         <li><kbd>RB</kbd> Melee shove · <kbd>LB</kbd> Use quick item</li>
-        <li><kbd>☰ Menu</kbd> Pause · <kbd>⧉ View</kbd> Journal · D-pad: <kbd>↑</kbd> Map <kbd>↓</kbd> Items <kbd>←</kbd> Home <kbd>→</kbd> Character</li>
+        <li>Left stick or D-pad: move · <kbd>☰ Menu</kbd> Pause (Map, Items, Home, Character are tabs there — <kbd>LB</kbd>/<kbd>RB</kbd>) · <kbd>⧉ View</kbd> Journal</li>
         <li>In menus: D-pad / stick to move, <kbd>A</kbd> select, <kbd>B</kbd> back, <kbd>LB</kbd>/<kbd>RB</kbd> tabs, <kbd>R stick</kbd> scroll</li>
       </ul></div>
       ${desktopApp ? '' : `<div><h3>Touch</h3><ul>

@@ -1365,6 +1365,10 @@ if (want('pad')) {
   await stick([0, 1, 0, 0]); await sleep(600); await stick([0, 0, 0, 0]);
   const p1 = await C(() => [window.__cus.G.player.x, window.__cus.G.player.y]);
   check('pad Left stick moves Frank', p1[1] - p0[1] > 40, `${Math.round(p1[1] - p0[1])}px`);
+  // D-pad up (button 12) walks Frank instead of opening the map.
+  await C(() => { window.__fakePad.buttons[12] = { pressed: true, value: 1 }; }); await sleep(600); await C(() => { window.__fakePad.buttons[12] = { pressed: false, value: 0 }; }); await sleep(100);
+  const p2 = await C(() => [window.__cus.G.player.x, window.__cus.G.player.y]);
+  check('pad D-pad moves Frank (no menu)', p1[1] - p2[1] > 40 && await C(() => !window.__cus.G.modal), `${Math.round(p1[1] - p2[1])}px, modal ${await C(() => window.__cus.G.modal)}`);
   await stick([0, 0, -1, 0]); await sleep(200);
   const ang = await C(() => window.__cus.G.player.angle);
   const mag0 = await C(() => window.__cus.G.player.mag);

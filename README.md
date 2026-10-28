@@ -132,8 +132,8 @@ Every town is now a place to live, not just a place to wait for the next fight.
   the Deck's 1280×800, no browser bar, no on-screen touch buttons, audio that starts without a
   click, a *Quit to Desktop* button, and F11 for fullscreen. Saves live in the app's own folder.
 - **Full controller support** (Steam Deck, Xbox, PlayStation, anything "standard"):
-  left stick move, right stick aim, RT fire, A interact, B dodge, X reload, Y switch weapon,
-  RB melee, LB quick item, Menu pause, View journal, D-pad shortcuts. Without the right stick,
+  left stick or D-pad move, right stick aim, RT fire, A interact, B dodge, X reload, Y switch weapon,
+  RB melee, LB quick item, Menu pause (map, items, home and character are tabs there), View journal. Without the right stick,
   aim assist picks targets like it does on touch. Full stick tilt (or LT / L3) sprints.
 - **Menus, the title screen and conversations work with the pad**: a gold highlight moves with
   the D-pad or stick, A selects, B backs out, LB/RB flip tabs, the right stick scrolls, and

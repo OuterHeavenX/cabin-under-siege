@@ -73,9 +73,11 @@ export function updateGamepad(dt) {
 
 /* ---------------- gameplay ---------------- */
 function play({ now, down, val, L, R }) {
-  // Move
-  input.padMove = L.m > 0 ? { x: L.x, y: L.y } : null;
-  own.move = L.m > 0;
+  // Move: left stick, or the D-pad (8 directions, full speed) when the stick is idle.
+  const dx = (now[BTN.RIGHT] ? 1 : 0) - (now[BTN.LEFT] ? 1 : 0), dy = (now[BTN.DOWN] ? 1 : 0) - (now[BTN.UP] ? 1 : 0);
+  const dm = Math.hypot(dx, dy);
+  input.padMove = L.m > 0 ? { x: L.x, y: L.y } : dm ? { x: dx / dm, y: dy / dm } : null;
+  own.move = L.m > 0 || dm > 0;
   // Aim with the right stick; without it, aim assist and movement direction take over.
   if (R.m > 0.08) {
     input.aim.active = true; input.aim.source = 'stick'; input.aim.mag = R.m;
@@ -90,7 +92,7 @@ function play({ now, down, val, L, R }) {
   if (rt) { input.held.fire = true; own.fire = true; } else if (own.fire) { input.held.fire = false; own.fire = false; }
   // Sprint: hold LT, or click the left stick (stays on until you stop)
   if (down(BTN.LS)) sprintLatch = !sprintLatch;
-  if (L.m === 0) sprintLatch = false;
+  if (L.m === 0 && !dm) sprintLatch = false;
   const sp = val(BTN.LT) > 0.35 || sprintLatch;
   if (sp) { input.held.sprint = true; own.sprint = true; } else if (own.sprint) { input.held.sprint = false; own.sprint = false; }
   // Buttons
@@ -102,10 +104,6 @@ function play({ now, down, val, L, R }) {
   if (down(BTN.RB)) press('melee');
   if (down(BTN.MENU)) press('pause');
   if (down(BTN.VIEW)) press('journal');
-  if (down(BTN.UP)) press('map');
-  if (down(BTN.DOWN)) press('inv');
-  if (down(BTN.LEFT)) press('home');
-  if (down(BTN.RIGHT)) press('char');
 }
 
 function releaseGame() {
