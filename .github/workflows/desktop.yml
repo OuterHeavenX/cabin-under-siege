@@ -19,7 +19,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      HAS_BUTLER: ${{ secrets.BUTLER_API_KEY != '' && vars.ITCH_GAME != '' }}
+      HAS_KEY: ${{ secrets.BUTLER_API_KEY != '' }}
+      HAS_GAME: ${{ vars.ITCH_GAME != '' || secrets.ITCH_GAME != '' }}
+      HAS_BUTLER: ${{ secrets.BUTLER_API_KEY != '' && (vars.ITCH_GAME != '' || secrets.ITCH_GAME != '') }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -43,12 +45,15 @@ jobs:
           path: desktop/dist/cabin-under-siege-windows-x64-*.zip
           retention-days: 30
       - if: env.HAS_BUTLER != 'true'
-        run: echo "::notice::BUTLER_API_KEY / ITCH_GAME not set, so nothing was uploaded to itch.io. Download the builds from Artifacts."
+        run: |
+          [ "$HAS_KEY" = true ] || echo "::warning::The BUTLER_API_KEY secret is missing or empty (Settings → Secrets and variables → Actions → Secrets)."
+          [ "$HAS_GAME" = true ] || echo "::warning::ITCH_GAME is missing or empty (Settings → Secrets and variables → Actions → Variables, value like yourname/your-game)."
+          echo "::notice::Nothing was uploaded to itch.io. Download the builds from Artifacts.
       - name: Upload to itch.io
         if: env.HAS_BUTLER == 'true'
         env:
           BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
-          ITCH_GAME: ${{ vars.ITCH_GAME }}
+          ITCH_GAME: ${{ vars.ITCH_GAME || secrets.ITCH_GAME }}
           VERSION: ${{ steps.ver.outputs.version }}
         run: |
           curl -sSL -o butler.zip https://broth.itch.zone/butler/linux-amd64/LATEST/archive/default
