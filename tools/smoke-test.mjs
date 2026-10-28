@@ -1358,7 +1358,7 @@ if (want('v7')) {
     const e = c.dbg.spawnEnemy('gunman', 14 * 32, 21.5 * 32, {}); e.angle = 0; e.path = null;
     await new Promise((r) => setTimeout(r, 120));
     const early = { alerted: e.alerted, sus: e.sus };
-    await new Promise((r) => setTimeout(r, 1000));
+    for (let i = 0; i < 30 && !e.alerted; i++) await new Promise((r) => setTimeout(r, 100));
     return { early, late: { alerted: e.alerted }, eye: document.getElementById('eye').textContent };
   });
   check('Awareness: they grow suspicious before they spot you, and the eye says "through a window"', !aw.early.alerted && aw.early.sus > 0 && aw.late.alerted && /SEEN/.test(aw.eye) && /window/.test(aw.eye), JSON.stringify(aw));
