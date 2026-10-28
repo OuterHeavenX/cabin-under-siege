@@ -342,6 +342,16 @@ export function updateSiege(dt) {
     sg.giveUpIn = HIDE_MINUTES - (now - sg.lastSpot);
     if (sg.waveIdx >= sg.plan.waves.length && sg.giveUpIn <= 0) giveUp(sg);
   }
+  if (sg.gaveUp) {
+    // Stragglers who can't find their way out just slip away (out of sight), so the night always ends.
+    sg.leaveT = (sg.leaveT || 0) + dt;
+    const p = G.player;
+    for (const e of G.enemies) {
+      if (e.dead || e.gone) continue;
+      const seen = dist(e.x, e.y, p.x, p.y) < 520 && map.los(p.x, p.y, e.x, e.y);
+      if ((sg.leaveT > 30 && !seen) || sg.leaveT > 60) { e.gone = true; G.events.emit('enemyFled', e); }
+    }
+  }
   if (sg.waveIdx >= sg.plan.waves.length && alive === 0 && !G.player.dead) endSiege();
 }
 

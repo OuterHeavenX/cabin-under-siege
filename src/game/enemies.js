@@ -128,7 +128,12 @@ function searchGoal(e) {
 }
 
 export function initEnemyEvents() {
-  G.events.on('enemyAlert', (e) => alertEnemy(e));
+  G.events.on('enemyAlert', (e, src) => {
+    // Getting hurt only gives you away if you did it. Fire and traps tell them nothing about where you are.
+    if (src === 'fire') return;
+    if (src === 'trap') { alertEnemy(e, { x: e.x, y: e.y }); return; }
+    alertEnemy(e);
+  });
   G.events.on('shot', (x, y, quiet) => {
     const r = quiet ? 110 : 420;
     for (const e of G.enemies) if (!e.dead && !e.alerted && dist(e.x, e.y, x, y) < r) alertEnemy(e, { x, y });

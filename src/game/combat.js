@@ -64,7 +64,7 @@ export function damageEnemy(e, dmg, angle, src, knock = 90) {
   e.hitT = 0.15;
   e.lastHit = 0;
   if (!e.def.vehicle) { e.kx += Math.cos(angle) * knock; e.ky += Math.sin(angle) * knock; }
-  if (!e.alerted && src !== 'takedown') G.events.emit('enemyAlert', e, 'hurt');
+  if (!e.alerted && src !== 'takedown') G.events.emit('enemyAlert', e, src);
   spawnParticles(e.x, e.y, '#b0302a', 5, 110);
   addFloater(e.x + rand(-6, 6), e.y - 20, `${Math.round(dmg)}`, '#ffd166');
   sfx('hit', { x: e.x, y: e.y, vol: 0.9 });
