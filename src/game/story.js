@@ -18,7 +18,7 @@ import { choresStatus, errandWaypoint, errandGiverWaypoint, startErrand, townErr
 import { startQuest } from './quests.js';
 import { input } from '../input.js';
 import { NG_TWISTS } from './ngplus.js';
-import { startRatCase, ratObjective, ratWaypoint } from './rat.js';
+import { startRatCase, ratObjective, ratWaypoint, CASES } from './rat.js';
 
 const ME = 'Frank';
 
@@ -37,6 +37,10 @@ export const STEPS = {
   see_dee: { obj: 'Dee at Marsh General wants a word.' },
   stranger: { obj: 'Find the man in the grey coat near the diner (daytime).' },
   ch1_rat: { obj: () => ratObjective() },
+  ch2_rat: { obj: () => ratObjective() },
+  ch3_rat: { obj: () => ratObjective() },
+  ch4_rat: { obj: () => ratObjective() },
+  ch5_rat: { obj: () => ratObjective() },
   reinforce: { obj: () => `Fortify the cabin: install three defenses (${Math.min(3, G.s.story.flags.fortified || 0)}/3) — boards, braces, cover, traps.` },
   first_siege: { obj: 'They\'re coming tonight. Be at the cabin by 10 PM — and survive.' },
   search_body: { obj: 'Search the big man for anything useful.' },
@@ -101,6 +105,14 @@ export function objectiveText() {
 const jobsSinceTrust = () => (G.s.jobsDone || 0) - (G.s.story.flags.jobsBase || 0);
 const questDoneFn = (id) => ((G.s.quests || {})[id] || {}).state === 'done';
 
+/** Before the fortify step: somebody in town sold you out. Find them first. */
+function toRatCase() {
+  const c = CASES[G.s.chapter];
+  if (!c) return;
+  const go = () => { startRatCase(); setStep(c.step); };
+  if (c.intro) playDialogue([{ who: ME, text: c.intro }], go); else go();
+}
+
 function setStep(step) {
   G.s.story.step = step;
   G.events.emit('storyStep', step);
@@ -149,7 +161,7 @@ export function storyWaypoint() {
     }
     case 'see_dee': return { ...npcPoint('dee'), label: 'Dee' };
     case 'stranger': return { map: 'town', ...town.points.stranger, label: 'Stranger' };
-    case 'ch1_rat': return ratWaypoint();
+    case 'ch1_rat': case 'ch2_rat': case 'ch3_rat': case 'ch4_rat': case 'ch5_rat': return ratWaypoint();
     case 'reinforce': return { map: 'cabin', ...cab.points.cabin_front, label: 'Cabin' };
     case 'first_siege': return { map: 'cabin', ...cab.points.cabin_in, label: 'Cabin' };
     case 'search_body': {
@@ -296,7 +308,7 @@ export function storyDialogue(id) {
         { who: 'Pete Kowalski', text: 'Honest is the only kind I got, buddy. Firewood, deliveries, fix-it jobs. Board\'s by the office, seven to five.' },
         { who: 'Pete Kowalski', text: 'The park\'s got deadfall you can split for firewood. Bring it to the drop-off in my yard. Easy money.' },
       ],
-      onEnd: () => { addRel('pete', 6); addXP(25, 'Met Pete'); setStep('ch2_job'); },
+      onEnd: () => { addRel('pete', 6); addXP(25, 'Met Pete'); f.townOpen = true; setStep('ch2_job'); },
     };
   }
   if (id === 'rosa' && st.step === 'ch2_rosa') {
@@ -365,7 +377,7 @@ export function storyDialogue(id) {
         { who: ME, text: 'Yes, yes, and mostly.' },
         { who: 'Tess Albright', text: 'Good enough. Board\'s out front. Harvest your own fields and bring the produce here, run deliveries, fix what\'s broke. Co-op pays Fridays. And every other day, because I\'m not a monster.' },
       ],
-      onEnd: () => { addRel('tess', 6); addXP(25, 'Met Tess'); setStep('ch3_job'); },
+      onEnd: () => { addRel('tess', 6); addXP(25, 'Met Tess'); f.townOpen = true; setStep('ch3_job'); },
     };
   }
   if (id === 'dom' && st.step === 'ch5_meet_dom') {
@@ -422,7 +434,7 @@ export function storyDialogue(id) {
         { who: ME, text: 'I need work. Honest work.' },
         { who: 'Walt Bishop', text: 'Board\'s by the door. Docks, deliveries, repairs, fish for the club kitchen. Show up on time and I don\'t care what your name used to be.' },
       ],
-      onEnd: () => { addRel('walt', 6); addXP(25, 'Met Walt'); setStep('ch4_job'); },
+      onEnd: () => { addRel('walt', 6); addXP(25, 'Met Walt'); f.townOpen = true; setStep('ch4_job'); },
     };
   }
   if (id === 'eleanor' && st.step === 'ch4_eleanor_truth') {
@@ -543,7 +555,7 @@ export function initStoryEvents() {
       ], () => setStep('ch5_find_work'));
     }
     if (st.step === 'ch5_trust') checkTrust5();
-    if (id === 'recon' && st.step === 'ch5_recon') setStep('ch5_allies');
+    if (id === 'recon' && st.step === 'ch5_recon') toRatCase();
     if (id === 'trail' && st.step === 'trail') {
       playDialogue([{ who: ME, text: 'Leo\'s people. Here. Already. Dee hears everything in this town — if somebody new has been around, she\'ll know.' }], () => setStep('see_dee'));
     }
@@ -626,8 +638,22 @@ export function initStoryEvents() {
     readBurner();
   });
   ev.on('talkStranger', (n) => strangerTalk(n));
-  ev.on('ratClosed', ({ next }) => {
-    playDialogue([{ who: ME, text: G.s.choices.rat === 'missed' ? 'No more time. The cabin.' : 'One problem down. Now the cabin.' }], () => setStep(next));
+  ev.on('ratClosed', ({ outcome, next }) => {
+    const then = { 1: 'the cabin', 2: 'the house', 3: 'the farm', 4: 'the estate', 5: 'the phone. Time to call in every favor I have' }[G.s.chapter] || 'the house';
+    playDialogue([{ who: ME, text: outcome === 'missed' ? `No more time. Now ${then}.` : `One problem down. Now ${then}.` }], () => {
+      setStep(next);
+      if (next === 'ch3_fortify') checkFarmReady();
+      if (next === 'ch4_fortify') checkEstateReady();
+      // Defenses built during the case count: re-run the count once for the cabin and the house.
+      const fl = G.s.story.flags;
+      if ((next === 'reinforce' || next === 'ch2_fortify') && fl.fortified > 0) { fl.fortified--; G.events.emit('defenseInstalled'); }
+    });
+  });
+  ev.on('defenseInstalled', () => {
+    if (!/^ch\d_rat$/.test(G.s.story.step)) return;
+    const fl = G.s.story.flags;
+    fl.fortified = (fl.fortified || 0) + 1;
+    toast(`Defense installed (${fl.fortified} ready for when you fortify).`, 'info', 2.5);
   });
   ev.on('defenseInstalled', () => {
     if (G.s.story.step === 'reinforce') {
@@ -935,8 +961,7 @@ function reyesTalk(n) {
     G.npcs = G.npcs.filter((x) => x !== n);
     st.flags.metReyes = true;
     addXP(30, 'Met Agent Reyes');
-    setStep('ch4_fortify');
-    checkEstateReady();
+    toRatCase();
   });
 }
 
@@ -976,8 +1001,7 @@ function deputyTalk(n) {
     st.flags.metDeputy = true;
     toast('Deputy Mott drives off in a truck far too new for a deputy\'s salary.', 'info', 3.5);
     addXP(30, 'Met the deputy');
-    setStep('ch3_fortify');
-    checkFarmReady();
+    toRatCase();
   });
 }
 
@@ -1004,7 +1028,7 @@ export function storyMail() {
     { who: 'Back of the photo', text: '"Nice place you had. Nicer place you got. — S.B."' },
     { who: ME, text: 'Sal Benedetto. Leo\'s cleanup man. He doesn\'t do warnings unless he wants you scared.' },
     { who: ME, text: 'Fine. Let him come to a house that\'s ready for him.' },
-  ], () => { addJP('shadow', 8); addThreat(10); setStep('ch2_fortify'); });
+  ], () => { addJP('shadow', 8); addThreat(10); toRatCase(); });
   return true;
 }
 

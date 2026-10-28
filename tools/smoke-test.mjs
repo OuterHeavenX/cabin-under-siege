@@ -60,6 +60,27 @@ async function skipDialogues(page, pick = 0) {
 }
 
 const ev = (page, fn, arg) => page.evaluate(fn, arg);
+
+/** Solve the current chapter's rat case: every clue, then accuse the culprit and run them out of town. */
+async function solveRat(page) {
+  await page.evaluate(() => import('./src/game/rat.js').then((rat) => {
+    const { G } = window.__cus; const c = rat.CASES[G.s.chapter]; const t = G.s.time.minute;
+    for (const [id, cl] of Object.entries(c.clues)) {
+      if (cl.talk) rat.ratTalk({ id: cl.talk });
+      else if (cl.point) { G.s.time.minute = cl.hours ? cl.hours[0] * 60 + 30 : 12 * 60; rat.ratPropAction({ rat: id }); }
+    }
+    G.s.time.minute = t;
+  }));
+  await skipDialogues(page);
+  await page.evaluate(() => import('./src/game/rat.js').then((rat) => rat.ratTalk({ id: rat.CASES[window.__cus.G.s.chapter].culprit })));
+  for (let i = 0, picks = 0; i < 40; i++) {
+    const st = await page.evaluate(() => { const d = document.getElementById('dialogue'); if (d.classList.contains('hidden')) return 'none'; return document.querySelectorAll('#dlg-choices .choice').length && !document.getElementById('dlg-choices').classList.contains('hidden') ? 'choice' : 'text'; });
+    if (st === 'none') break;
+    if (st === 'choice') await page.locator('#dlg-choices .choice').nth(picks++ === 0 ? 0 : 1).click(); else await page.click('#dlg-skip').catch(() => {});
+    await sleep(90);
+  }
+  await sleep(300); await skipDialogues(page);
+}
 const tp = (page, x, y, map) => ev(page, ([x, y, map]) => {
   const c = window.__cus; if (map && c.G.map.id !== map) c.loadMap(map);
   c.G.player.x = x * 32; c.G.player.y = y * 32;
@@ -781,7 +802,9 @@ if (want('v2')) {
   await talk('rosa'); await skipDialogues(page);
   check('Ch2: Rosa -> check the mailbox (+2 shutters)', (await step(page)) === 'ch2_letter');
   await tp(page, 21.5, 32.4); await faceTo(page, 20.5, 32.5); await sleep(150); await pressE(page); await sleep(200); await skipDialogues(page);
-  check('Ch2: letter -> fortify', (await step(page)) === 'ch2_fortify');
+  check('Ch2: letter -> find who\'s watching the house', (await step(page)) === 'ch2_rat');
+  await solveRat(page);
+  check('Ch2: the rat is caught -> fortify', (await step(page)) === 'ch2_fortify' && await ev(page, () => window.__cus.G.s.choices.rat2 === 'expose'));
   // two defenses: shutters on the front-left window, then a trap
   await tp(page, 21.5, 32.2); await faceTo(page, 21.5, 33.5); await sleep(150); await pressE(page); await sleep(200);
   if (await page.isVisible('[data-opt]')) { const n = await page.locator('[data-opt]').count(); for (let i = 0; i < n; i++) { const t = await page.locator('[data-opt]').nth(i).textContent(); if (t.includes('Shutters')) { await page.locator('[data-opt]').nth(i).click(); break; } } }
@@ -851,7 +874,9 @@ if (want('v2')) {
     await C(() => { const c = window.__cus; const d = c.G.npcs.find((n) => n.id === 'deputy'); c.G.player.x = d.x; c.G.player.y = d.y + 26; c.dbg.input.mouse.inside = false; c.G.player.angle = -Math.PI / 2; }); await sleep(200);
     await pressE(page); await sleep(200); await skipDialogues(page, 1);
     const dep = await C(() => ({ choice: window.__cus.G.s.choices.deputy, step: window.__cus.G.s.story.step }));
-    check('Ch3: deputy visit is a choice with consequences', dep.choice === 'refuse' && dep.step === 'ch3_fortify', JSON.stringify(dep));
+    check('Ch3: deputy visit is a choice with consequences', dep.choice === 'refuse' && dep.step === 'ch3_rat', JSON.stringify(dep));
+    await solveRat(page);
+    check('Ch3: Hank the trucker is caught -> fortify', (await step(page)) === 'ch3_fortify');
     await C(() => { const c = window.__cus; const o = c.G.s.home.openings; for (const k of ['gate_l', 'gate_r']) o[k].hp = o[k].baseHp; c.G.s.story.flags.fortified = 1; c.G.events.emit('defenseInstalled'); }); await sleep(300); await skipDialogues(page);
     const plan = await C(() => window.__cus.G.s.world.siege && window.__cus.G.s.world.siege.plan.waves.map((w) => w.types));
     check('Ch3: gate + defenses -> Vinnie\'s siege (truck, snipers; refusing the deputy adds a sniper)', plan && plan[0].includes('truck') && plan[1].filter((t) => t === 'sniper').length === 2, JSON.stringify(plan));
@@ -1088,7 +1113,9 @@ if (want('v4')) {
   await C(() => { window.__cus.G.events.emit('jobDone', 'woodcut'); }); await sleep(300); await skipDialogues(page);
   await sleep(200);
   await talk4('reyes', 1);
-  check('Ch4: Agent Reyes and the ledger choice', (await step(page)) === 'ch4_fortify' && await C(() => window.__cus.G.s.choices.reyes === 'copy'));
+  check('Ch4: Agent Reyes and the ledger choice', (await step(page)) === 'ch4_rat' && await C(() => window.__cus.G.s.choices.reyes === 'copy'));
+  await solveRat(page);
+  check('Ch4: June Tremblay is caught -> fortify', (await step(page)) === 'ch4_fortify');
   await C(() => { const c = window.__cus; const o = c.G.s.home.openings; for (const k of ['gate_l', 'gate_r']) o[k].hp = o[k].baseHp; c.G.s.story.flags.fortified = 2; c.G.events.emit('defenseInstalled'); }); await sleep(300); await skipDialogues(page);
   const plan4 = await C(() => window.__cus.G.s.world.siege && window.__cus.G.s.world.siege.plan.waves.map((w) => w.dir));
   check('Ch4: iron gate + three defenses -> Nico\'s attack by road and by water', plan4 && plan4.includes('lake') && plan4.includes('shore'), JSON.stringify(plan4));
@@ -1140,7 +1167,9 @@ if (want('v5')) {
   for (const id of ['ferraro_rosary', 'vito_bocce']) { await C((id) => { const c = window.__cus; c.G.s.errands[id] = { state: 'done' }; c.G.events.emit('errandDone', id); }, id); await sleep(150); await skipDialogues(page); }
   check('Ch5: the avenue trusts you -> recon', (await step(page)) === 'ch5_recon', await step(page));
   await C(() => { const c = window.__cus; c.G.s.errands.recon = { state: 'done' }; c.G.events.emit('errandDone', 'recon'); }); await sleep(200); await skipDialogues(page);
-  check('Ch5: recon -> call in your favors', (await step(page)) === 'ch5_allies', await step(page));
+  check('Ch5: recon -> who\'s feeding Leo?', (await step(page)) === 'ch5_rat', await step(page));
+  await solveRat(page);
+  check('Ch5: Old Vito is caught -> call in your favors', (await step(page)) === 'ch5_allies', await step(page));
   await C(() => { const c = window.__cus; c.G.s.rel.mickey = 30; const ph = c.G.map.props.find((p) => p.id === 'phone'); c.G.player.x = ph.x; c.G.player.y = ph.y + 20; c.dbg.input.mouse.inside = false; c.G.player.angle = -Math.PI / 2; });
   await sleep(250); await pressE(page); await sleep(300); await skipDialogues(page);
   const al = await C(() => window.__cus.G.s.allies || []);
@@ -1276,6 +1305,35 @@ if (want('town')) {
   const jt = await ev(page, () => document.querySelector('.modal-body').innerText);
   check('Town: Journal shows the case board, storylines, the week and perks', ['Case board', 'Storylines', 'This week in town', 'Perks'].every((k) => jt.includes(k)));
   await page.screenshot({ path: OUT + 'town-journal.png' });
+  await ev(page, () => window.__cus.dbg.closeAll());
+
+  // Chapters 2–5: town life on every map, a rat case each, and a storyline.
+  for (const n of [2, 3, 4, 5]) {
+    await ev(page, (n) => { const c = window.__cus; c.G.s.story.done = { 1: true, 2: true, 3: true, 4: true }; c.dbg.moveToChapter(n); }, n); await sleep(600);
+    await page.click('[data-go]').catch(() => {}); await sleep(300); await skipDialogues(page);
+    await ev(page, () => { const c = window.__cus; if (c.G.cutscene) c.dbg.skipCutscene(); c.dbg.closeAll(); }); await skipDialogues(page);
+    const kinds = await ev(page, () => window.__cus.G.map.props.filter((p) => ['poker', 'market', 'supper', 'gallery', 'pie_stand'].includes(p.kind)).length);
+    await ev(page, () => import('./src/game/rat.js').then((rat) => {
+      const { G } = window.__cus; const c = rat.CASES[G.s.chapter];
+      G.s.time.minute = 12 * 60; rat.startRatCase(); G.s.story.step = c.step;
+      for (const [id, cl] of Object.entries(c.clues)) {
+        if (cl.talk) rat.ratTalk({ id: cl.talk });
+        else if (cl.point) { G.s.time.minute = cl.hours ? cl.hours[0] * 60 + 30 : 12 * 60; rat.ratPropAction({ rat: id }); }
+      }
+    }));
+    await skipDialogues(page);
+    const before = await ev(page, () => window.__cus.dbg.storyPlan().waves[1].types.length);
+    await ev(page, () => import('./src/game/rat.js').then((rat) => rat.ratTalk({ id: rat.CASES[window.__cus.G.s.chapter].culprit })));
+    await skipDialogues(page, 0); await sleep(300); await skipDialogues(page);
+    const res = await ev(page, () => ({ step: window.__cus.G.s.story.step, rat: window.__cus.G.s.choices['rat' + window.__cus.G.s.chapter], wave: window.__cus.dbg.storyPlan().waves[1].types.length }));
+    const next = { 2: 'ch2_fortify', 3: 'ch3_fortify', 4: 'ch4_fortify', 5: 'ch5_allies' }[n];
+    check(`Town: Chapter ${n} has town life and a rat case that changes the siege`, kinds === 5 && res.step === next && res.rat === 'feed' && res.wave === before - 1, JSON.stringify({ kinds, ...res, before }));
+  }
+  // A Chapter 5 storyline: Father Dom's ring.
+  await ev(page, () => { const { G } = window.__cus; G.s.story.flags.townOpen = true; G.s.time.minute = 10 * 60; G.s.inv.wood = 10; G.s.inv.toolkit = 1; });
+  const dom = await ev(page, () => import('./src/game/errands.js').then((m) => { const ok = m.offerErrand('dom'); return ok; }));
+  await skipDialogues(page, 0);
+  check('Town: Father Dom offers his storyline in Chapter 5', dom && (await erState('dom_1')) === 'active');
   await ctx.close();
 }
 

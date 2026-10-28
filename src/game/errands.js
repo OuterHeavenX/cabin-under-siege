@@ -36,6 +36,7 @@ import { inHours, fmtWindow, weekday, WEEKDAYS } from './calendar.js';
 import { grantPerk } from './perks.js';
 import { startTail } from './tail.js';
 import { spawnEnemy } from './enemies.js';
+import { LATER_ARCS } from '../data/storylines.js';
 
 const T = (x, y) => ({ x: x * TILE, y: y * TILE });
 const FOOD = new Set(['sandwich', 'stew']);
@@ -515,7 +516,8 @@ export const ERRANDS = {
     reward: { money: 80, xp: 40, jp: ['survivor', 6], perk: 'tracker', flag: 'hendersonRoll' },
   },
 
-};
+};Object.assign(ERRANDS, LATER_ARCS);
+
 
 const est = () => G.s.errands || (G.s.errands = {});
 export const errandState = (id) => est()[id] || null;
@@ -889,9 +891,10 @@ export function arcSummary() {
     if (!active && !finished) {
       const cand = parts.find((p) => !rec(p.id) && arcReady(p));
       const waiting = parts.find((p) => !rec(p.id) && (p.requires || []).every((r) => rec(r) && rec(r).state === 'done') && (!p.needsChoice || (rec(p.requires[0]) || {}).choice === p.needsChoice));
-      if (cand) next = 'Ready — go and talk to them.';
+      if (!G.s.story.flags.townOpen && !done.length) next = 'Later — once you\'ve found work in town.';
+      else if (cand) next = 'Ready — go and talk to them.';
       else if (waiting) next = waiting.hours && !inHours(waiting.hours) ? `Find them ${fmtWindow(waiting.hours)}.` : waiting.waitDays ? 'Give it a day or two.' : 'Not yet.';
-      else if (!done.length) next = G.s.story.flags.townOpen ? 'Get to know them — talk to them in town.' : 'Later in the chapter.';
+      else if (!done.length) next = 'Get to know them first — help them out around town.';
     }
     return { arc, giver: parts[0].giver, done: done.map((p) => p.title), active: active ? { title: active.title, stage: stageLabel(active.id) } : null, next, finished, count: done.length, total };
   });

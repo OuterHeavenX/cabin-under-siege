@@ -40,31 +40,39 @@ than using simple beeps:
 loop per mood). See [`audio/README.md`](audio/README.md) for the sound names and
 recommended free sources.
 
-### Life in town (v0.9) — Chapter 1 first
+### Life in town (v0.9)
 
-Pine Hollow is now a place to live, not just a place to wait for the next fight.
+Every town is now a place to live, not just a place to wait for the next fight.
 
 - **The week has a shape.** Day 1 is a Monday and the HUD clock shows the weekday plus what's on
-  today. **Poker night** (Wed & Sat, 7–11 PM, back of the diner), **market day** (Friday: stalls
-  on Main Street and 20% off at the store), **Sunday supper** at the chapel (everyone likes you a
-  little more, full health), and the **county fair** on the first Saturday (shooting gallery and pie).
-- **Personal storylines** with choices and perks: Ruth and Harold's shed (letters from Duluth, a
-  daughter nobody knew about, a letter in the deer blind at first light); Dee's Thursday visitor
-  (watch Earl Pruitt collect, **tail** him across town without being seen, then scare him off, pay
-  him off, or call the State Police); Gus's broken saw and the night-time log vandal; Old Man
-  Tibbs's poker game and his late wife's venison stew; Mr. Henderson's suspiciously well-paid hides.
-  Each finished storyline gives a **perk** (Field Medic, Dee's Tab, Mill Hand, Card Sharp, Tracker,
-  and Marksman from the fair).
-- **The rat.** After the probe, Frank works out that someone in Pine Hollow told the man in the grey
-  coat where he lives. You have four days to find out who: the diner payphone after dark, the trash
-  behind Henderson's house, alibis from the townsfolk, poker-table talk, Sunday supper, the scanner.
-  The Journal keeps a **case board**. Accuse the wrong person and the town hears about it; unmask
-  the rat and either turn him (he feeds the mob lies — a lighter first siege) or run him out of
-  town. Run out of time and they come in harder.
-- **Things to do**: five-card draw poker with three regulars and their gossip; **deer hunting** in
-  the north woods at dawn and dusk (walk soft — they spook), venison to cook or smoke and pelts to
-  sell; **home projects** that take days (workshop, watchtower, police scanner, smokehouse), each
-  with a lasting effect; **courier jobs** with a delivery reputation, regular clients who tip, and
+  today. **Poker night** (Wed & Sat, 7–11 PM), **market day** (Friday: stalls and 20% off at the
+  store), **Sunday supper** (everyone likes you a little more, full health), and a **fair** on the
+  first Saturday of each chapter (shooting gallery and pie). Every chapter has its own card table
+  and regulars: the diner in Pine Hollow, the room above the Millbrook post office, the Kettle
+  Crossing café, the Point Yacht Club and Mickey Doyle's tow-yard office.
+- **Personal storylines** for the people in every chapter — 17 of them — with choices, tailing,
+  night stakeouts, hunts, card games and fights, each ending in a **perk**:
+  - *Pine Hollow:* Ruth and Harold's secret daughter; Dee's Thursday "insurance" man (tail Earl
+    Pruitt, then scare him off, pay him off, or call the State Police); Gus's saw and the night-time
+    log vandal; Old Man Tibbs's late wife's stew; Mr. Henderson's suspiciously well-paid hides.
+  - *Millbrook:* the Buick on Larch Street and the woman Marcus hid in 1981; Rosa's van and her
+    missing rifles; Pete's piano and his eleven-year losing streak at cards.
+  - *Kettle Crossing:* a breech calf at dawn, the woman in Ingrid's hayloft, and the night bus; Bo's
+    freezer and his father's shotgun; the co-op's missing grain.
+  - *Port Whitcombe:* Edward Whitcombe's boathouse safe and what the Commodore knew; Theo's
+    "artisanal" jerky and the club card game; Walt's dock and his dawn range lessons.
+  - *Short Hills:* Father Dom's boxing ring and your mother's grave; Joey Marchetti's impounded
+    Buick and his notebook; Leo's bagman, followed up the avenue.
+- **The rat.** In every chapter someone in town has sold you out, and before the big fight you
+  have a few days to find out who: places to search at the right hour, alibis, poker-table talk,
+  Sunday supper and the police scanner. The Journal keeps a **case board**. Accuse the wrong person
+  and the town hears about it; unmask the rat and either turn them (they feed the mob lies — a
+  lighter siege) or run them out of town (everyone you know likes you more). Run out of time and
+  the attack comes in harder.
+- **Things to do**: five-card draw poker; **deer hunting** at dawn and dusk (walk soft — they spook)
+  in Pine Hollow, Kettle Crossing, Port Whitcombe and the Short Hills ravine; venison to cook or
+  smoke and pelts to sell; **home projects** at every home that take days (workshop, watchtower,
+  police scanner, smokehouse); **courier jobs** with a delivery reputation, regulars who tip, and
   rush orders.
 
 ### Awareness and game feel (v0.8.2)
@@ -404,7 +412,7 @@ validation/migration, simultaneous two-finger touch (joystick + aim) in an iPhon
 landscape viewport, rotation to portrait and back, and pausing when backgrounded. It fails
 on any console error. Screenshots go to `test-output/`.
 
-Current result: **all checks pass** (see the count printed at the end of `npm test`). Run one part with `ONLY=desktop|v2|audio|v3|v4|v5|v7|stealth|town|pad|electron|mobile npm test` (comma-separate several). The town block plays the rat mystery (clues, a wrong accusation, turning the rat and the lighter siege that follows), Dee's whole storyline (a Thursday, tailing Earl, the choice, the woodlot fight, the perk), a hand of poker, a deer hunt at dawn, the fair's shooting gallery and the new Journal sections. The v7 block covers cloud save between two browsers (code pad, newer-save offer, conflict refusal), trophies, New Game+, the whole Newark episode (including a restart after falling) and the daily challenge posting to the leaderboard; the local server runs the real API Worker against SQLite. The pad block drives the desktop build with a simulated controller (title, difficulty, dialogue, move, aim, fire, pause menu, tabs, settings, back); the electron block launches the packaged app (after `node tools/build-desktop.mjs`, under a display such as `xvfb-run`). The v5 block plays Chapter 5 end to end: the move to Short Hills, chores, Mickey's jobs, recon, the ally phone calls, Carlo's siege, the floor plans, the night-only drive, guards holding posts, the locked study, Ruth's rescue, Dante's key and the justice ending. The v0.4 block covers portraits, rain, cutscenes and skipping, lasting damage, Duke, the safe room, dog handlers, loot drops and the full Chapter 4 story; the v0.3 block covers Ruth's move, Chapter 3, farm life, difficulty and Endless Siege. The v0.2 block covers buying/switching/firing the shotgun and rifle, rifle pierce, favors, shutters, traps, cameras, arsonist fire, the lieutenant's rally, weakest-point targeting, the move to Chapter 2, the full Chapter 2 story and siege, saving in Chapter 2 and migrating a version-1 save.
+Current result: **all checks pass** (see the count printed at the end of `npm test`). Run one part with `ONLY=desktop|v2|audio|v3|v4|v5|v7|stealth|town|pad|electron|mobile npm test` (comma-separate several). The town block plays the Chapter 1 rat mystery (clues, a wrong accusation, turning the rat and the lighter siege that follows), the rat cases of Chapters 2–5, Dee's whole storyline (a Thursday, tailing Earl, the choice, the woodlot fight, the perk), a hand of poker, a deer hunt at dawn, the fair's shooting gallery and the new Journal sections. The v7 block covers cloud save between two browsers (code pad, newer-save offer, conflict refusal), trophies, New Game+, the whole Newark episode (including a restart after falling) and the daily challenge posting to the leaderboard; the local server runs the real API Worker against SQLite. The pad block drives the desktop build with a simulated controller (title, difficulty, dialogue, move, aim, fire, pause menu, tabs, settings, back); the electron block launches the packaged app (after `node tools/build-desktop.mjs`, under a display such as `xvfb-run`). The v5 block plays Chapter 5 end to end: the move to Short Hills, chores, Mickey's jobs, recon, the ally phone calls, Carlo's siege, the floor plans, the night-only drive, guards holding posts, the locked study, Ruth's rescue, Dante's key and the justice ending. The v0.4 block covers portraits, rain, cutscenes and skipping, lasting damage, Duke, the safe room, dog handlers, loot drops and the full Chapter 4 story; the v0.3 block covers Ruth's move, Chapter 3, farm life, difficulty and Endless Siege. The v0.2 block covers buying/switching/firing the shotgun and rifle, rifle pierce, favors, shutters, traps, cameras, arsonist fire, the lieutenant's rally, weakest-point targeting, the move to Chapter 2, the full Chapter 2 story and siege, saving in Chapter 2 and migrating a version-1 save.
 
 ### iPhone / iPad checklist (real device testing still needed)
 

@@ -5,6 +5,7 @@ import { G } from './state.js';
 import { choose } from '../util.js';
 import { addMoney } from './progression.js';
 import { hasPerk } from './perks.js';
+import { LATER_TABLES } from '../data/storylines.js';
 
 export const ANTE = 10;
 export const BET = 20;
@@ -26,6 +27,8 @@ export const TABLES = {
     ],
   },
 };
+
+Object.assign(TABLES, LATER_TABLES);
 
 /** Extra lines the story can slip into the table talk (clues, storyline hints). */
 export const gossipHooks = [];

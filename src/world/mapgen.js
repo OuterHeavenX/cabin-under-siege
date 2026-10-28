@@ -376,6 +376,10 @@ export function buildTownMap() {
 
 /** Town life on a chapter's work map: poker table, market stalls, Sunday supper, the fairground. */
 function addTownLife(m, cfg) {
+  // Dev check: everything we place should land on open ground.
+  const clash = (x, y, w, h, what) => { for (let cy = y; cy < y + h; cy++) for (let cx = x; cx < x + w; cx++) if (m.getSolid(cx, cy) && !m.trees.has(m.idx(cx, cy))) { console.warn(`[town life] ${m.id}: ${what} overlaps something at ${cx},${cy}`); return; } };
+  for (const [cx, cy] of cfg.stalls) clash(cx, cy, 2, 1, 'stall');
+  if (cfg.fair) { for (const [cx, cy] of cfg.fair.tents) clash(cx, cy, 3, 2, 'tent'); clash(cfg.fair.gallery[0], cfg.fair.gallery[1], 8, 1, 'gallery'); }
   const [px, py] = cfg.poker;
   addProp(m, { id: 'poker_table', kind: 'poker', x: px * TILE, y: py * TILE, label: 'Poker table', r: 46 });
   m.points.poker_table = P(px, py);
@@ -395,10 +399,11 @@ function addTownLife(m, cfg) {
   for (const [cx, cy] of f.tents) { m.fillSolid(cx, cy, 3, 2, SO.FURN); m.decor.push({ kind: 'tent', x: cx, y: cy, w: 3, h: 2 }); }
   const [gx, gy] = f.gallery;
   m.fillSolid(gx, gy, 8, 1, SO.FURN); m.decor.push({ kind: 'gallery', x: gx, y: gy, w: 8, h: 2 });
-  m.gallery = { x0: (gx + 0.5) * TILE, x1: (gx + 7.5) * TILE, y: (gy + 1.5) * TILE, shootFrom: P(gx + 4, gy + 6) };
-  addProp(m, { id: 'gallery', kind: 'gallery', x: (gx + 4) * TILE, y: (gy + 6) * TILE, label: 'Shooting gallery', r: 48 });
+  const shoot = f.shoot || 6;
+  m.gallery = { x0: (gx + 0.5) * TILE, x1: (gx + 7.5) * TILE, y: (gy + 1.5) * TILE, shootFrom: P(gx + 4, gy + shoot) };
+  addProp(m, { id: 'gallery', kind: 'gallery', x: (gx + 4) * TILE, y: (gy + shoot) * TILE, label: 'Shooting gallery', r: 48 });
   addProp(m, { id: 'pie_stand', kind: 'pie_stand', x: f.pie[0] * TILE, y: f.pie[1] * TILE, label: 'Pie stand', r: 44 });
-  m.points.fair = P(gx + 4, gy + 6);
+  m.points.fair = P(gx + 4, gy + shoot);
 }
 
 /* ------------------------------------------------------------------ */
@@ -575,6 +580,15 @@ export function buildMillbrookMap(home) {
     building: 'house', interior: { cx: 24, cy: 37 }, allyPost: P(21.5, 34.5),
     flood: { x: 24.5 * TILE, y: 32.6 * TILE, r: 270 }, porch: { x: 24.5 * TILE, y: 32 * TILE, r: 95 },
   };
+  m.homeInfo.projectSpots = { workshop: [31, 39, 3, 2], watchtower: [14, 42, 2, 2], radio: [25, 40, 1, 1], smokehouse: [21, 44, 2, 2] };
+  addTownLife(m, {
+    poker: [50.5, 21.5],
+    stalls: [[47, 26], [49, 26]],
+    supper: [53.5, 26.6],
+    fair: { rect: [47, 0, 63, 7], tents: [[48, 2], [60, 3]], gallery: [52, 1], pie: [49.5, 5.4] },
+  });
+  m.points.hendricks_trash = P(11.5, 32.4);
+  m.points.library_back = P(62.5, 26.5);
   return m;
 }
 
@@ -754,6 +768,17 @@ export function buildFarmMap(home) {
     building: 'farmhouse', interior: { cx: 20, cy: 25 }, allyPost: P(16.5, 21.5), gate: { cx: 21, cy: 12 },
     flood: { x: 20.5 * TILE, y: 18.4 * TILE, r: 300 }, porch: { x: 20.5 * TILE, y: 19.2 * TILE, r: 95 },
   };
+  m.homeInfo.projectSpots = { workshop: [29, 27, 3, 2], watchtower: [10, 26, 2, 2], radio: [24, 28, 1, 1], smokehouse: [33, 27, 2, 2] };
+  addTownLife(m, {
+    poker: [68.5, 25.5],
+    stalls: [[63, 21], [66, 21], [69, 21]],
+    supper: [50.5, 11.4],
+    fair: { rect: [9, 31, 30, 39], tents: [[10, 32], [26, 32]], gallery: [16, 32], pie: [12.5, 36.4] },
+  });
+  m.huntZone = [1, 42, 75, 53];
+  m.points.hunt_area = P(30, 44);
+  m.points.truck_cab = P(60.5, 1.4);
+  m.points.cb_radio = P(70.5, 24.6);
   return m;
 }
 
@@ -941,6 +966,17 @@ export function buildEstateMap(home) {
     building: 'manor', interior: { cx: 34, cy: 25 }, allyPost: P(36.5, 20.6), gate: { cx: 34, cy: 10 },
     flood: { x: 34 * TILE, y: 18 * TILE, r: 340 }, porch: { x: 34 * TILE, y: 18 * TILE, r: 110 },
   };
+  m.homeInfo.projectSpots = { workshop: [15, 26, 3, 2], watchtower: [15, 12, 2, 2], radio: [42, 24, 1, 1], smokehouse: [20, 33, 2, 2] };
+  addTownLife(m, {
+    poker: [34.5, 56.5],
+    stalls: [[14, 49], [17, 49], [20, 49], [23, 49]],
+    supper: [21.5, 56],
+    fair: { rect: [36, 32, 54, 36], tents: [[49, 33], [52, 33]], gallery: [40, 32], pie: [37.5, 35.4], shoot: 4 },
+  });
+  m.huntZone = [0, 4, 6, 48];
+  m.points.hunt_area = P(4, 30);
+  m.points.club_office = P(38.5, 54.5);
+  m.points.june_boat = P(57.5, 52.5);
   return m;
 }
 
@@ -1072,6 +1108,16 @@ export function buildShortHillsMap(home) {
     building: 'watchhouse', interior: { cx: 49, cy: 10 }, allyPost: P(46.5, 12.2),
     flood: { x: 48.5 * TILE, y: 15 * TILE, r: 300 }, porch: { x: 48.5 * TILE, y: 15 * TILE, r: 100 },
   };
+  m.homeInfo.projectSpots = { workshop: [56, 8, 3, 2], watchtower: [57, 12, 2, 2], radio: [45, 12, 1, 1], smokehouse: [56, 4, 2, 2] };
+  addTownLife(m, {
+    poker: [30.5, 11.5],
+    stalls: [[40, 19], [43, 19], [46, 19]],
+    supper: [16.5, 12.5],
+    fair: { rect: [36, 20, 50, 28], tents: [[46, 21], [47, 25]], gallery: [37, 21], pie: [38.5, 25.4] },
+  });
+  m.huntZone = [1, 29, 58, 49];
+  m.points.hunt_area = P(30, 36);
+  m.points.club_back = P(34.5, 15.4);
   return m;
 }
 

@@ -12,6 +12,7 @@ import { playDialogue } from '../ui/dialogue.js';
 import { saveGame } from './save.js';
 import { chapter, workMap, workMapId, homeMap, homeMapId } from './chapters.js';
 import { NPCS } from '../data/npcs.js';
+import { LATER_COURIER } from '../data/storylines.js';
 
 const first = (id) => NPCS[id].name.split(' ')[0].replace(/"/g, '');
 const C = () => chapter();
@@ -54,6 +55,7 @@ export const COURIER = {
     ],
   },
 };
+Object.assign(COURIER, LATER_COURIER);
 /** Story hooks: (job) => special contents line, or null. */
 export const courierHooks = [];
 

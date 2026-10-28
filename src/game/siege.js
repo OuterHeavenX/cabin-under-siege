@@ -63,7 +63,18 @@ export function makeRaidPlan(size, kind = 'raid') {
   return { kind, waves, hpMult };
 }
 
+/** The story siege for this chapter, adjusted for how the rat case went. */
 export function storyPlan() {
+  const plan = basePlan();
+  const rat = (G.s.choices || {})[`rat${G.s.chapter}`];
+  if (G.s.chapter > 1 && rat && plan.waves.length > 1) {
+    if (rat === 'feed') { plan.waves[1].types.pop(); plan.waves[plan.waves.length - 1].delay += 20; } // they believed the lies
+    if (rat === 'missed') plan.waves[1].types.push('enforcer'); // they knew everything
+  }
+  return plan;
+}
+
+function basePlan() {
   const ch = G.s.choices || {};
   if (G.s.chapter === 5) {
     const waves = [

@@ -28,6 +28,7 @@ const ASSETS = [
   "./src/game/tail.js",
   "./src/game/townlife.js",
   "./src/ui/poker.js",
+  "./src/data/storylines.js",
   "./src/game/activities.js",
   "./src/game/ally.js",
   "./src/game/chapters.js",

@@ -14,6 +14,7 @@ import { sfx } from '../audio.js';
 import { grantPerk } from './perks.js';
 import { saveGame } from './save.js';
 import { choose, dist } from '../util.js';
+import { LATER_SUPPER } from '../data/storylines.js';
 
 const ev = (id) => WEEKLY.find((e) => e.id === id);
 const when = (id) => `${ev(id).days.join(' & ')}, ${fmtWindow(ev(id).hours)}`;
@@ -87,6 +88,8 @@ const SUPPER_TALK = {
     { who: 'Ruth Calloway', text: '(Ruth slides you the last piece of cobbler under the table.) Don\'t tell Dee.' },
   ],
 };
+
+Object.assign(SUPPER_TALK, LATER_SUPPER);
 
 /* ---------------- county fair: shooting gallery ---------------- */
 const ROUND = 25;

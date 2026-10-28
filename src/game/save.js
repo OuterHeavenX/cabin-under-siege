@@ -116,6 +116,8 @@ export function migrate(data) {
   const mapsByChapter = { 1: ['cabin', 'town'], 2: ['millbrook'], 3: ['farm'], 4: ['estate'], 5: ['shorthills', 'mansion'] };
   if (!mapsByChapter[d.chapter]) d.chapter = 1;
   if (!mapsByChapter[d.chapter].includes(d.player.map)) d.player.map = mapsByChapter[d.chapter][0];
+  // Saves from before town life (v0.9): open the town once you're past meeting your job contact.
+  if ([2, 3, 4].includes(d.chapter) && d.story && d.story.flags && !d.story.flags.townOpen && !/_(arrive|meet_\w+|find_work)$/.test(d.story.step || '')) d.story.flags.townOpen = true;
   if (!Array.isArray(d.home.traps)) d.home.traps = [];
   d.home.traps = d.home.traps.filter((t) => t && Number.isInteger(t.cx) && Number.isInteger(t.cy));
   d.money = Math.max(0, Math.floor(Number(d.money) || 0));
