@@ -7,7 +7,7 @@ You are Frank Lowe — formerly Frankie Corsetti of the Vescari crime family —
 to build an honest life in a cabin outside the small town of Pine Hollow. By day you
 work, meet people and fix up the place. Some nights, the family comes for you.
 
-This build (v0.9) contains **the complete story — five playable chapters with four endings** — plus a prequel episode, New Game+ and an arcade mode. It runs in the browser and as an installable Steam Deck / PC game:
+This build (v0.10) contains **the complete story — five playable chapters with four endings** — plus a prequel episode, New Game+ and an arcade mode. It runs in the browser and as an installable Steam Deck / PC game:
 
 1. **The Cabin** — Pine Hollow, a remote cabin and a small town.
 2. **Larch Street** — Millbrook, Ohio: a house on a quiet street, a neighbor with secrets, and Sal Benedetto.
@@ -39,6 +39,34 @@ than using simple beeps:
 `audio/manifest.json` — each listed sound replaces the generated one (music files
 loop per mood). See [`audio/README.md`](audio/README.md) for the sound names and
 recommended free sources.
+
+### Visual polish (v0.10)
+
+- **Terrain**: natural ground is painted smoothly at sub-tile resolution with layered noise, so the
+  tile grid is gone. Grass varies from shade to sunlit to dry patches, is trampled and worn near
+  paths and porches, and darkens under trees. Paths wander with ruts, pebbles and the odd weed;
+  wildflower patches (daisies, buttercups, asters, clover, chicory), grass tufts, clover, leaf litter
+  under trees, and deeper water in the middle of ponds with sandy, wet shorelines. Asphalt has grain,
+  cracks and patches; porches have weathered boards.
+- **Trees**: bigger, layered canopies with leaf texture and a sunlit rim, several palettes and sizes
+  per species, stacked-tier pines, real apple trees in the yards at the cabin and the farm, visible
+  trunks and soft shadows from the same sun as the buildings. Canopies still fade when anyone stands
+  under them, so they never hide a fight.
+- **Crops**: each garden row grows a real crop — corn, cabbage, staked tomatoes, pumpkins — and picked
+  cells show the actual regrowth (bare soil, sprouts, young plants, ripe again).
+- **Buildings**: layered soft shadows, stone foundations with a little grime, shrubs and flowers along
+  homes, varied shingles with ridge caps, gutters and moss on rustic roofs; front windows with painted
+  shutters, flower boxes and curtains glowing at night; doors with trim and a porch lamp after dark.
+  (This also fixes front walls that were always drawn in the plain side-wall style.)
+- **Characters**: a darker outline for a clear silhouette, Frank in a brown leather jacket and jeans,
+  slightly larger figures, soft contact shadows, idle breathing, a reach when interacting, a red flash
+  when hit; hostile rings carry tick marks so enemies don't rely on colour alone.
+- **Light**: a bluer, more readable night, stronger warm window glow, a golden hour, a red-orange sunset
+  and a pink dawn; attacks get a tense red edge instead of a red wash. Leaves drift on the breeze by day.
+- **Combat**: a star-shaped muzzle flash with glow, a reload ring over Frank, and a low-ammo warning (the
+  ammo panel turns amber and the RELOAD button lights up).
+- **Touch**: lighter, more transparent controls with a cohesive style, plus **Touch button opacity** and
+  **Touch button size** in Settings; achievement pop-ups moved out from under your thumbs.
 
 ### Life in town (v0.9)
 

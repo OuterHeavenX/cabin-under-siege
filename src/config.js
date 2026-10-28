@@ -1,6 +1,6 @@
 // Global tuning constants.
 
-export const GAME_VERSION = '0.9.1';
+export const GAME_VERSION = '0.10.0';
 export const TILE = 32;
 export const SAVE_VERSION = 2;
 export const SAVE_KEY = 'cabinUnderSiege.save';
@@ -33,5 +33,7 @@ export const DEFAULT_SETTINGS = {
   rumble: true, // controller vibration
   fpsCap: 'auto', // 'auto' | '30' (battery saver)
   textSize: 'normal', // 'normal' | 'large'
+  touchOpacity: 0.85, // on-screen controls, 0.3..1
+  touchSize: 'normal', // 'small' | 'normal' | 'large'
   cloudServer: '', // desktop app: override CLOUD_SERVER
 };

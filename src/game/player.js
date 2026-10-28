@@ -235,7 +235,7 @@ function startReload(p, d) {
   const w = WEAPONS[p.weapon];
   if (p.reloadT > 0 || p.mag >= magSize(p.weapon)) return;
   if (count(w.ammo) <= 0) { toast(`No spare ${ITEM_NAME(w.ammo)}.`, 'warn'); return; }
-  p.reloadT = reloadTime(p.weapon);
+  p.reloadT = p.reloadMax = reloadTime(p.weapon);
   sfx(w.perRound ? 'shell' : 'reload');
 }
 
@@ -247,7 +247,7 @@ function finishReload(p, d) {
   p.mag += take;
   p.reloadT = 0;
   // Shotgun keeps loading shells until full (or until you fire).
-  if (w.perRound && p.mag < magSize(p.weapon) && count(w.ammo) > 0) { p.reloadT = reloadTime(p.weapon); sfx('shell'); }
+  if (w.perRound && p.mag < magSize(p.weapon) && count(w.ammo) > 0) { p.reloadT = p.reloadMax = reloadTime(p.weapon); sfx('shell'); }
   else sfx('reloadDone');
 }
 

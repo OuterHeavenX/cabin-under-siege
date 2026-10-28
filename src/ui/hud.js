@@ -98,7 +98,14 @@ export function updateHud(dt, info) {
   const reserve = s.inv[w.ammo] || 0;
   els.ammo.textContent = p.reloadT > 0 && !w.perRound ? 'RELOADING' : `${p.mag} / ${reserve}`;
   els.ammo.classList.toggle('warn', p.mag === 0 && p.reloadT <= 0);
-  els.ammoSub.textContent = p.mag === 0 && reserve === 0 ? 'EMPTY — switch or MELEE' : p.mag === 0 ? 'Press R to reload' : `${w.icon} ${w.name}`;
+  // Low ammo: amber when a quarter of the magazine is left; the reload button lights up.
+  const low = p.mag > 0 && p.reloadT <= 0 && info.magSize > 2 && p.mag <= Math.max(1, Math.round(info.magSize * 0.25));
+  els.ammo.classList.toggle('low', low);
+  els.ammo.parentElement.classList.toggle('low-ammo', low);
+  els.ammo.parentElement.classList.toggle('empty', p.mag === 0 && p.reloadT <= 0);
+  const rb = els.reloadBtn || (els.reloadBtn = document.getElementById('btn-reload'));
+  if (rb) rb.classList.toggle('reload-now', (low || p.mag === 0) && p.reloadT <= 0 && reserve > 0);
+  els.ammoSub.textContent = p.mag === 0 && reserve === 0 ? 'EMPTY — switch or MELEE' : p.mag === 0 ? (document.body.classList.contains('touch') ? 'Tap RELOAD' : document.body.classList.contains('pad') ? 'Press X to reload' : 'Press R to reload') : low ? 'Low — reload soon' : `${w.icon} ${w.name}`;
   els.swapLabel.textContent = info.weaponCount > 1 ? `${w.short}` : 'SWAP';
   els.swapBtn.classList.toggle('dim', info.weaponCount < 2);
   els.reloadBar.style.width = p.reloadT > 0 ? `${(1 - p.reloadT / info.reloadTime) * 100}%` : '0%';

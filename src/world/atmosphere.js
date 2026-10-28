@@ -147,15 +147,16 @@ export function drawScreenAtmosphere(ctx, w, h, dk, dt) {
   const siege = !!G.siegeActive;
   const indoor = !!(G.player && G.map.buildingAt(G.player.x, G.player.y));
   // Cold night, overcast rain, grey fog.
-  if (dk > 0.05) { ctx.fillStyle = `rgba(20,35,80,${0.12 * dk})`; ctx.fillRect(0, 0, w, h); }
+  if (dk > 0.05) { ctx.fillStyle = `rgba(20,40,90,${0.14 * dk})`; ctx.fillRect(0, 0, w, h); }
   if (rain > 0.02) { ctx.fillStyle = `rgba(30,40,55,${0.16 * rain})`; ctx.fillRect(0, 0, w, h); }
   if (fog > 0.02) { ctx.fillStyle = `rgba(150,155,160,${(dk > 0.5 ? 0.08 : 0.16) * fog})`; ctx.fillRect(0, 0, w, h); }
   // Attacks run red.
   if (siege) {
     const pulse = 0.5 + 0.5 * Math.sin(G.time * 1.6);
-    ctx.fillStyle = `rgba(120,0,0,${0.07 + pulse * 0.03})`; ctx.fillRect(0, 0, w, h);
-    const vg = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.35, w / 2, h / 2, Math.max(w, h) * 0.7);
-    vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(60,0,0,0.45)');
+    // A tense red edge rather than a red wash, so attackers stay easy to see.
+    ctx.fillStyle = `rgba(120,0,0,${0.025 + pulse * 0.02})`; ctx.fillRect(0, 0, w, h);
+    const vg = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.42, w / 2, h / 2, Math.max(w, h) * 0.72);
+    vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, `rgba(70,0,0,${0.3 + pulse * 0.08})`);
     ctx.fillStyle = vg; ctx.fillRect(0, 0, w, h);
   }
   // Rain streaks.

@@ -13,7 +13,7 @@ import { showChapterStart, openDifficultyPicker, openEndlessPicker, openCloud, o
 import { initCloudSync, cloudCode, cloudCheck, cloudTake } from './game/cloud.js';
 import { canNewGamePlus, makeNewGamePlus } from './game/ngplus.js';
 import { buildGroundCanvas, buildRoofCanvas, render } from './world/render.js';
-import { initInput, consume, endFrame, resetInput, setTouchMode, input, suppressGhostClick, desktopApp } from './input.js';
+import { initInput, consume, endFrame, resetInput, setTouchMode, input, suppressGhostClick, desktopApp, applyTouchStyle } from './input.js';
 import { updateGamepad, rumble } from './gamepad.js';
 import { initFxEvents, updateFx } from './world/fx.js';
 import { initAudio, setVolumes, updateAudio, setMusic, setAmbient, suspendAudio, resumeAudio, sfx, setListener, setFireLevel, audioDebug, renderOffline, musicBar, birdCall } from './audio.js';
@@ -36,7 +36,7 @@ import { ITEMS } from './data/items.js';
 import { NPCS } from './data/npcs.js';
 import { TRUST_LEVEL } from './game/ally.js';
 import { WEAPONS, WEAPON_ORDER } from './data/weapons.js';
-import { ownsWeapon, reloadTime } from './game/player.js';
+import { ownsWeapon, reloadTime, magSize } from './game/player.js';
 import { saveGame, hasSave, readSaveRaw, migrate, validateSave, deleteSave, loadSettings, canSaveNow } from './game/save.js';
 import { addPickup, damageEnemy } from './game/combat.js';
 import { updateFire, startFire } from './game/fire.js';
@@ -313,7 +313,7 @@ function computeHudInfo(dt) {
   }
   G.waypoint = wp && !G.siegeActive ? wp : null;
   hudInfo = {
-    maxHp: d.maxHp, maxStamina: d.maxStamina, reloadTime: reloadTime(G.player.weapon), weapon: WEAPONS[G.player.weapon], weaponCount: WEAPON_ORDER.filter(ownsWeapon).length, objective: G.prequel ? prequelObjective() : objectiveText(), jobLine, danger,
+    maxHp: d.maxHp, maxStamina: d.maxStamina, reloadTime: reloadTime(G.player.weapon), magSize: magSize(G.player.weapon), weapon: WEAPONS[G.player.weapon], weaponCount: WEAPON_ORDER.filter(ownsWeapon).length, objective: G.prequel ? prequelObjective() : objectiveText(), jobLine, danger,
     quickLabel: q ? `${ITEMS[q].icon}×${count(q)}` : 'USE', night: isNight(), combat: inCombat(), target: null,
   };
 }
@@ -734,6 +734,7 @@ function toggleFullscreen() {
 function boot() {
   loadSettings();
   document.body.classList.toggle('large-text', G.settings.textSize === 'large');
+  applyTouchStyle();
   // Desktop app: the Deck going to sleep pauses the game.
   window.addEventListener('cus-suspend', () => pauseForInterruption());
   setVolumes(G.settings.sfxVolume, G.settings.musicVolume);

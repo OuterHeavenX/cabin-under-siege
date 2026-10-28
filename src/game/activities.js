@@ -12,7 +12,7 @@ import { toast } from '../ui/hud.js';
 import { sfx } from '../audio.js';
 import { clamp } from '../util.js';
 
-const REGROW_DAYS = 3;
+export const REGROW_DAYS = 3;
 
 /* ---------------- fishing ---------------- */
 /** Nearest water cell the player is standing beside, or null. */

@@ -1547,7 +1547,7 @@ if (want('stealth')) {
   await skipDialogues(page);
   await ev(page, () => { const c = window.__cus; c.G.s.chapter = 1; c.G.s.story.done = { 1: true }; c.dbg.moveToChapter(2); });
   await sleep(500); await page.click('[data-go]').catch(() => {}); await sleep(300); await skipDialogues(page);
-  const hidePos = [21.5, 20.6]; // back wall of the Bell house across Larch Street, out of sight of its windows
+  const hidePos = [23.5, 26.3]; // inside the Bell house across Larch Street, against the front wall between its windows: no line of sight from outside
   await ev(page, ([x, y]) => { const c = window.__cus; c.dbg.closeAll(); c.G.s.story.step = 'ch2_free'; c.G.s.story.flags.firstSiegeDone = true; c.G.s.time.minute = 22 * 60; c.G.s.time.day = 5; c.G.player.x = x * 32; c.G.player.y = y * 32; c.dbg.startSiege({ plan: c.dbg.makeRaidPlan(4) }, true); }, hidePos);
   await sleep(300); await ev(page, () => { if (window.__cus.G.cutscene) window.__cus.dbg.skipCutscene(); });
   let st = null, sawSearch = false, everAlerted = false;

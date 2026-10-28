@@ -360,7 +360,9 @@ function truckRam(e, t, m) {
     const x = e.x + Math.cos(a) * 34 - Math.cos(e.angle) * 10, y = e.y + Math.sin(a) * 34 - Math.sin(e.angle) * 10;
     const q = spawnEnemy(ty, x, y, { hpMult: e.hpMultApplied, noDiff: true });
     m.pushOut(q, q.radius, 'enemy');
-    q.alerted = true;
+    // Where they have to find you, the passengers search like everyone else;
+    // otherwise they pile out already knowing where you are.
+    if (!huntMode()) q.alerted = true;
     if (G.siege) G.siege.spawned++;
   });
   G.events.emit('truckRammed', e);

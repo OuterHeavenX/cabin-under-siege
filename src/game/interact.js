@@ -275,6 +275,7 @@ export function findTarget() {
 export function doInteract(target) {
   if (!target) return;
   sfx('ui');
+  if (G.player) G.player.reachT = 0.3; // Frank reaches out (drawn by the renderer)
   target.action();
 }
 

@@ -165,7 +165,7 @@ export function buildCabinMap(home) {
   scatterTrees(m, rnd, 15, 0, W - 1, 38, 0.05, avoid);
   scatterTrees(m, rnd, 0, 41, W - 1, H - 1, 0.35, (cx, cy) => cy < 42);
   // A few deliberate trees near the yard: cover for both sides.
-  [[16, 22], [33, 18], [17, 28], [34, 27], [20, 31], [29, 36]].forEach(([cx, cy]) => addTree(m, cx, cy, 'oak'));
+  [[16, 22], [33, 18], [17, 28], [34, 27], [20, 31], [29, 36]].forEach(([cx, cy], k) => addTree(m, cx, cy, k % 2 ? 'oak' : 'fruit'));
 
   // Attacker spawn points (map edges).
   m.spawns = {
@@ -719,7 +719,7 @@ export function buildFarmMap(home) {
   scatterTrees(m, rnd, 0, 0, W - 1, 1, 0.25, avoid);
   scatterTrees(m, rnd, 22, 4, 43, 11, 0.12, avoid);
   scatterTrees(m, rnd, 41, 40, 75, 48, 0.2, avoid);
-  [[8, 26], [27, 14], [38, 39], [13, 13]].forEach(([cx, cy]) => addTree(m, cx, cy, 'oak'));
+  [[8, 26], [27, 14], [38, 39], [13, 13]].forEach(([cx, cy]) => addTree(m, cx, cy, 'fruit'));
 
   m.spawns = {
     west: { ...P(0.5, 2.5), label: 'the county road to the west' },

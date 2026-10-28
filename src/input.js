@@ -67,6 +67,14 @@ export function readMove() {
   return l > 0 ? { x: m.x / l, y: m.y / l } : m;
 }
 
+/** Apply the touch-control opacity and size settings (CSS variables). */
+export function applyTouchStyle() {
+  const r = document.documentElement.style;
+  const op = Math.max(0.3, Math.min(1, Number(G.settings.touchOpacity) || 0.85));
+  r.setProperty('--tc-op', String(op));
+  r.setProperty('--tc-scale', { small: '0.88', large: '1.12' }[G.settings.touchSize] || '1');
+}
+
 export function setTouchMode(on) {
   if (desktopApp) on = false; // no on-screen controls in the desktop build
   input.touchMode = on;

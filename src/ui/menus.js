@@ -28,7 +28,7 @@ import { restBlocker, startSleep } from '../game/time.js';
 import { saveGame, canSaveNow, exportSave, readImportFile, writeSaveData, saveSettings } from '../game/save.js';
 import { sfx, setVolumes } from '../audio.js';
 import { toast } from './hud.js';
-import { resetInput, setTouchMode, input, desktopApp } from '../input.js';
+import { resetInput, setTouchMode, input, desktopApp, applyTouchStyle } from '../input.js';
 import { drawMinimap } from '../world/render.js';
 import { equipWeapon, magSize } from '../game/player.js';
 import { WEAPONS } from '../data/weapons.js';
@@ -221,6 +221,7 @@ function handleSettingsInput(e, commit) {
   }
   if (k === 'quality') G.events.emit('qualityChanged');
   if (k === 'textSize') document.body.classList.toggle('large-text', t.value === 'large');
+  if (k === 'touchOpacity' || k === 'touchSize') applyTouchStyle();
   saveSettings();
   if (commit && t.type === 'range') sfx('blip');
 }
@@ -414,6 +415,8 @@ function settingsTab() {
     <label>${chk('showDamageNumbers')} Show damage numbers</label>
     <label>Screen shake ${sel('screenShake', [['full', 'Full'], ['reduced', 'Reduced'], ['off', 'Off']])}</label>
     ${desktopApp ? '' : `<label>Touch controls ${sel('touchControls', [['auto', 'Automatic'], ['on', 'Always on'], ['off', 'Off']])}</label>`}
+    ${desktopApp ? '' : `<label>Touch button opacity <input type="range" min="30" max="100" value="${Math.round((s.touchOpacity || 0.85) * 100)}" data-set="touchOpacity"></label>`}
+    ${desktopApp ? '' : `<label>Touch button size ${sel('touchSize', [['small', 'Smaller'], ['normal', 'Normal'], ['large', 'Larger']])}</label>`}
     <label>Text size ${sel('textSize', [['normal', 'Normal'], ['large', 'Large']])}</label>
     <label>Frame rate ${sel('fpsCap', [['auto', 'Smooth (60 fps)'], ['30', desktopApp ? 'Battery saver (30 fps)' : 'Battery saver (30 fps)']])}</label>
     <label>${chk('rumble')} Controller rumble</label>
