@@ -365,6 +365,8 @@ export function sfx(name, opts = {}) {
       osc(out, t, { f: 90, fTo: 50, sweep: 0.06, dur: 0.07, peak: 0.4 }); break;
     case 'hurt': grunt(out, t, 105, 0.45); nz(out, t, { type: 'pink', dur: 0.05, peak: 0.4, lp: 800 }); break;
     case 'thud': nz(out, t, { type: 'brown', dur: 0.12, peak: 0.9, lp: 500 }); woodKnock(out, t, 0.7, 0.6, 0.1); break;
+    case 'heartbeat': osc(out, t, { type: 'sine', f: 62, fTo: 40, sweep: 0.12, dur: 0.16, peak: 0.55 }); osc(out, t + 0.2, { type: 'sine', f: 55, fTo: 36, sweep: 0.12, dur: 0.14, peak: 0.4 }); break;
+    case 'whoosh': nz(out, t, { type: 'pink', dur: 0.28, a: 0.08, peak: 0.35, bp: 600, q: 0.7 }); break;
     case 'swing': nz(out, t, { type: 'pink', dur: 0.16, a: 0.05, peak: 0.5, bp: 900, q: 0.9 }); break;
     case 'ricochet': {
       const o = osc(out, t, { type: 'sine', f: 3800, fTo: 1400, sweep: 0.35, dur: 0.25, peak: 0.12 });

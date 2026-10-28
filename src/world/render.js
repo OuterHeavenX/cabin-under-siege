@@ -3,6 +3,7 @@
 import { G, isNight } from '../game/state.js';
 import { TILE } from '../config.js';
 import { GR, SO } from './map.js';
+import { drawWorldFx, drawScreenFlash, fxZoom } from './fx.js';
 import { lowQuality } from '../game/difficulty.js';
 import { drawDecals, drawWorldWeather, drawScreenAtmosphere } from './atmosphere.js';
 import { castPoly, lightPoly, FLASH_ANGLE, FLASH_RANGE } from './shadowcast.js';
@@ -822,12 +823,13 @@ export function render(ctx) {
   const m = G.map;
   const cam = G.camera;
   const { w, h, dpr } = G.view;
-  const z = cam.zoom;
+  const z = cam.zoom * fxZoom();
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = '#1d2a18';
   ctx.fillRect(0, 0, w * dpr, h * dpr);
   if (!m || !G.player) return;
-  const ox = w / 2 - cam.x * z + cam.shakeX, oy = h / 2 - cam.y * z + cam.shakeY;
+  const kx = G.fx ? G.fx.kickX : 0, ky = G.fx ? G.fx.kickY : 0;
+  const ox = w / 2 - cam.x * z + cam.shakeX + kx, oy = h / 2 - cam.y * z + cam.shakeY + ky;
   ctx.setTransform(dpr * z, 0, 0, dpr * z, dpr * ox, dpr * oy);
   ctx.imageSmoothingEnabled = false;
 
@@ -1066,9 +1068,17 @@ export function render(ctx) {
 
   // Bullets as tracers
   for (const b of G.bullets) {
+    // Tracers: a soft glow under a hot core, streaked back along the flight path.
+    const tx = b.x - (b.x - b.px) * 2.2, ty = b.y - (b.y - b.py) * 2.2;
+    if (!lowQuality()) {
+      ctx.strokeStyle = b.owner === 'player' ? 'rgba(255,220,120,0.25)' : 'rgba(255,110,70,0.3)';
+      ctx.lineWidth = 6; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(tx, ty); ctx.lineTo(b.x, b.y); ctx.stroke();
+    }
     ctx.strokeStyle = b.owner === 'player' ? '#fff3b0' : '#ff8a65';
     ctx.lineWidth = b.owner === 'player' ? 2 : 2.5;
     ctx.beginPath(); ctx.moveTo(b.px, b.py); ctx.lineTo(b.x, b.y); ctx.stroke();
+    ctx.lineCap = 'butt';
   }
 
   // Particles
@@ -1078,6 +1088,7 @@ export function render(ctx) {
     ctx.fillRect(pt.x - pt.size / 2, pt.y - pt.size / 2, pt.size, pt.size);
   }
   ctx.globalAlpha = 1;
+  drawWorldFx(ctx);
 
   // Canopies (sprites with a gentle wind sway; fade if something is underneath)
   const lowQ = lowQuality();
@@ -1468,6 +1479,22 @@ function drawOverlays(ctx, dk, inView) {
       ctx.fillStyle = '#fff'; ctx.font = 'bold 14px system-ui, sans-serif'; ctx.textAlign = 'center';
       ctx.fillText('!', e.x, hy - 8);
     }
+    // Awareness: a "?" that fills as they grow suspicious, a "!" that pops when they spot you.
+    if (!e.alerted && e.sus > 0.04) {
+      const cy = hy - 14;
+      ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.beginPath(); ctx.arc(e.x, cy, 8, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#f5c542'; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.arc(e.x, cy, 8, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, e.sus)); ctx.stroke();
+      ctx.fillStyle = '#f5c542'; ctx.font = 'bold 11px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.fillText('?', e.x, cy + 4);
+    } else if (e.alertPop > 0) {
+      const k = 1 - e.alertPop / 0.7;
+      const sc = k < 0.25 ? 0.6 + k * 4 : 1.6 - Math.min(0.6, (k - 0.25) * 1.2);
+      ctx.save(); ctx.translate(e.x, hy - 16); ctx.scale(sc, sc);
+      ctx.font = 'bold 18px system-ui, sans-serif'; ctx.textAlign = 'center';
+      ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(0,0,0,0.8)'; ctx.strokeText('!', 0, 6);
+      ctx.fillStyle = '#ff3b30'; ctx.fillText('!', 0, 6);
+      ctx.restore();
+    }
     if (e.hp < e.maxHp) bar(ctx, e.x - 14, e.y + e.radius + 6, 28, 4, e.hp / e.maxHp, '#e74c3c');
     if (e.name !== e.def.name || pd < 140) {
       ctx.font = '600 9px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(0,0,0,0.6)';
@@ -1514,9 +1541,15 @@ function drawOverlays(ctx, dk, inView) {
   // Floaters
   for (const f of G.floaters) {
     ctx.globalAlpha = Math.min(1, f.life / f.max * 2);
-    ctx.font = 'bold 12px system-ui, sans-serif'; ctx.textAlign = 'center';
-    ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.7)'; ctx.strokeText(f.text, f.x, f.y);
-    ctx.fillStyle = f.color; ctx.fillText(f.text, f.x, f.y);
+    // Pop in big, settle, drift up.
+    const age = f.max - f.life;
+    const sc = age < 0.12 ? 1.7 - age * 5.8 : 1;
+    const big = !/^-?\d/.test(f.text) && f.text.length > 4;
+    ctx.save(); ctx.translate(f.x, f.y); ctx.scale(sc, sc);
+    ctx.font = `bold ${big ? 13 : 12}px system-ui, sans-serif`; ctx.textAlign = 'center';
+    ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.75)'; ctx.strokeText(f.text, 0, 0);
+    ctx.fillStyle = f.color; ctx.fillText(f.text, 0, 0);
+    ctx.restore();
   }
   ctx.globalAlpha = 1;
   // Waypoint marker (on-screen)
@@ -1575,6 +1608,7 @@ function drawScreenFx(ctx, ox, oy, z) {
     vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,0.28)');
     ctx.fillStyle = vg; ctx.fillRect(0, 0, w, h);
   }
+  drawScreenFlash(ctx);
   // Off-screen threats (known attackers)
   for (const e of G.enemies) {
     if (e.dead || e.gone) continue;
@@ -1606,6 +1640,12 @@ function drawScreenFx(ctx, ox, oy, z) {
   }
   // Low health pulse + text cue
   if (p.hp / d.maxHp < 0.3 && !p.dead) {
+    // Colour drains out as you weaken.
+    if (!lowQuality()) {
+      ctx.save(); ctx.globalCompositeOperation = 'saturation';
+      ctx.fillStyle = `rgba(128,128,128,${0.75 - (p.hp / d.maxHp) * 2})`; ctx.fillRect(0, 0, w, h);
+      ctx.restore();
+    }
     const pulse = (Math.sin(t * 5) + 1) / 2;
     ctx.strokeStyle = `rgba(220,30,30,${0.35 + pulse * 0.35})`;
     ctx.lineWidth = 10;

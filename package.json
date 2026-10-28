@@ -1,6 +1,6 @@
 {
   "name": "cabin-under-siege",
-  "version": "0.8.1",
+  "version": "0.8.2",
   "private": true,
   "description": "Top-down survival action RPG for mobile and desktop browsers. You left the family. The family didn't leave you.",
   "type": "module",

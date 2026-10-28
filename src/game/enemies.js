@@ -80,6 +80,8 @@ function alertEnemy(e, at = null) {
   if (e.alerted || e.dead) return;
   const p = G.player;
   e.alerted = true;
+  e.alertPop = 0.7;
+  e.sus = 0;
   e.searching = false;
   e.lastSeen = at ? { x: at.x, y: at.y } : { x: p.x, y: p.y };
   e.lostT = 0;
@@ -414,10 +416,20 @@ export function updateEnemies(dt) {
       // They see poorly behind them: that's how you sneak up.
       const behind = Math.abs(angleDiff(e.angle, angleTo(e.x, e.y, p.x, p.y))) > 1.75;
       const loud = Math.hypot(p.vx || 0, p.vy || 0) > 150 && p.dodgeT <= 0; // sprinting footsteps
-      const base = (isNight() && !lit ? 140 : 240) * wx.notice * (behind ? 0.4 : 1);
-      if (canSee && pd < base * d.noticeMult) alertEnemy(e);
+      const base = (isNight() && !lit ? 140 : 240) * wx.notice * (behind ? 0.4 : 1) * d.noticeMult;
+      // Suspicion builds before they're sure: fast up close, slowly at the edge of their sight.
+      if (canSee && pd < base) e.sus = (e.sus || 0) + dt * (behind ? 2.2 : 4.5);
+      else if (canSee && pd < base * 1.9) e.sus = (e.sus || 0) + dt * 0.75;
+      else e.sus = Math.max(0, (e.sus || 0) - dt * 0.3);
+      if (e.sus >= 1) alertEnemy(e);
       else if (pd < (behind ? (loud ? 90 : 22) : 50)) alertEnemy(e);
       else if (loud && pd < 100) alertEnemy(e);
+      else if (e.sus > 0.35 && canSee && !e.guard) {
+        // Something's there: stop and stare.
+        const want = angleTo(e.x, e.y, p.x, p.y);
+        e.angle += angleDiff(e.angle, want) * Math.min(1, dt * 4);
+        e.staring = 0.3;
+      }
       // Endless Siege: searching attackers eventually start hunting (no stalemates).
       if (!huntMode()) {
         e.searchT = (e.searchT || 0) + dt;
@@ -436,6 +448,8 @@ export function updateEnemies(dt) {
       }
     }
     if (e.searchGoalT) e.searchGoalT -= dt;
+    if (e.alertPop > 0) e.alertPop -= dt;
+    e.viaWindow = canSee && (e.alerted || e.sus > 0.1) ? m.throughWindow(e.x, e.y, p.x, p.y) : false;
     // Player spotting unalerted attackers -> Shadow JP
     if (!e.spottedOnce && !e.alerted && canSee && pd < d.seeRadius + 40) {
       e.spottedOnce = true;
@@ -503,6 +517,7 @@ export function updateEnemies(dt) {
     }
 
     e.fireCd -= dt;
+    if (e.staring > 0) { e.staring -= dt; if (!e.alerted) continue; }
     if (!e.alerted) {
       if (e.guard) { if (!updateGuard(e, dt)) followPath(e, dt, e.def.speed * 0.45); continue; }
       const searching = huntMode() && G.siege.homeCleared;

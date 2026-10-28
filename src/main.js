@@ -15,6 +15,7 @@ import { canNewGamePlus, makeNewGamePlus } from './game/ngplus.js';
 import { buildGroundCanvas, buildRoofCanvas, render } from './world/render.js';
 import { initInput, consume, endFrame, resetInput, setTouchMode, input, suppressGhostClick, desktopApp } from './input.js';
 import { updateGamepad, rumble } from './gamepad.js';
+import { initFxEvents, updateFx } from './world/fx.js';
 import { initAudio, setVolumes, updateAudio, setMusic, setAmbient, suspendAudio, resumeAudio, sfx, setListener, setFireLevel, audioDebug, renderOffline, musicBar, birdCall } from './audio.js';
 import { initHud, updateHud, toast, banner } from './ui/hud.js';
 import { initDialogue, updateDialogue, playDialogue } from './ui/dialogue.js';
@@ -335,9 +336,10 @@ function frame(ts) {
       handleGlobalKeys();
       if (G.cutscene) updateCutscene(dt);
       if (G.transition) updateTransition(dt);
-      else if (!G.paused && !G.modal) update(dt);
+      else if (!G.paused && !G.modal) update(dt * (G.cutscene ? 1 : updateFx(dt)));
       if (G.modal === 'dialogue') updateDialogue(dt);
       if (G.player) {
+        updateEye();
         updateAtmosphere(dt);
         updateCamera(dt);
         computeHudInfo(dt);
@@ -407,6 +409,7 @@ function initEvents() {
   initErrandEvents();
   initAchievementEvents();
   initCloudSync();
+  initFxEvents();
   G.events.on('prequelDone', () => {
     const el = openModal('prequelEnd', `<div class="chapter-card"><div class="ch-num">PREQUEL</div><h2>NEWARK, 1999</h2><div class="ch-done">— COMPLETE —</div>
       <p>Joey Marchetti was twenty-four. His sister Angie still keeps his photograph behind the register at Marchetti's.</p>
@@ -666,6 +669,30 @@ function initTitle() {
   document.getElementById('objective').addEventListener('click', () => { if (!modalOpen()) openMenu('journal'); });
   const rh = document.getElementById('rotate-hint');
   rh.addEventListener('click', () => rh.classList.add('dismissed'));
+}
+
+/* ---------------- awareness eye ---------------- */
+let eyeState = '';
+/** HUD eye: hidden / someone's suspicious / seen (and whether it's through a window). */
+function updateEye() {
+  const el = document.getElementById('eye');
+  if (!el) return;
+  let st = '';
+  if (G.enemies.some((e) => !e.dead && !e.gone && !e.def.vehicle)) {
+    st = 'hidden';
+    let window = false;
+    for (const e of G.enemies) {
+      if (e.dead || e.gone) continue;
+      if (e.alerted && e.canSee) { st = 'seen'; window = window || e.viaWindow; }
+      else if (st !== 'seen' && !e.alerted && e.sus > 0.12) { st = 'sus'; window = window || e.viaWindow; }
+    }
+    if (window && st !== 'hidden') st += '-window';
+  }
+  if (st === eyeState) return;
+  eyeState = st;
+  el.className = `eye ${st ? 'eye-' + st.split('-')[0] : 'hidden'}`;
+  const txt = { hidden: 'HIDDEN', sus: 'NOTICED?', seen: 'SEEN' }[st.split('-')[0]] || '';
+  el.innerHTML = `<span class="eye-ico"></span><span class="eye-txt">${txt}${st.endsWith('-window') ? '<small>through a window</small>' : ''}</span>`;
 }
 
 /* ---------------- desktop app ---------------- */

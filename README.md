@@ -40,6 +40,17 @@ than using simple beeps:
 loop per mood). See [`audio/README.md`](audio/README.md) for the sound names and
 recommended free sources.
 
+### Awareness and game feel (v0.8.2)
+
+- **Know when you're seen**: attackers show a **?** that fills as they grow suspicious (they stop
+  and stare) and a **!** that pops when they spot you. A HUD eye shows *HIDDEN*, *NOTICED?* or
+  *SEEN* — and says when it's **through a window**.
+- **Juice**: hit-stop on kills and takedowns, slow motion on the last attacker of the night, camera
+  recoil per weapon, glowing tracers, sparks and dust where bullets hit, directional blood spray,
+  glass shards and wood splinters when windows, boards and doors break, shockwave rings and a flash
+  when a truck blows, popping damage numbers, a level-up burst, and at low health a heartbeat with
+  the colour draining from the screen. The Low graphics setting keeps the cheap essentials.
+
 ### Stealth (v0.8.1)
 
 - **They don't know where you are.** Attackers go for your home first; if it's empty, they spread

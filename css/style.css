@@ -473,3 +473,18 @@ body.large-text .bar-lbl, body.large-text .ammo-sub, body.large-text .clock { fo
 .board-list li.me { color: #f4d98a; }
 .name-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .name-row input { flex: 1; background: #120909; color: #fff; border: 1px solid #5e2424; border-radius: 8px; padding: 6px 8px; }
+
+/* ---------------- awareness eye ---------------- */
+.eye { position: absolute; right: calc(12px + var(--sar)); top: calc(74px + var(--sat)); display: flex; align-items: center; gap: 7px; padding: 4px 10px 4px 8px; border-radius: 999px; background: rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.15); font-size: 11px; font-weight: 800; letter-spacing: 1px; pointer-events: none; transition: border-color 0.2s, background 0.2s; }
+.eye.hidden { display: none; }
+.eye .eye-txt { display: flex; flex-direction: column; line-height: 1.1; }
+.eye .eye-txt small { font-size: 9px; font-weight: 600; letter-spacing: 0; opacity: 0.9; text-transform: none; }
+.eye .eye-ico { position: relative; width: 22px; height: 12px; border: 2px solid currentColor; border-radius: 50% / 60%; }
+.eye .eye-ico::after { content: ""; position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: currentColor; }
+.eye-hidden { color: #8fb39a; }
+.eye-hidden .eye-ico { height: 2px; border-radius: 2px; border-width: 1px 0 1px 0; margin-top: 4px; }
+.eye-hidden .eye-ico::after { display: none; }
+.eye-sus { color: #f5c542; border-color: rgba(245,197,66,0.6); animation: eye-pulse 0.9s ease-in-out infinite; }
+.eye-seen { color: #ff5a4a; border-color: rgba(255,90,74,0.8); background: rgba(70,0,0,0.7); animation: eye-pulse 0.45s ease-in-out infinite; }
+@keyframes eye-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }
+body.portrait .eye { top: calc(120px + var(--sat)); }

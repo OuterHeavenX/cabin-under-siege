@@ -1,7 +1,7 @@
 // Service worker: lets the game run offline after the first visit.
 // Network-first for freshness, falling back to the cache when offline.
 // Bump CACHE when shipping a new version.
-const CACHE = 'cabin-under-siege-v0.8.1';
+const CACHE = 'cabin-under-siege-v0.8.2';
 const ASSETS = [
   './',
   './index.html',
@@ -64,6 +64,7 @@ const ASSETS = [
   "./src/world/mapgen.js",
   "./src/world/render.js",
   "./src/world/shadowcast.js",
+  "./src/world/fx.js",
 ];
 
 self.addEventListener('install', (e) => {

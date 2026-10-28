@@ -76,6 +76,18 @@ export class GameMap {
     return false;
   }
 
+  /** Does the line from a to b pass through a window (glass, broken or open)? */
+  throughWindow(ax, ay, bx, by) {
+    const d = Math.hypot(bx - ax, by - ay);
+    const steps = Math.ceil(d / 8);
+    for (let i = 1; i < steps; i++) {
+      const t = i / steps;
+      const b = this.blockers.get(Math.floor((ay + (by - ay) * t) / TILE) * this.w + Math.floor((ax + (bx - ax) * t) / TILE));
+      if (b && b.kind === 'window') return true;
+    }
+    return false;
+  }
+
   /** Line-of-sight test (treats windows and doors per their sight rules). */
   los(ax, ay, bx, by) {
     const d = Math.hypot(bx - ax, by - ay);

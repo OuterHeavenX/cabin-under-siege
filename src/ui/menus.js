@@ -551,6 +551,7 @@ export function openHelp() {
       <li><b>Attackers</b>: Scouts, Enforcers (break doors), Gunmen (use cover), Arsonists (molotovs — fire burns doors, windows and you) and Lieutenants (tough, rally nearby attackers). Raiders probe your weakest door or window.</li>
       <li><b>Defend</b>: board windows, add steel shutters, brace doors, place sandbags and bear traps, install a floodlight, tripwire alarm and cameras. Solid things (trees, rocks, cars, walls, cover) stop bullets. Standing next to cover reduces damage you take.</li>
       <li><b>Hide</b>: attackers don't know where you are. They hit your home first, then search. Stay out of sight (they see poorly behind them; sprinting is loud; gunshots carry) and after <b>4 hours</b> they give up and come back the next night. Break line of sight and they lose track of you.</li>
+      <li><b>Are they onto you?</b> A yellow <b>?</b> over an attacker fills as they grow suspicious; a red <b>!</b> means they've spotted you. The eye at the top right says HIDDEN, NOTICED? or SEEN — and warns you when it's through a window.</li>
       <li><b>Silent takedown</b>: get behind an attacker who hasn't seen you and press ACT/E or melee. Nobody else hears it — unless someone sees it.</li>
       <li><b>Repair</b>: walk up to damaged doors/windows and press ACT. Costs wood.</li>
       <li><b>Rest</b> in your bed to sleep until morning. You'll never sleep through an attack.</li>

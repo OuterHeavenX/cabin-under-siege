@@ -942,7 +942,7 @@ if (want('audio')) {
   await page.click('#t-new');
   await sleep(200); if (await page.isVisible('[data-diff-pick]')) await page.click('[data-diff-pick="normal"]');
   await sleep(1200);
-  const names = ['shot', 'shotgun', 'rifleShot', 'enemyShot', 'rifle', 'reload', 'shell', 'swap', 'hit', 'hurt', 'thud', 'ricochet', 'impact', 'glass', 'wood', 'chop', 'treefall', 'door', 'doorBreak', 'crash', 'explode', 'dig', 'splash', 'suppressed', 'drip', 'thunder', 'bark', 'growl', 'boat', 'hammer', 'trap', 'molotov', 'step', 'dodge', 'pickup', 'coin', 'heal', 'eat', 'car', 'phone', 'alarm', 'warning', 'ui', 'chime', 'jobDone', 'levelup', 'victory', 'defeat'];
+  const names = ['shot', 'shotgun', 'rifleShot', 'enemyShot', 'rifle', 'reload', 'shell', 'swap', 'hit', 'hurt', 'thud', 'ricochet', 'impact', 'glass', 'wood', 'chop', 'treefall', 'door', 'doorBreak', 'crash', 'explode', 'dig', 'splash', 'suppressed', 'drip', 'thunder', 'bark', 'growl', 'boat', 'hammer', 'trap', 'molotov', 'step', 'dodge', 'pickup', 'coin', 'heal', 'eat', 'car', 'phone', 'alarm', 'warning', 'ui', 'chime', 'jobDone', 'levelup', 'victory', 'defeat', 'heartbeat', 'whoosh'];
   const lv = await page.evaluate(async (names) => {
     const d = window.__cus.dbg; const out = {};
     for (const n of names) out[n] = await d.renderOffline(() => d.sfx(n), 2);
@@ -1350,6 +1350,18 @@ if (want('v7')) {
   });
   check('Fix: a molotov thrown from outside shatters on the wall, not inside the house', mol.landX < 18, JSON.stringify(mol));
   check('Fix: fire outside a wall doesn\'t burn you through it (but does when you stand in it)', mol.sawFire && !mol.burned && mol.controlHp < 100, JSON.stringify(mol));
+  // Awareness: suspicion builds before they're sure; the HUD warns when it's through a window.
+  const aw = await ev(page, async () => {
+    const c = window.__cus, G = c.G;
+    c.G.s.time.minute = 21 * 60 + 30;
+    G.player.x = 19.5 * 32; G.player.y = 21.5 * 32; G.player.angle = Math.PI; G.player.invuln = 999; G.enemies = []; G.fires = [];
+    const e = c.dbg.spawnEnemy('gunman', 14 * 32, 21.5 * 32, {}); e.angle = 0; e.path = null;
+    await new Promise((r) => setTimeout(r, 120));
+    const early = { alerted: e.alerted, sus: e.sus };
+    await new Promise((r) => setTimeout(r, 1000));
+    return { early, late: { alerted: e.alerted }, eye: document.getElementById('eye').textContent };
+  });
+  check('Awareness: they grow suspicious before they spot you, and the eye says "through a window"', !aw.early.alerted && aw.early.sus > 0 && aw.late.alerted && /SEEN/.test(aw.eye) && /window/.test(aw.eye), JSON.stringify(aw));
   // The Map tab works in later chapters.
   await ev(page, () => { const c = window.__cus; c.G.s.chapter = 4; c.G.s.story.done = { 1: true, 2: true, 3: true, 4: true }; c.dbg.moveToChapter(5); }); await sleep(500);
   await ev(page, () => { window.__cus.dbg.closeAll(); window.__cus.dbg.openMenu('inv'); }); await sleep(200);
