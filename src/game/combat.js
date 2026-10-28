@@ -1,5 +1,7 @@
 // Bullets, damage resolution, pickups and lightweight visual effects.
 import { G } from './state.js';
+import { animalBulletCheck } from './hunting.js';
+import { galleryBulletCheck } from './townlife.js';
 import { dogBulletCheck } from './dog.js';
 import { TILE } from '../config.js';
 import { dist, rand, randInt } from '../util.js';
@@ -116,6 +118,7 @@ export function updateBullets(dt) {
           break;
         }
       }
+      if (b.owner === 'player' && (animalBulletCheck(b) || galleryBulletCheck(b))) { b.dead = true; break; }
       if (b.owner === 'player' || b.owner === 'ally') {
         for (const e of G.enemies) {
           if (e.dead || e.gone) continue;

@@ -23,7 +23,39 @@ export const JOB_TYPES = {
   supply: { name: 'Supply Run', icon: '🚚', path: 'neighbor', requires: 'good_reputation' },
   harvest: { name: 'Harvest', icon: '🥕', path: 'survivor', item: 'vegetables' },
   fishing: { name: 'Fish Order', icon: '🎣', path: 'survivor', item: 'fish', needsItem: 'fishing_rod' },
+  courier: { name: 'Courier', icon: '✉', path: 'shadow' },
 };
+
+/** Your standing with the people who hire you: better pay, better work. */
+export const REP_TIERS = [
+  { at: 0, name: 'New hand', mult: 1 },
+  { at: 5, name: 'Reliable', mult: 1.1 },
+  { at: 12, name: 'Trusted', mult: 1.2 },
+  { at: 25, name: 'Best in town', mult: 1.3 },
+];
+export function repTier() {
+  const n = G.s.jobsDone || 0;
+  let t = REP_TIERS[0];
+  for (const r of REP_TIERS) if (n >= r.at) t = r;
+  const next = REP_TIERS[REP_TIERS.indexOf(t) + 1];
+  return { ...t, next, toNext: next ? next.at - n : 0 };
+}
+
+/** Who sends sealed envelopes, and what's inside if you look (per chapter). */
+export const COURIER = {
+  1: {
+    senders: ['Mr. Henderson', 'Old Man Tibbs', 'Jenny Miller', 'Pastor Abe'],
+    contents: [
+      'A birthday card with a twenty-dollar bill in it. "To Bobby, from Grandpa."',
+      'Two pages of a love letter. You fold it back up quickly.',
+      'A past-due notice from the county. Somebody\'s behind on their taxes.',
+      'Seed catalog order form, filled out in careful pencil.',
+      'A photograph of a dog, and on the back: "Still miss him."',
+    ],
+  },
+};
+/** Story hooks: (job) => special contents line, or null. */
+export const courierHooks = [];
 
 /** First water cell on a map (for fishing waypoints). */
 function pondPoint(m) {
@@ -34,7 +66,7 @@ function pondPoint(m) {
 }
 
 function payMult() {
-  let m = derived().jobPayMult;
+  let m = derived().jobPayMult * repTier().mult;
   if (relOf(C().jobContact) >= 2) m *= 1.1;
   return m;
 }
@@ -51,6 +83,12 @@ export function boardOffers() {
   if (town.cropsPickable && !o.harvest) { const need = randInt(5, 8); o.harvest = { type: 'harvest', need, pay: 20 + need * 8, desc: `Pick ${need} vegetables from your garden and bring them to the drop-off at ${C().jobPlace}.` }; }
   if (!o.fishing && pondPoint(town) || !o.fishing && pondPoint(homeMap())) { const need = randInt(2, 3); o.fishing = { type: 'fishing', need, pay: 30 + need * 15, desc: `A restaurant wants ${need} fresh fish. Catch them in the pond and bring them to the drop-off. Needs a Fishing Rod.` }; }
   if (!o.supply) o.supply = { type: 'supply', pay: 70, desc: `Load a crate of supplies from the yard and take it to ${first(C().neighbor)}'s porch.` };
+  const cz = COURIER[C().id];
+  if (cz && !o.courier && town.deliveryTargets) {
+    const t = choose(Object.keys(town.deliveryTargets));
+    const from = choose(cz.senders);
+    o.courier = { type: 'courier', target: t, from, pay: 40, desc: `${from} needs a sealed envelope taken to ${town.deliveryTargets[t].name}. Discreetly. Don't open it.` };
+  }
   return Object.values(o).map((x) => ({ ...x, pay: Math.round(x.pay * payMult()), locked: JOB_TYPES[x.type].requires && !hasSkill(JOB_TYPES[x.type].requires), needs: JOB_TYPES[x.type].needsItem && count(JOB_TYPES[x.type].needsItem) < 1 ? JOB_TYPES[x.type].needsItem : null }));
 }
 
@@ -70,6 +108,8 @@ export function acceptJob(type) {
   if (type === 'delivery') job.stage = 'pickup';
   if (type === 'repair') job.stage = 'materials';
   if (type === 'supply') job.stage = 'pickup';
+  if (type === 'courier') { job.stage = 'deliver'; addItem('envelope', 1, true); }
+  if (type === 'delivery' && Math.random() < 0.3) { job.rush = true; job.pay = Math.round(job.pay * 1.4); }
   G.s.job = job;
   delete G.s.world.board.offers[type];
   sfx('blip');
@@ -96,6 +136,7 @@ export function jobHint() {
     case 'delivery': return j.stage === 'pickup' ? `Pick up the parcel at the ${C().storeName} counter.` : `Deliver the parcel to ${town.deliveryTargets[j.target].name}.`;
     case 'repair': return j.stage === 'materials' ? `Collect materials from the supply crates at ${C().jobPlace}.` : `Fix ${town.repairTargets[j.target].name}.`;
     case 'supply': return j.stage === 'pickup' ? `Load the crate at ${C().jobPlace}.` : `Leave the crate on ${first(C().neighbor)}'s porch.`;
+    case 'courier': return `Take ${j.from}'s envelope to ${town.deliveryTargets[j.target].name}. Don't open it.`;
     default: return '';
   }
 }
@@ -119,6 +160,7 @@ export function jobWaypoint() {
       return wp ? { map: wm, ...wp, label: 'Pond' } : { map: homeMapId(), ...hp, label: 'Pond' };
     }
     case 'delivery': return j.stage === 'pickup' ? { ...tp('store_door'), label: C().storeName } : { map: wm, ...town.deliveryTargets[j.target], label: 'Delivery' };
+    case 'courier': return { map: wm, ...town.deliveryTargets[j.target], label: 'Envelope' };
     case 'repair': {
       if (j.stage === 'materials') { const pr = town.props.find((p) => p.id === 'shed'); return { map: wm, x: pr.x, y: pr.y, label: 'Supplies' }; }
       return { map: wm, ...town.repairTargets[j.target], label: 'Repair' };
@@ -140,6 +182,10 @@ export function jobProps(mapId) {
   if (mapId === workMapId() && j.type === 'delivery' && j.stage === 'deliver') {
     const t = town.deliveryTargets[j.target];
     out.push({ id: 'job_deliver', kind: 'job_deliver', x: t.x, y: t.y, r: 46, label: `Deliver parcel to ${t.name}` });
+  }
+  if (mapId === workMapId() && j.type === 'courier') {
+    const t = town.deliveryTargets[j.target];
+    out.push({ id: 'job_courier', kind: 'job_courier', x: t.x, y: t.y, r: 46, label: `Hand over ${j.from}'s envelope` });
   }
   if (mapId === workMapId() && j.type === 'repair' && j.stage === 'fix') {
     const t = town.repairTargets[j.target];
@@ -169,10 +215,10 @@ export function onStoreCounter() {
     const town = workMap();
     const t = town.deliveryTargets[j.target];
     const d = dist(town.points.store_door.x, town.points.store_door.y, t.x, t.y);
-    j.timeLimit = Math.round(25 + d / 55);
+    j.timeLimit = Math.round((25 + d / 55) * (j.rush ? 0.75 : 1));
     j.timeLeft = j.timeLimit;
     sfx('pickup');
-    playDialogue([{ who: NPCS[C().shopkeeper].name, text: `Here's the parcel for ${t.name}. They're expecting it — you've got about ${j.timeLimit} seconds before they start calling me.` }]);
+    playDialogue([{ who: NPCS[C().shopkeeper].name, text: `${j.rush ? 'RUSH ORDER — they\'re paying extra. ' : ''}Here's the parcel for ${t.name}. They're expecting it — you've got about ${j.timeLimit} seconds before they start calling me.` }]);
     return true;
   }
   return false;
@@ -216,7 +262,38 @@ export function onDeliver() {
   const j = G.s.job;
   const late = j.timeLeft <= 0;
   if (late) j.pay = Math.round(j.pay * 0.55);
-  completeJob({ xp: 25, jp: ['neighbor', 10], rel: [[C().shopkeeper, 3], [C().jobContact, 2]], note: late ? 'Late, but delivered.' : 'Right on time!' });
+  // Regulars remember you, and sometimes tip.
+  const reg = (G.s.regulars || (G.s.regulars = {}));
+  reg[j.target] = (reg[j.target] || 0) + 1;
+  const name = workMap().deliveryTargets[j.target].name;
+  if (!late && (reg[j.target] >= 3 || Math.random() < 0.25)) {
+    const tip = choose([['pie', 'a slice of pie'], ['sandwich', 'a sandwich for the road'], [null, '$10']]);
+    if (tip[0]) addItem(tip[0], 1, true); else addMoney(10, 'tip');
+    toast(reg[j.target] >= 3 ? `"Frank! My favorite delivery man." (${name} tips ${tip[1]})` : `A tip from ${name}: ${tip[1]}.`, 'good', 3.5);
+  }
+  completeJob({ xp: 25, jp: ['neighbor', 10], rel: [[C().shopkeeper, 3], [C().jobContact, 2]], note: late ? 'Late, but delivered.' : j.rush ? 'Rush order, on time!' : 'Right on time!' });
+}
+
+/** The courier's choice at the door: hand it over, or look first. */
+export function onCourier() {
+  const j = G.s.job;
+  const t = workMap().deliveryTargets[j.target];
+  const deliver = (peeked) => {
+    removeItem('envelope', 1);
+    const noticed = peeked && Math.random() < 0.35;
+    if (noticed) { j.pay = Math.round(j.pay * 0.5); toast('"This seal\'s been lifted." Half pay, and a look you won\'t forget.', 'warn', 4); }
+    completeJob({ xp: 25, jp: ['shadow', peeked ? 8 : 4], rel: [[C().jobContact, 2]], note: noticed ? 'They noticed.' : 'Delivered, no questions asked.' });
+  };
+  playDialogue([{ who: 'Frank', text: `${j.from}'s envelope for ${t.name}. Light. Sealed with a lick and a prayer.`, choices: [
+    { text: 'Hand it over.', effect: () => { deliver(false); return []; } },
+    { text: '(Steam it open first.)', effect: () => {
+      let line = null;
+      for (const f of courierHooks) { line = f(j); if (line) break; }
+      if (!line) line = choose((COURIER[C().id] || COURIER[1]).contents);
+      deliver(true);
+      return [{ who: 'Frank', text: `(Inside: ${line})` }];
+    } },
+  ] }]);
 }
 
 export function onRepairTarget() {

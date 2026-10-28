@@ -5,7 +5,10 @@ import { ITEMS, SHOPS, RECIPES, COOK_RECIPES } from '../data/items.js';
 import { cook, canCook } from '../game/activities.js';
 import { DIFFICULTY } from '../game/difficulty.js';
 import { endlessData, ENDLESS_SITES, MODIFIERS, dailyChallenge } from '../game/endless.js';
-import { ERRANDS, errandState, errandDone, stageLabel, activeErrands } from '../game/errands.js';
+import { ERRANDS, errandState, errandDone, stageLabel, activeErrands, arcSummary, errandOffer, offerErrand } from '../game/errands.js';
+import { caseBoard } from '../game/rat.js';
+import { weekAhead } from '../game/townlife.js';
+import { ownedPerks, PERKS } from '../game/perks.js';
 import { TOWNSFOLK } from '../data/npcs.js';
 const errandGiverName = (id) => (NPCS[id] ? NPCS[id].name : (Object.values(TOWNSFOLK).flat().find((f) => f.id === id) || {}).name || id);
 import { ATTRIBUTES, MAX_ATTR, PATHS, SKILLS, xpForLevel } from '../data/skills.js';
@@ -15,7 +18,7 @@ import { escapeHtml, fmtClock } from '../util.js';
 import { derived, spendAttr, buySkill, canBuySkill, shopDiscount, addMoney, addRel } from '../game/progression.js';
 import { addItem, count, removeItem, useConsumable } from '../game/inventory.js';
 import { installUpgrade, placeCover, homeStatus, craft, recipeCost, MAX_COVERS, MAX_TRAPS } from '../game/home.js';
-import { boardOffers, acceptJob, abandonJob, jobHint, JOB_TYPES, jobOpenHours } from '../game/jobs.js';
+import { boardOffers, acceptJob, abandonJob, jobHint, JOB_TYPES, jobOpenHours, repTier } from '../game/jobs.js';
 import { heatLabel } from '../game/siege.js';
 import { chatWith, giveGift, npcAvailableServices } from '../game/npcs.js';
 import { objectiveText } from '../game/story.js';
@@ -31,6 +34,7 @@ import { equipWeapon, magSize } from '../game/player.js';
 import { WEAPONS } from '../data/weapons.js';
 import { GAME_VERSION } from '../config.js';
 import { ACHIEVEMENTS, isUnlocked, unlockedCount, achievementData } from '../game/achievements.js';
+import { projectDone } from '../game/projects.js';
 import { cloudCode, cloudState, cloudAvailable, cloudEnable, cloudPeek, cloudLink, cloudUnlink, cloudPush, cloudCheck, cloudTake, deviceName, playerName, getDailyScores, postDailyScore } from '../game/cloud.js';
 
 const root = () => document.getElementById('modal-root');
@@ -355,8 +359,43 @@ function journalTab() {
     ${choreBox}${errands}
     ${favors || '<p class="muted small">No favors in progress. Friends (♥1+) sometimes ask for help — talk to them.</p>'}
     ${doneFavors.length ? `<p class="small muted">Favors done: ${doneFavors.map(escapeHtml).join(', ')}</p>` : ''}
+    ${caseHtml()}
+    ${storylinesHtml()}
+    ${weekHtml()}
     <h3>People</h3>${rel}
+    ${perksHtml()}
     <h3>The road ahead</h3>${homes}`;
+}
+
+function caseHtml() {
+  const c = caseBoard();
+  if (!c) return '';
+  const head = c.open ? `<span class="muted">${c.left} day${c.left === 1 ? '' : 's'} left · ${c.clues.filter((x) => x.found).length}/${c.need} clues needed to accuse</span>`
+    : c.outcome === 'missed' ? '<span class="muted">Unsolved. The rat kept talking.</span>'
+      : `<span class="hl">Solved: ${escapeHtml(c.culpritName)} — ${c.outcome === 'feed' ? 'now feeding them lies' : 'gone from town'}</span>`;
+  const sus = c.suspects.map((x) => `<span class="case-sus ${x.cleared ? 'cleared' : ''} ${x.wrong ? 'wrong' : ''}">${escapeHtml(x.name)}${x.pts ? ` ${'●'.repeat(x.pts)}` : ''}${x.cleared ? ' (alibi)' : ''}${x.wrong ? ' ✗' : ''}</span>`).join(' ');
+  const clues = c.clues.map((x) => `<div class="chore ${x.found ? 'done' : ''}">${x.found ? '🔎' : '·'} ${escapeHtml(x.found ? x.note : x.how)}</div>`).join('');
+  return `<h3>🐀 Case board: ${escapeHtml(c.title)}</h3><div class="objective-box case">${head}<div class="small" style="margin:6px 0">Suspects: ${sus}</div>${clues}</div>`;
+}
+
+function storylinesHtml() {
+  const arcs = arcSummary();
+  if (!arcs.length) return '';
+  return `<h3>Storylines</h3>${arcs.map((a) => `<div class="arc-row"><b>${escapeHtml(errandGiverName(a.giver))}</b> <span class="muted small">${a.count}/${a.total}${a.finished ? ' ✓ complete' : ''}</span>
+    ${a.done.length ? `<div class="small muted">${a.done.map((t) => `✓ ${escapeHtml(t)}`).join(' · ')}</div>` : ''}
+    ${a.active ? `<div class="small"><b>${escapeHtml(a.active.title)}:</b> ${escapeHtml(a.active.stage)}</div>` : ''}
+    ${a.next ? `<div class="small muted">Next: ${escapeHtml(a.next)}</div>` : ''}</div>`).join('')}`;
+}
+
+function weekHtml() {
+  if (G.endless || G.prequel) return '';
+  return `<h3>This week in town</h3>${weekAhead().map((e) => `<div class="small ${e.today ? 'hl' : ''}">${e.icon} <b>${escapeHtml(e.name)}</b> — ${escapeHtml(e.when)}${e.today ? ' · <b>today</b>' : ''} <span class="muted">${escapeHtml(e.desc)}</span></div>`).join('')}`;
+}
+
+function perksHtml() {
+  const own = ownedPerks();
+  const all = Object.keys(PERKS).length;
+  return `<h3>Perks <span class="muted small">${own.length}/${all}</span></h3>${own.length ? own.map((p) => `<div class="small">${p.icon} <b>${escapeHtml(p.name)}</b> <span class="muted">from ${escapeHtml(p.from)}</span> — ${escapeHtml(p.desc)}</div>`).join('') : '<p class="small muted">Finish townspeople\'s storylines to earn perks.</p>'}`;
 }
 
 /* ---- Settings ---- */
@@ -570,6 +609,7 @@ export function openNpcMenu(n) {
   if (services.includes('shop')) btns.push(`<button class="btn big" data-npc="shop">🛒 Shop</button>`);
   if (services.includes('jobs')) btns.push(`<button class="btn big" data-npc="jobs">📋 Job board</button>`);
   if (services.includes('favor')) btns.push(`<button class="btn big hl-btn" data-npc="favor">🙋 Ask about a favor</button>`);
+  if (services.includes('story')) btns.push(`<button class="btn big hl-btn" data-npc="story">📖 ${escapeHtml(ERRANDS[errandOffer(n.id)].title)}</button>`);
   btns.push(`<button class="btn big" data-npc="gift" ${count('stew') + count('sandwich') ? '' : 'disabled'}>🎁 Give food</button>`);
   const el = openModal('npc', `<div class="npc-head"><div class="npc-dot" style="background:${def.body}"></div><div><h2>${escapeHtml(def.name)}</h2><div class="muted">${escapeHtml(def.title)}</div></div><div class="hearts">${'♥'.repeat(lv)}${'♡'.repeat(5 - lv)}</div></div>
     ${night ? '<p class="muted">It\'s late. They look tired.</p>' : ''}
@@ -585,6 +625,7 @@ export function openNpcMenu(n) {
     if (a === 'jobs') openJobBoard();
     if (a === 'gift') giveGift(n.id);
     if (a === 'favor') offerQuest(n.id);
+    if (a === 'story') offerErrand(n.id);
   });
 }
 
@@ -663,7 +704,9 @@ export function openJobBoard() {
       return `<div class="job-card ${o.locked ? 'locked' : ''}"><div class="job-title">${t.icon} ${t.name} <span class="pay">$${o.pay}</span></div><div class="small">${escapeHtml(o.desc)}</div><div class="small muted">Rewards: money, XP, ${PATHS[t.path].name} JP, friendship with ${escapeHtml(NPCS[chapter().jobContact].name.split(' ')[0])}</div>
         ${o.locked ? '<div class="small hl">Requires the Neighbor skill "Good Reputation".</div>' : o.needs ? `<div class="small hl">Needs a ${escapeHtml(ITEMS[o.needs].name)} (${escapeHtml(chapter().storeName)}).</div>` : `<button class="btn" data-accept="${o.type}" ${j || !open ? 'disabled' : ''}>Accept</button>`}</div>`;
     }).join('');
-    rerender(entry, `<h2>📋 Okafor Lumber — Job Board</h2>
+    const rep = repTier();
+    rerender(entry, `<h2>📋 ${escapeHtml(chapter().jobPlace || 'Job')} — Job Board</h2>
+      <p class="small">Your reputation: <b>${rep.name}</b>${rep.mult > 1 ? ` (+${Math.round((rep.mult - 1) * 100)}% pay)` : ''}${rep.next ? ` · ${rep.toNext} more job${rep.toNext === 1 ? '' : 's'} to ${rep.next.name}` : ''}</p>
       ${!open ? '<p class="hl">The board is closed. New jobs are handed out 7 AM – 5 PM.</p>' : ''}
       ${j ? `<div class="objective-box job"><b>Current job: ${JOB_TYPES[j.type].name}</b> ($${j.pay})<br>${escapeHtml(jobHint())}</div>` : ''}
       <div class="jobs">${offers}</div>`);
@@ -704,7 +747,7 @@ export function openCraft() {
   const entry = stack[stack.length - 1];
   const render = () => {
     const carpentry = (G.s.unlocks || {}).carpentry || G.s.chapter > 1 || (G.s.story.done || {})[1];
-    const rows = RECIPES.filter((r) => r.id !== 'barricade' || carpentry).map((r) => {
+    const rows = RECIPES.filter((r) => (r.id !== 'barricade' || carpentry) && (!r.workshop || projectDone('workshop'))).map((r) => {
       const cost = recipeCost(r);
       return `<div class="item-row"><div class="item-icon">${ITEMS[r.id].icon}</div><div class="item-main"><div class="item-name">${escapeHtml(r.label)} <span class="muted">(have ${count(r.id)})</span></div><div class="item-desc">${escapeHtml(ITEMS[r.id].desc)}</div></div><button class="btn" data-craft="${r.id}" ${count('wood') >= cost ? '' : 'disabled'}>${cost} wood</button></div>`;
     }).join('');

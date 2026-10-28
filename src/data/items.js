@@ -150,6 +150,30 @@ export const ITEMS = {
     name: 'Pistol Suppressor', icon: '🔇', cat: 'Upgrade', cap: 1, sell: 45, install: 'suppressor',
     desc: 'Fits the handgun: shots are much quieter — distant attackers aren\'t alerted, and gunfire in town doesn\'t raise your Heat.',
   },
+  venison: {
+    name: 'Venison', icon: '🥩', cat: 'Food', cap: 12, sell: 9,
+    desc: 'Fresh deer meat. Cook it at a stove (Venison Stew), smoke it into jerky, or sell it.',
+  },
+  pelt: {
+    name: 'Deer Pelt', icon: '🦌', cat: 'Material', cap: 10, sell: 35,
+    desc: 'A good hide. Stores pay well for them.',
+  },
+  venison_stew: {
+    name: 'Venison Stew', icon: '🍲', cat: 'Food', cap: 6, heal: 45, stamina: 100, regenBuff: 180, wellFed: 180, sell: 14, quick: true, food: true,
+    desc: 'Cooked from 2 venison. Restores 45 health; Well Fed for 3 minutes.',
+  },
+  jerky: {
+    name: 'Venison Jerky', icon: '🥓', cat: 'Food', cap: 12, heal: 18, stamina: 100, sell: 8, quick: true, food: true,
+    desc: 'Smoked in your smokehouse. Light, keeps forever, restores 18 health.',
+  },
+  pie: {
+    name: 'Slice of Pie', icon: '🥧', cat: 'Food', cap: 6, heal: 15, stamina: 100, regenBuff: 60, sell: 3, quick: true, food: true,
+    desc: 'Restores 15 health. Somebody\'s grandmother\'s recipe.',
+  },
+  envelope: {
+    name: 'Sealed Envelope', icon: '✉', cat: 'Story', cap: 3, sell: 0, story: true,
+    desc: 'A courier job. "Don\'t open it."',
+  },
   note: {
     name: 'Folded Note', icon: '✉', cat: 'Story', cap: 1, sell: 0, story: true,
     desc: 'Found on the big man after the attack. "Pine Hollow. The cabin off Route 9."',
@@ -175,6 +199,22 @@ export const SHOPS = {
       { id: 'rifle_ammo', qty: 10, price: 15 },
       { id: 'fishing_rod', qty: 1, price: 30 },
       { id: 'suppressor', qty: 1, price: 120 },
+    ],
+  },
+  // Friday market stalls (any chapter's town).
+  market: {
+    name: 'Market Stalls',
+    owner: null,
+    stock: [
+      { id: 'pie', qty: 1, price: 4 },
+      { id: 'venison', qty: 1, price: 12 },
+      { id: 'stew', qty: 1, price: 7 },
+      { id: 'shells', qty: 8, price: 10 },
+      { id: 'ammo', qty: 12, price: 8 },
+      { id: 'bear_trap', qty: 1, price: 24 },
+      { id: 'board_kit', qty: 1, price: 20 },
+      { id: 'fishing_rod', qty: 1, price: 24 },
+      { id: 'bandage', qty: 1, price: 6 },
     ],
   },
   gus: {
@@ -203,6 +243,8 @@ export const SHOPS = {
 export const RECIPES = [
   { id: 'board_kit', wood: 3, label: 'Window Board Kit' },
   { id: 'barricade', wood: 4, label: 'Wood Barricade' },
+  { id: 'shutter_kit', wood: 7, label: 'Steel Shutter Kit', workshop: true },
+  { id: 'bear_trap', wood: 4, label: 'Bear Trap', workshop: true },
 ];
 
 // Chapter 2: one store on Main Street carries a bit of everything.
@@ -248,4 +290,5 @@ export const COOK_RECIPES = [
   { id: 'fish_fry', label: 'Fish Fry', needs: { fish: 2 } },
   { id: 'veg_stew', label: 'Garden Stew', needs: { vegetables: 3 } },
   { id: 'hearty_meal', label: 'Hearty Supper', needs: { fish: 1, vegetables: 2, sandwich: 1 } },
+  { id: 'venison_stew', label: 'Venison Stew', needs: { venison: 2 } },
 ];

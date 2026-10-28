@@ -12,11 +12,13 @@ import { inCombat } from './player.js';
 import { saveGame } from './save.js';
 import { dist } from '../util.js';
 import { homeMap, atHome } from './chapters.js';
+import { hasPerk } from './perks.js';
+import { projectDone } from './projects.js';
 import { damageEnemy } from './combat.js';
 
 export const MAX_COVERS = 4;
 
-const effWood = (n) => Math.max(1, n - (hasSkill('efficient_repairs') ? 1 : 0));
+const effWood = (n) => Math.max(1, n - (hasSkill('efficient_repairs') ? 1 : 0) - (hasPerk('mill_hand') ? 1 : 0));
 
 /** Rebuild placed-cover blockers on the home map from the save. */
 export function syncCovers() {
@@ -253,7 +255,7 @@ export function pickUpCover(cover) {
   saveGame('cover');
 }
 
-export function recipeCost(r) { return effWood(r.wood); }
+export function recipeCost(r) { return effWood(r.wood - (projectDone('workshop') ? 1 : 0)); }
 
 export function craft(id) {
   const r = RECIPES.find((x) => x.id === id);

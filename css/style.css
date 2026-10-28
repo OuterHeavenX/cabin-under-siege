@@ -488,3 +488,26 @@ body.large-text .bar-lbl, body.large-text .ammo-sub, body.large-text .clock { fo
 .eye-seen { color: #ff5a4a; border-color: rgba(255,90,74,0.8); background: rgba(70,0,0,0.7); animation: eye-pulse 0.45s ease-in-out infinite; }
 @keyframes eye-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.08); } }
 body.portrait .eye { top: calc(120px + var(--sat)); }
+
+/* ---------------- poker ---------------- */
+.poker .modal { background: radial-gradient(ellipse at center, #1e4a2e 0%, #10281a 70%, #0a1a10 100%); }
+.pk-table { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 8px 0 14px; }
+.pk-seat { text-align: center; padding: 6px; border-radius: 10px; background: rgba(0,0,0,0.25); }
+.pk-seat.folded { opacity: 0.45; }
+.pk-name { font-size: 12px; font-weight: 700; margin-bottom: 4px; }
+.pk-hand { display: flex; gap: 4px; justify-content: center; flex-wrap: wrap; }
+.pk-card { width: 38px; height: 54px; border-radius: 6px; background: #f6f2e8; color: #1a1a1a; border: 1px solid #b8b0a0; font: 700 15px/54px system-ui, sans-serif; text-align: center; padding: 0; cursor: pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.4); transition: transform 0.12s; }
+.pk-card.red { color: #b0201c; }
+.pk-card:disabled { cursor: default; opacity: 1; }
+.pk-card.sel { transform: translateY(-10px); background: #ffe8a8; border-color: #d4af37; }
+.pk-card.back { display: inline-block; background: repeating-linear-gradient(45deg, #7a1414, #7a1414 4px, #5a0e0e 4px, #5a0e0e 8px); border-color: #3a0808; }
+.pk-you { text-align: center; padding: 8px; border-radius: 12px; background: rgba(0,0,0,0.3); }
+.pk-you .pk-card { width: 46px; height: 66px; line-height: 66px; font-size: 18px; }
+.pk-result { font-weight: 700; text-align: center; margin: 10px 0 4px; }
+.pk-result.win { color: #8fdc93; }
+.pk-gossip { font-style: italic; text-align: center; color: #e8d8b8; margin: 4px 0 6px; }
+.case-sus { display: inline-block; padding: 1px 6px; margin: 2px 2px 0 0; border-radius: 4px; background: rgba(255,255,255,0.06); }
+.case-sus.cleared { opacity: 0.55; text-decoration: line-through; }
+.case-sus.wrong { color: #e07a6a; }
+.objective-box.case { border-left-color: #c9a227; }
+.arc-row { padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.06); }

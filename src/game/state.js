@@ -57,6 +57,7 @@ export function newHome(id) {
     upgrades: { floodlight: false, alarm: false, camera: false },
     covers: [],
     traps: [],
+    projects: {},
     phoneLine: true,
     porchLight: true,
   };

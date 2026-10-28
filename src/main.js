@@ -42,7 +42,12 @@ import { addPickup, damageEnemy } from './game/combat.js';
 import { updateFire, startFire } from './game/fire.js';
 import { spawnEnemy, openingStrength } from './game/enemies.js';
 import { initActivityEvents } from './game/activities.js';
-import { initErrandEvents, ERRANDS } from './game/errands.js';
+import { initErrandEvents, ERRANDS, updateErrands } from './game/errands.js';
+import { updateTail, tailStatus, cancelTail } from './game/tail.js';
+import { spawnDeer, updateAnimals } from './game/hunting.js';
+import { updateGallery, galleryStatus, updateTownLife } from './game/townlife.js';
+import { updateRat, initRat } from './game/rat.js';
+import { applyProjects } from './game/projects.js';
 import { spawnDog, updateDog, dogMorning } from './game/dog.js';
 import { setWeather } from './game/weather.js';
 import { initAchievementEvents, updateAchievements, unlockedCount, ACHIEVEMENTS, isUnlocked } from './game/achievements.js';
@@ -101,6 +106,7 @@ function buildMaps() {
   G.maps = {};
   for (const id of chapter().maps) {
     const m = MAP_BUILDERS[id]();
+    if (id === homeMapId()) applyProjects(m);
     m.groundCanvas = buildGroundCanvas(m);
     for (const b of m.buildings) b.roofCanvas = buildRoofCanvas(b);
     G.maps[id] = m;
@@ -122,6 +128,7 @@ function buildMaps() {
 }
 
 export function loadMap(id, pos) {
+  if (G.tail) cancelTail();
   G.map = G.maps[id];
   G.enemies = [];
   G.bullets = [];
@@ -137,6 +144,7 @@ export function loadMap(id, pos) {
   G.camera.x = p.x; G.camera.y = p.y;
   spawnNpcs();
   spawnDog();
+  spawnDeer();
   G.events.emit('mapLoaded', id);
   updateMood(true);
 }
@@ -211,6 +219,12 @@ function update(dt) {
   updateDog(dt);
   updateAssault(dt);
   updateAchievements(dt);
+  updateErrands(dt);
+  updateTail(dt);
+  updateAnimals(dt);
+  updateGallery(dt);
+  updateTownLife(dt);
+  updateRat(dt);
   updateJobs(dt);
   if (!G.endless && !G.prequel) { updateStory(dt); checkDiscovery(); }
 
@@ -284,7 +298,9 @@ function computeHudInfo(dt) {
       : G.siege && G.siege.searching
       ? `HIDDEN — they're searching for you · they give up in ${Math.floor(G.siege.giveUpIn / 60)}h ${String(Math.max(0, Math.round(G.siege.giveUpIn % 60))).padStart(2, '0')}m`
       : `UNDER ATTACK — ${alive} attacker${alive === 1 ? '' : 's'}${pending ? ` (+${pending} coming)` : ''}`;
-  } else if (G.assault && !G.assault.alarm) danger = null; // stealth: the objective line is enough
+  } else if (G.tail) danger = tailStatus();
+  else if (G.gallery) danger = galleryStatus();
+  else if (G.assault && !G.assault.alarm) danger = null; // stealth: the objective line is enough
   else if (G.assault) danger = alive ? `ALARM — ${alive} guard${alive === 1 ? '' : 's'} hunting you` : null;
   else if (alive) danger = `${alive} attacker${alive === 1 ? '' : 's'} nearby`;
   else if (s.world.siege && s.world.siege.warned) danger = `Attack expected ~${fmtClock(s.world.siege.minute)}. Get ready!`;
@@ -407,9 +423,16 @@ function initEvents() {
   initSiegeEvents();
   initActivityEvents();
   initErrandEvents();
+  initRat();
   initAchievementEvents();
   initCloudSync();
   initFxEvents();
+  G.events.on('projectsChanged', () => {
+    const m = G.maps[homeMapId()];
+    if (!m) return;
+    applyProjects(m);
+    m.groundCanvas = buildGroundCanvas(m);
+  });
   G.events.on('prequelDone', () => {
     const el = openModal('prequelEnd', `<div class="chapter-card"><div class="ch-num">PREQUEL</div><h2>NEWARK, 1999</h2><div class="ch-done">— COMPLETE —</div>
       <p>Joey Marchetti was twenty-four. His sister Angie still keeps his photograph behind the register at Marchetti's.</p>
@@ -516,7 +539,7 @@ function moveToChapter(n) {
   s.home = newHome(n === 5 ? 'watchhouse' : n === 4 ? 'estate' : n === 3 ? 'farm' : n === 2 ? 'house' : 'cabin');
   s.job = null;
   s.story.step = chapter().firstStep;
-  s.story.flags = {};
+  s.story.flags = { chapterStartDay: s.time.day + 2 };
   s.world.siege = null;
   s.world.signs = {};
   s.world.threat = 15;
@@ -546,7 +569,7 @@ function moveToChapter(n) {
 function startGame(isNew) {
   closeAllModals();
   G.enemies = []; G.bullets = []; G.pickups = []; G.particles = []; G.floaters = []; G.fires = []; G.lobs = [];
-  G.siegeActive = false; G.siege = null; G.sleeping = null; G.transition = null; G.repairHold = null;
+  G.siegeActive = false; G.siege = null; G.sleeping = null; G.transition = null; G.repairHold = null; G.tail = null;
   buildMaps();
   G.player = createPlayer();
   const d = derived();

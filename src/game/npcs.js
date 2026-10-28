@@ -16,7 +16,8 @@ import { dailyAllow } from './progression.js';
 import { chapter, workMapId, homeMapId } from './chapters.js';
 import { ruthJoined, companionSchedule, updateAlly, COMPANION_LINES } from './ally.js';
 import { questOffer, questTalk } from './quests.js';
-import { errandTalk, offerErrand } from './errands.js';
+import { errandTalk, offerErrand, autoOfferErrand, errandOffer } from './errands.js';
+import { ratTalk } from './rat.js';
 
 function npcCost(cx, cy) {
   const m = G.map;
@@ -48,6 +49,7 @@ export function spawnNpcs() {
   }
   if (m.id === workMapId() && !G.prequel) {
     for (const f of TOWNSFOLK[m.id] || []) {
+      if (G.s.story.flags.ratGone === f.id) continue;
       const p = m.points[f.route[0]];
       G.npcs.push({ id: f.id, def: f, folk: true, x: p.x, y: p.y, radius: 10, angle: 0, routeIdx: 0, path: null, walkPhase: 0, idleT: Math.random() * 3, spot: f.route[0] });
     }
@@ -125,7 +127,8 @@ export function updateNpcs(dt) {
 }
 
 /* ---------------- talking ---------------- */
-export function interactNpc(n) {
+export function interactNpc(n, skipRat = false) {
+  if (!skipRat && ratTalk(n, () => interactNpc(n, true))) return;
   if (n.folk) {
     if (errandTalk(n.id) || offerErrand(n.id)) return;
     playDialogue([{ who: n.def.name, text: choose(FOLK_LINES[G.map.id] || FOLK_LINES.town) }]);
@@ -140,6 +143,7 @@ export function interactNpc(n) {
   const story = storyDialogue(n.id);
   if (story) { playDialogue(story.lines, story.onEnd); firstTalkBonus(n.id); return; }
   if (errandTalk(n.id)) return;
+  if (autoOfferErrand(n.id)) return;
   if (questTalk(n.id)) return;
   openNpcMenu(n);
 }
@@ -259,6 +263,7 @@ export function npcAvailableServices(n) {
   if (n.id === ch.shopkeeper && n.spot === `${n.id}_store` && minute >= 8 * 60 && minute < 20 * 60) out.push('shop');
   if (n.id === ch.jobContact && n.spot === `${n.id}_yard` && minute >= 7 * 60 && minute < 17 * 60) { out.push('jobs'); if (n.id === 'gus') out.push('shop'); }
   if (questOffer(n.id)) out.push('favor');
+  if (errandOffer(n.id)) out.push('story');
   return out;
 }
 

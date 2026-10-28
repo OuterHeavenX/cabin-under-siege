@@ -206,7 +206,16 @@ export function buildCabinMap(home) {
   m.homeInfo = {
     building: 'cabin', interior: { cx: 24, cy: 22 }, allyPost: P(20.5, 24.9),
     flood: { x: 24.5 * TILE, y: 28.6 * TILE, r: 270 }, porch: { x: 24.5 * TILE, y: 27.6 * TILE, r: 95 },
+    // Long building projects around the cabin: [x, y, w, h] in tiles.
+    projectSpots: { workshop: [32, 19, 3, 2], watchtower: [35, 26, 2, 2], radio: [31, 21, 1, 1], smokehouse: [12, 23, 2, 2] },
   };
+  // Deer graze in the north woods at dawn and dusk.
+  m.huntZone = [1, 1, 45, 15];
+  m.points.hunt_area = P(20, 8);
+  m.points.ruth_shed = P(53.6, 23);
+  m.fillSolid(54, 21, 2, 2, SO.FURN); m.decor.push({ kind: 'crate', x: 54, y: 21, w: 2, h: 2 });
+  m.points.blind = P(9, 4.5);
+  m.decor.push({ kind: 'blind', x: 8, y: 2, w: 2, h: 2 });
   m.exits = [{ id: 'to_town', x: 59 * TILE, y: 38 * TILE, w: TILE, h: 4 * TILE, target: 'town', label: 'Walk to Pine Hollow (1 hr)' }];
   addProp(m, { id: 'exit_town', kind: 'exit', x: 58.6 * TILE, y: 40 * TILE, label: 'Road to Pine Hollow', r: 56, target: 'town' });
   return m;
@@ -353,7 +362,43 @@ export function buildTownMap() {
     south: { ...P(32, 43.5), label: 'the south road' },
   };
   addProp(m, { id: 'exit_cabin', kind: 'exit', x: 0.6 * TILE, y: 21 * TILE, label: 'Road Home', r: 56, target: 'cabin' });
+  addTownLife(m, {
+    poker: [24.5, 16.4],
+    stalls: [[34, 19], [37, 19], [44, 19], [47, 19]],
+    supper: [39.5, 18.4],
+    fair: { rect: [3, 32, 29, 42], tents: [[5, 33], [9, 33], [23, 33]], gallery: [13, 33], pie: [6.5, 36.4] },
+  });
+  m.points.henderson_back = P(50.5, 10.4);
+  m.points.payphone = P(29.5, 19.4);
+  m.points.mill = P(52.5, 33.5);
   return m;
+}
+
+/** Town life on a chapter's work map: poker table, market stalls, Sunday supper, the fairground. */
+function addTownLife(m, cfg) {
+  const [px, py] = cfg.poker;
+  addProp(m, { id: 'poker_table', kind: 'poker', x: px * TILE, y: py * TILE, label: 'Poker table', r: 46 });
+  m.points.poker_table = P(px, py);
+  for (const [cx, cy] of cfg.stalls) { m.fillSolid(cx, cy, 2, 1, SO.FURN); m.decor.push({ kind: 'stall', x: cx, y: cy, w: 2, h: 1 }); }
+  const [sx, sy] = cfg.stalls[0];
+  addProp(m, { id: 'market', kind: 'market', x: (sx + 1) * TILE, y: (sy + 1.4) * TILE, label: 'Market stalls', r: 50 });
+  m.points.market = P(sx + 1, sy + 1.4);
+  addProp(m, { id: 'supper', kind: 'supper', x: cfg.supper[0] * TILE, y: cfg.supper[1] * TILE, label: 'Sunday supper', r: 40 });
+  m.points.supper = P(...cfg.supper);
+  const f = cfg.fair;
+  const [x0, y0, x1, y1] = f.rect;
+  for (let cy = y0; cy <= y1; cy++) for (let cx = x0; cx <= x1; cx++) {
+    const i = m.idx(cx, cy);
+    if (m.trees.has(i)) { m.trees.delete(i); m.solid[i] = SO.NONE; }
+  }
+  m.fillGround(x0 + 1, y0 + 4, x1 - x0 - 2, 1, GR.DIRT);
+  for (const [cx, cy] of f.tents) { m.fillSolid(cx, cy, 3, 2, SO.FURN); m.decor.push({ kind: 'tent', x: cx, y: cy, w: 3, h: 2 }); }
+  const [gx, gy] = f.gallery;
+  m.fillSolid(gx, gy, 8, 1, SO.FURN); m.decor.push({ kind: 'gallery', x: gx, y: gy, w: 8, h: 2 });
+  m.gallery = { x0: (gx + 0.5) * TILE, x1: (gx + 7.5) * TILE, y: (gy + 1.5) * TILE, shootFrom: P(gx + 4, gy + 6) };
+  addProp(m, { id: 'gallery', kind: 'gallery', x: (gx + 4) * TILE, y: (gy + 6) * TILE, label: 'Shooting gallery', r: 48 });
+  addProp(m, { id: 'pie_stand', kind: 'pie_stand', x: f.pie[0] * TILE, y: f.pie[1] * TILE, label: 'Pie stand', r: 44 });
+  m.points.fair = P(gx + 4, gy + 6);
 }
 
 /* ------------------------------------------------------------------ */

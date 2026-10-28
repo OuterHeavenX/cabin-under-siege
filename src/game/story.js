@@ -18,6 +18,7 @@ import { choresStatus, errandWaypoint, errandGiverWaypoint, startErrand, townErr
 import { startQuest } from './quests.js';
 import { input } from '../input.js';
 import { NG_TWISTS } from './ngplus.js';
+import { startRatCase, ratObjective, ratWaypoint } from './rat.js';
 
 const ME = 'Frank';
 
@@ -35,6 +36,7 @@ export const STEPS = {
   first_job: { obj: 'Take and complete a job from the board at Okafor Lumber.' },
   see_dee: { obj: 'Dee at Marsh General wants a word.' },
   stranger: { obj: 'Find the man in the grey coat near the diner (daytime).' },
+  ch1_rat: { obj: () => ratObjective() },
   reinforce: { obj: () => `Fortify the cabin: install three defenses (${Math.min(3, G.s.story.flags.fortified || 0)}/3) — boards, braces, cover, traps.` },
   first_siege: { obj: 'They\'re coming tonight. Be at the cabin by 10 PM — and survive.' },
   search_body: { obj: 'Search the big man for anything useful.' },
@@ -147,6 +149,7 @@ export function storyWaypoint() {
     }
     case 'see_dee': return { ...npcPoint('dee'), label: 'Dee' };
     case 'stranger': return { map: 'town', ...town.points.stranger, label: 'Stranger' };
+    case 'ch1_rat': return ratWaypoint();
     case 'reinforce': return { map: 'cabin', ...cab.points.cabin_front, label: 'Cabin' };
     case 'first_siege': return { map: 'cabin', ...cab.points.cabin_in, label: 'Cabin' };
     case 'search_body': {
@@ -623,6 +626,9 @@ export function initStoryEvents() {
     readBurner();
   });
   ev.on('talkStranger', (n) => strangerTalk(n));
+  ev.on('ratClosed', ({ next }) => {
+    playDialogue([{ who: ME, text: G.s.choices.rat === 'missed' ? 'No more time. The cabin.' : 'One problem down. Now the cabin.' }], () => setStep(next));
+  });
   ev.on('defenseInstalled', () => {
     if (G.s.story.step === 'reinforce') {
       const fl = G.s.story.flags;
@@ -763,8 +769,10 @@ function checkPrepared() {
   const f = G.s.story.flags;
   if (G.s.story.step !== 'prepare' || !f.firstAid || !f.carpentry || !questDoneFn('ruth_watch')) return;
   playDialogue([
-    { who: ME, text: 'Bandages, barricades, and Harold\'s rifle. Now the cabin.' },
-  ], () => setStep('reinforce'));
+    { who: ME, text: 'Bandages, barricades, and Harold\'s rifle.' },
+    { who: ME, text: 'But that grey coat found a cabin at the end of an unmarked road in a town of four hundred people. Nobody finds that by accident.' },
+    { who: ME, text: 'Somebody in Pine Hollow told him. And whoever it is will tell him when I\'m asleep, too. I\'ve got a few days before they come back in force.' },
+  ], () => { startRatCase(); setStep('ch1_rat'); });
 }
 
 function checkFarmReady() {

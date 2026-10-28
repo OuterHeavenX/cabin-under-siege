@@ -4,6 +4,7 @@ import { G, isNight } from '../game/state.js';
 import { TILE } from '../config.js';
 import { GR, SO } from './map.js';
 import { drawWorldFx, drawScreenFlash, fxZoom } from './fx.js';
+import { drawGallery } from '../game/townlife.js';
 import { lowQuality } from '../game/difficulty.js';
 import { drawDecals, drawWorldWeather, drawScreenAtmosphere } from './atmosphere.js';
 import { castPoly, lightPoly, FLASH_ANGLE, FLASH_RANGE } from './shadowcast.js';
@@ -13,6 +14,7 @@ import { derived } from '../game/progression.js';
 import { jobProps } from '../game/jobs.js';
 import { questProps } from '../game/quests.js';
 import { errandProps } from '../game/errands.js';
+import { ratProps } from '../game/rat.js';
 import { homeMapId } from '../game/chapters.js';
 import { ITEMS } from '../data/items.js';
 
@@ -353,6 +355,70 @@ function drawDecor(g, d) {
       g.fillStyle = '#3e5a2a'; for (let k = 0; k < 7; k++) { g.beginPath(); g.arc(x + 6 + k * 13, y + 4 + (k % 2) * 4, 7, 0, Math.PI * 2); g.fill(); }
       g.fillStyle = '#1a1410'; g.fillRect(x + w / 2 - 14, y + h - 12, 28, 6);
       break;
+    case 'scaffold': {
+      // A building site: posts, a frame that fills in as the days go by.
+      g.fillStyle = 'rgba(0,0,0,0.25)'; g.fillRect(x + 3, y + 4, w, h);
+      g.fillStyle = '#b08a5a'; g.fillRect(x + 2, y + 2, w - 4, h - 4);
+      g.strokeStyle = '#6a4a2a'; g.lineWidth = 3;
+      for (const [px, py] of [[x + 3, y + 3], [x + w - 3, y + 3], [x + 3, y + h - 3], [x + w - 3, y + h - 3]]) { g.beginPath(); g.arc(px, py, 2.5, 0, Math.PI * 2); g.stroke(); }
+      g.lineWidth = 2; g.beginPath(); g.moveTo(x + 3, y + 3); g.lineTo(x + w - 3, y + h - 3); g.moveTo(x + w - 3, y + 3); g.lineTo(x + 3, y + h - 3); g.stroke();
+      g.fillStyle = 'rgba(122,86,52,0.9)'; g.fillRect(x + 4, y + h - 6 - (h - 10) * (d.stage || 0), w - 8, (h - 10) * (d.stage || 0));
+      break;
+    }
+    case 'workshop': {
+      g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(x + 4, y + 5, w, h);
+      g.fillStyle = '#6a4a34'; g.fillRect(x, y, w, h);
+      g.fillStyle = '#4a3a2a'; for (let i = 0; i < w; i += 6) g.fillRect(x + i, y, 3, h);
+      g.fillStyle = '#9a9aa0'; g.fillRect(x + 6, y + h - 14, w - 12, 8);
+      g.fillStyle = '#c0392b'; g.fillRect(x + 10, y + 6, 8, 5); g.fillStyle = '#d4af37'; g.fillRect(x + 24, y + 6, 10, 4);
+      break;
+    }
+    case 'watchtower': {
+      g.fillStyle = 'rgba(0,0,0,0.35)'; g.fillRect(x + 10, y + 10, w + 14, h + 6);
+      g.strokeStyle = '#5a3a24'; g.lineWidth = 4;
+      g.beginPath(); g.moveTo(x + 4, y + h); g.lineTo(x + 12, y + 6); g.moveTo(x + w - 4, y + h); g.lineTo(x + w - 12, y + 6); g.stroke();
+      g.fillStyle = '#7a5634'; g.fillRect(x + 2, y - 4, w - 4, h - 18);
+      g.fillStyle = '#5a3a24'; g.fillRect(x, y - 10, w, 6);
+      g.fillStyle = '#3a2a1a'; g.fillRect(x + 8, y, w - 16, 8);
+      break;
+    }
+    case 'radio': {
+      g.strokeStyle = '#9aa0a6'; g.lineWidth = 2;
+      g.beginPath(); g.moveTo(x + 16, y + 30); g.lineTo(x + 16, y - 6); g.moveTo(x + 8, y + 2); g.lineTo(x + 24, y + 2); g.moveTo(x + 10, y + 10); g.lineTo(x + 22, y + 10); g.stroke();
+      g.fillStyle = '#e74c3c'; g.beginPath(); g.arc(x + 16, y - 7, 2.5, 0, Math.PI * 2); g.fill();
+      break;
+    }
+    case 'smokehouse': {
+      g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(x + 4, y + 5, w, h);
+      g.fillStyle = '#5a4030'; g.fillRect(x + 2, y + 2, w - 4, h - 4);
+      g.fillStyle = '#3a2a20'; g.beginPath(); g.moveTo(x, y + 6); g.lineTo(x + w / 2, y - 8); g.lineTo(x + w, y + 6); g.closePath(); g.fill();
+      g.fillStyle = '#2a2a2a'; g.fillRect(x + w - 14, y - 10, 6, 10);
+      g.fillStyle = '#c0782a'; g.fillRect(x + w / 2 - 5, y + h - 14, 10, 10);
+      break;
+    }
+    case 'stall': {
+      // Market stall: a counter under a striped awning.
+      g.fillStyle = 'rgba(0,0,0,0.3)'; g.fillRect(x + 2, y + 6, w, h);
+      g.fillStyle = '#7a5634'; g.fillRect(x + 2, y + 10, w - 4, h - 12);
+      for (let i = 0; i < w; i += 8) { g.fillStyle = (i / 8) % 2 ? '#e8e2d0' : '#b0302a'; g.fillRect(x + i, y - 4, 8, 12); }
+      g.fillStyle = '#d9a441'; g.fillRect(x + 6, y + 12, 6, 5); g.fillStyle = '#6a8a3a'; g.fillRect(x + 16, y + 12, 7, 5); g.fillStyle = '#a3201c'; g.fillRect(x + 28, y + 12, 6, 5);
+      break;
+    }
+    case 'tent': {
+      g.fillStyle = 'rgba(0,0,0,0.3)'; g.beginPath(); g.ellipse(x + w / 2 + 3, y + h - 4, w / 2, 8, 0, 0, Math.PI * 2); g.fill();
+      for (let i = 0; i < 6; i++) { g.fillStyle = i % 2 ? '#f0e6d0' : '#2f5d7a'; g.beginPath(); g.moveTo(x + w / 2, y - 10); g.lineTo(x + (i / 6) * w, y + h); g.lineTo(x + ((i + 1) / 6) * w, y + h); g.closePath(); g.fill(); }
+      g.fillStyle = '#d4af37'; g.beginPath(); g.moveTo(x + w / 2, y - 18); g.lineTo(x + w / 2 + 8, y - 14); g.lineTo(x + w / 2, y - 10); g.fill();
+      break;
+    }
+    case 'gallery': {
+      // Shooting gallery booth: a long counter, a painted backboard, a rail the ducks ride on.
+      g.fillStyle = '#5a2a1a'; g.fillRect(x, y, w, 14);
+      for (let i = 0; i < w; i += 16) { g.fillStyle = (i / 16) % 2 ? '#f0c040' : '#b0302a'; g.fillRect(x + i, y - 8, 16, 8); }
+      g.fillStyle = '#3a6a8a'; g.fillRect(x + 4, y + 14, w - 8, h * 1 - 14);
+      g.strokeStyle = '#d8c8a8'; g.lineWidth = 2; g.beginPath(); g.moveTo(x + 6, y + h - 6); g.lineTo(x + w - 6, y + h - 6); g.stroke();
+      g.fillStyle = '#7a5634'; g.fillRect(x - 4, y + h + 2, w + 8, 6);
+      break;
+    }
     case 'irongate':
       if (d.rammed) {
         // Twisted bars on the gravel where Ingrid's truck came through
@@ -961,7 +1027,7 @@ export function render(ctx) {
   }
 
   // Favor props
-  for (const pr of [...questProps(m.id), ...errandProps(m.id)]) {
+  for (const pr of [...questProps(m.id), ...errandProps(m.id), ...ratProps(m.id)]) {
     if (!inView(pr.x, pr.y)) continue;
     if (pr.kind === 'quest_find' && pr.dog) drawDog(ctx, pr.x, pr.y, t);
     if (pr.kind === 'quest_find' && pr.animal === 'cat') drawCat(ctx, pr.x, pr.y, t);
@@ -1011,10 +1077,12 @@ export function render(ctx) {
   for (const e of G.enemies) if (!e.gone && inView(e.x, e.y)) ents.push(e);
   ents.push(G.player);
   if (G.dog && inView(G.dog.x, G.dog.y)) ents.push(G.dog);
+  for (const a of G.animals || []) if (inView(a.x, a.y)) ents.push(a);
   ents.sort((a, b) => a.y - b.y);
   const p = G.player;
   for (const e of ents) {
     if (e === G.dog) { drawGuardDog(ctx, e, t); continue; }
+    if (e.kind === 'deer') { drawDeer(ctx, e, t); continue; }
     if (e.def && e.def.dog) { drawAttackDog(ctx, e, t); continue; }
     if (e === p) {
       if (p.dead) continue;
@@ -1089,6 +1157,7 @@ export function render(ctx) {
   }
   ctx.globalAlpha = 1;
   drawWorldFx(ctx);
+  drawGallery(ctx);
 
   // Canopies (sprites with a gentle wind sway; fade if something is underneath)
   const lowQ = lowQuality();
@@ -1506,7 +1575,15 @@ function drawOverlays(ctx, dk, inView) {
   }
   // NPC name tags when close
   for (const n of G.npcs) {
-    if (!n.present || dist(n.x, n.y, p.x, p.y) > 110) continue;
+    if (n.scripted && n.sus > 0.04) {
+      // Someone you're tailing: the same "?" the attackers use.
+      const cy = n.y - 38;
+      ctx.fillStyle = 'rgba(0,0,0,0.55)'; ctx.beginPath(); ctx.arc(n.x, cy, 8, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#f5c542'; ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.arc(n.x, cy, 8, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(1, n.sus)); ctx.stroke();
+      ctx.fillStyle = '#f5c542'; ctx.font = 'bold 11px system-ui, sans-serif'; ctx.textAlign = 'center'; ctx.fillText('?', n.x, cy + 4);
+    }
+    if (!n.present || dist(n.x, n.y, p.x, p.y) > (n.scripted ? 400 : 110)) continue;
     if (G.map.buildingAt(n.x, n.y) && G.map.buildingAt(n.x, n.y) !== G.map.buildingAt(p.x, p.y)) continue;
     ctx.font = '600 10px system-ui, sans-serif'; ctx.textAlign = 'center';
     const label = n.def.name;
@@ -1868,6 +1945,32 @@ function drawCalf(ctx, x, y, t) {
   ctx.fillStyle = '#e8d8c8'; ctx.beginPath(); ctx.ellipse(x + 18, y - 1, 6, 5, 0, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = '#d4af37'; ctx.beginPath(); ctx.arc(x + 14, y + 4, 2.2, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = '#ffd166'; ctx.font = 'bold 12px system-ui'; ctx.textAlign = 'center'; ctx.fillText('?', x, y - 16 + Math.sin(t * 4) * 2);
+}
+
+/** A deer: tan body, white tail, a head that lifts when it's wary; antlers on bucks. */
+function drawDeer(ctx, a, t) {
+  ctx.save(); ctx.translate(a.x, a.y);
+  if (a.dead) {
+    ctx.rotate(a.angle + Math.PI / 2);
+    ctx.fillStyle = 'rgba(90,10,10,0.5)'; ctx.beginPath(); ctx.ellipse(0, 4, 14, 8, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = a.dressed ? '#6a4a34' : '#9a6a40'; ctx.beginPath(); ctx.ellipse(0, 0, 13, 6, 0.3, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+    if (!a.dressed) { ctx.fillStyle = '#ffd166'; ctx.font = 'bold 11px system-ui'; ctx.textAlign = 'center'; ctx.fillText('▼', a.x, a.y - 16 + Math.sin(t * 4) * 2); }
+    return;
+  }
+  ctx.rotate(a.angle);
+  const leg = Math.sin(a.walk) * 4;
+  ctx.fillStyle = 'rgba(0,0,0,0.28)'; ctx.beginPath(); ctx.ellipse(1, 4, 15, 7, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#4a3020';
+  for (const [lx, ly, s] of [[7, -5, 1], [7, 5, -1], [-8, -5, -1], [-8, 5, 1]]) ctx.fillRect(lx + leg * s - 1.5, ly - 1.2, 4, 2.4);
+  ctx.fillStyle = '#9a6a40'; ctx.beginPath(); ctx.ellipse(0, 0, 12, 5.5, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#f2e8d8'; ctx.beginPath(); ctx.ellipse(-12, 0, 2.6, 2.2, 0, 0, Math.PI * 2); ctx.fill(); // tail
+  const hx = a.alert ? 15 : 17, hy = a.state === 'graze' && !a.alert ? 2 : 0;
+  ctx.fillStyle = '#8a5c36'; ctx.beginPath(); ctx.ellipse(hx, hy, 4.4, 3.4, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#2a1a10'; ctx.beginPath(); ctx.arc(hx + 4, hy, 1.4, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#8a5c36'; ctx.beginPath(); ctx.ellipse(hx - 2, hy - 4, 1.4, 3, -0.5, 0, Math.PI * 2); ctx.ellipse(hx - 2, hy + 4, 1.4, 3, 0.5, 0, Math.PI * 2); ctx.fill();
+  if (a.buck) { ctx.strokeStyle = '#d8c8a8'; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(hx - 1, hy - 2); ctx.lineTo(hx - 6, hy - 8); ctx.lineTo(hx - 9, hy - 7); ctx.moveTo(hx - 4, hy - 5); ctx.lineTo(hx - 3, hy - 9); ctx.moveTo(hx - 1, hy + 2); ctx.lineTo(hx - 6, hy + 8); ctx.lineTo(hx - 9, hy + 7); ctx.moveTo(hx - 4, hy + 5); ctx.lineTo(hx - 3, hy + 9); ctx.stroke(); }
+  ctx.restore();
 }
 
 function drawDog(ctx, x, y, t) {

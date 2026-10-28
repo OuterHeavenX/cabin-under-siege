@@ -4,7 +4,7 @@ import { TILE } from '../config.js';
 import { dist, angleDiff, angleTo } from '../util.js';
 import { count } from './inventory.js';
 import { interactNpc, npcPresent } from './npcs.js';
-import { chopTree, jobProps, onDeliver, onLogDrop, onRepairTarget, onShed, onStoreCounter, onSupplyDrop } from './jobs.js';
+import { chopTree, jobProps, onDeliver, onCourier, onLogDrop, onRepairTarget, onShed, onStoreCounter, onSupplyDrop } from './jobs.js';
 import { installBoards, installBrace, installShutters, pickUpCover, repairNeed, startRepair, trapAt, rearmTrap, pickUpTrap } from './home.js';
 import { atHome, chapter, LAST_CHAPTER } from './chapters.js';
 import { questProps, questPropAction } from './quests.js';
@@ -20,6 +20,12 @@ import { sfx } from '../audio.js';
 import { inCombat, canTakedown, takedown } from './player.js';
 import { tryStudyDoor, endAssault } from './assault.js';
 import { prequelProp } from './prequel.js';
+import { deerTargets, fieldDress } from './hunting.js';
+import { townLifeProp } from './townlife.js';
+import { ratProps, ratPropAction } from './rat.js';
+import { projectProps, projectAction } from './projects.js';
+import { openPoker } from '../ui/poker.js';
+import { eventOn } from './calendar.js';
 
 let travelFn = null;
 export function setTravel(fn) { travelFn = fn; }
@@ -36,14 +42,15 @@ function candidates() {
     out.push({ x, y, label, short, action, score: d + facing - prio * 40 });
   };
 
+  for (const a of deerTargets()) add(a.x, a.y, 56, `Field-dress the ${a.buck ? 'buck' : 'doe'}`, 'DRESS', () => fieldDress(a), 4);
   for (const e of G.enemies) if (canTakedown(e)) add(e.x, e.y, 60, `Silent takedown — ${e.name || 'attacker'}${e.def.boss ? ' (won\'t go down quietly)' : ''}`, 'TAKEDOWN', () => takedown(e), 6);
 
   for (const n of G.npcs) {
-    if (!n.present) continue;
+    if (!n.present || n.scripted) continue;
     add(n.x, n.y, n.folk ? 50 : 64, `Talk to ${n.def.name}`, 'TALK', () => interactNpc(n), n.folk ? -1 : 2);
   }
 
-  const props = [...m.props, ...jobProps(m.id), ...questProps(m.id), ...errandProps(m.id)];
+  const props = [...m.props, ...jobProps(m.id), ...questProps(m.id), ...errandProps(m.id), ...projectProps(m.id), ...ratProps(m.id)];
   for (const pr of props) {
     const a = propAction(pr);
     if (a) add(pr.x, pr.y, pr.r, a.label, a.short, a.action, a.prio || 0);
@@ -81,8 +88,12 @@ function candidates() {
 
 function propAction(pr) {
   const s = G.s;
+  if (pr.rat) return { label: pr.label, short: 'LOOK', action: () => ratPropAction(pr), prio: 3 };
   if (pr.errand) return { label: pr.label, short: pr.kind === 'quest_chop' ? 'CHOP' : pr.kind === 'quest_repair' ? 'FIX' : pr.kind === 'quest_find' ? 'LOOK' : 'ACT', action: () => errandPropAction(pr), prio: 3 };
   if (G.prequel && (pr.kind === 'car' || pr.kind === 'prequel')) return prequelProp(pr);
+  if (pr.kind === 'project') return G.endless ? null : projectAction(pr);
+  if (['market', 'supper', 'gallery', 'pie_stand'].includes(pr.kind)) return G.endless ? null : townLifeProp(pr, { openShop });
+  if (pr.kind === 'poker') return G.endless ? null : { label: eventOn('poker') ? 'Sit in on poker night ($10 ante)' : 'Poker table (Wed & Sat, 7–11 PM)', short: 'POKER', prio: eventOn('poker') ? 2 : -1, action: () => openPoker() };
   if (G.endless && ['bed', 'car', 'exit', 'jobboard', 'phone', 'mailbox', 'phonepole'].includes(pr.kind)) return null;
   switch (pr.kind) {
     case 'bed': return { label: 'Use bed (sleep / save)', short: 'REST', action: () => openBedMenu() };
@@ -116,6 +127,7 @@ function propAction(pr) {
     case 'footprints': return { label: 'Examine footprints', short: 'LOOK', action: () => examineSign('footprints'), prio: 2 };
     case 'strange_car': return { label: 'Approach the dark sedan', short: 'LOOK', action: () => examineSign('strange_car'), prio: 2 };
     case 'job_deliver': return { label: pr.label, short: 'GIVE', action: () => onDeliver(), prio: 3 };
+    case 'job_courier': return { label: pr.label, short: 'GIVE', action: () => onCourier(), prio: 3 };
     case 'job_repair': return { label: pr.label, short: 'FIX', action: () => onRepairTarget(), prio: 3 };
     case 'job_supply': return { label: pr.label, short: 'DROP', action: () => onSupplyDrop(), prio: 3 };
     case 'quest_find': return { label: pr.label, short: pr.dog ? 'CALL' : 'LOOK', action: () => questPropAction(pr), prio: 3 };

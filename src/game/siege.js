@@ -17,6 +17,7 @@ import { allyStartSiege, allyEndSiege } from './ally.js';
 import { diff } from './difficulty.js';
 import { playCutscene } from '../ui/cutscene.js';
 import { prequelDefeat } from './prequel.js';
+import { projectDone } from './projects.js';
 
 export const absNow = () => G.s.time.day * 1440 + G.s.time.minute;
 export const absOf = (s) => s.day * 1440 + s.minute;
@@ -107,14 +108,15 @@ export function storyPlan() {
       ],
     };
   }
-  return {
-    kind: 'story', hpMult: 1, bossName: 'Big Carmine', bossItem: 'note',
-    waves: [
-      { dir: 'north', types: ch.stranger === 'threaten' ? ['scout', 'scout', 'gunman'] : ['scout', 'scout'], delay: 0, named: ch.stranger === 'threaten' ? { 2: 'The Grey Coat' } : null },
-      { dir: 'east', types: ['gunman', 'scout'], delay: 22 },
-      { dir: 'west', types: ['enforcer', 'gunman'], delay: 45, boss: 0 },
-    ],
-  };
+  const waves = [
+    { dir: 'north', types: ch.stranger === 'threaten' ? ['scout', 'scout', 'gunman'] : ['scout', 'scout'], delay: 0, named: ch.stranger === 'threaten' ? { 2: 'The Grey Coat' } : null },
+    { dir: 'east', types: ['gunman', 'scout'], delay: 22 },
+    { dir: 'west', types: ['enforcer', 'gunman'], delay: 45, boss: 0 },
+  ];
+  // The rat: turned, they send fewer men to the wrong side; never caught, they know the back way in.
+  if (ch.rat === 'feed') { waves[1].types = ['scout']; waves[2].delay = 70; }
+  if (ch.rat === 'missed') waves[1].types.push('enforcer');
+  return { kind: 'story', hpMult: 1, bossName: 'Big Carmine', bossItem: 'note', waves };
 }
 
 export function scheduleSiege(plan, day, minute) {
@@ -319,6 +321,7 @@ export function updateSiege(dt) {
       if (wave.named && wave.named[i]) opts.name = wave.named[i];
       const e = spawnEnemy(t, pos.x, pos.y, opts);
       if (opts.carriesNote && sg.plan.kind === 'story') bossEntrance(e);
+      if (projectDone('watchtower') && !G.endless) e.spotted = 25; // seen from the tower
       if (sg.plan.kind === 'ambush') e.alerted = true;
       sg.spawned++;
     });
