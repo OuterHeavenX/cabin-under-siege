@@ -19,9 +19,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      HAS_KEY: ${{ secrets.BUTLER_API_KEY != '' }}
+      HAS_KEY: ${{ (secrets.BUTLER_API_KEY != '' || secrets.BUTELER_API_KEY != '') }}
       HAS_GAME: ${{ vars.ITCH_GAME != '' || secrets.ITCH_GAME != '' }}
-      HAS_BUTLER: ${{ secrets.BUTLER_API_KEY != '' && (vars.ITCH_GAME != '' || secrets.ITCH_GAME != '') }}
+      HAS_BUTLER: ${{ (secrets.BUTLER_API_KEY != '' || secrets.BUTELER_API_KEY != '') && (vars.ITCH_GAME != '' || secrets.ITCH_GAME != '') }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -52,7 +52,7 @@ jobs:
       - name: Upload to itch.io
         if: env.HAS_BUTLER == 'true'
         env:
-          BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY }}
+          BUTLER_API_KEY: ${{ secrets.BUTLER_API_KEY || secrets.BUTELER_API_KEY }}
           ITCH_GAME: ${{ vars.ITCH_GAME || secrets.ITCH_GAME }}
           VERSION: ${{ steps.ver.outputs.version }}
         run: |
