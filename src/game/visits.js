@@ -17,6 +17,7 @@ import { NPCS } from '../data/npcs.js';
 import { inCombat } from './player.js';
 import { REUNIONS, ARRIVALS } from '../data/reunions.js';
 import { hasPerk } from './perks.js';
+import { onVisitStart, onVisitEnd } from './away.js';
 
 let hooks = {};
 /** main.js hands over map building and loading. */
@@ -119,6 +120,7 @@ export function startVisit(n) {
       if (g) addMoney(-g);
       advanceMinutes(h * 60);
       G.s.visit = { ch: n, since: absNow(), met: {} };
+      onVisitStart();
       const lv = G.s.life.visits;
       lv[n] = (lv[n] || 0) + 1;
       hooks.buildMaps();
@@ -164,7 +166,7 @@ function overnight(host) {
 export function endVisit() {
   if (!visiting() || G.transition) return false;
   if (G.s.job) { toast('Finish or abandon the job you took here first (Journal).', 'warn', 3); return false; }
-  const n = G.s.visit.ch;
+  const n = G.s.visit.ch, v = G.s.visit;
   const h = travelHours(n, G.s.chapter);
   sfx('car');
   G.transition = {
@@ -172,6 +174,7 @@ export function endVisit() {
     mid: () => {
       advanceMinutes(h * 60);
       G.s.visit = null;
+      onVisitEnd(v);
       hooks.buildMaps();
       const m = G.maps[homeMapId()];
       hooks.loadMap(m.id, m.points.car);

@@ -39,6 +39,7 @@ import { romanceEpilogue } from '../game/letters.js';
 import { lifeCh, PHASES, phaseOf, inLifeStep, lifeIdeas, LIFE_NEED, farewellPending, farewellsSaid, farewellPeople, eventLog } from '../game/life.js';
 import { WATCH } from '../data/watch.js';
 import { travelHours, visitableChapters, oldHomeStatus, travelBlocker } from '../game/visits.js';
+import { awayStatus, noticed } from '../game/away.js';
 import { inWatch, helpOptions, predictAdapt } from '../game/watch.js';
 import { trailBoard, canDeduce, connectTheDots } from '../game/evidence.js';
 import { letterLog, unreadMail, rereadLetter } from '../game/letters.js';
@@ -339,8 +340,8 @@ function mapTab() {
     : G.s.chapter === 5 ? 'Everything on Millburn Avenue is in walking distance. The Vescari house is up the ridge (by car, after dark).'
       : `Everything in ${escapeHtml(chapter().place)} is within walking distance.`;
   const vis = G.endless || G.prequel ? '' : visiting()
-    ? `<div class="objective-box visit small">🚗 Visiting <b>${escapeHtml(here().place)}</b>. Home: <b>${escapeHtml(chapter().place)}</b> (${CHAPTERS[G.s.chapter].name}). Use your car to drive home (${travelHours(G.s.visit.ch, G.s.chapter)} h).</div>`
-    : G.s.chapter > 1 ? `<div class="small muted">Home: <b>${escapeHtml(chapter().place)}</b>. Old towns you can drive back to from your car: ${visitableChapters().map((n) => `${escapeHtml(CHAPTERS[n].place)} (${travelHours(G.s.chapter, n)} h${oldHomeStatus(n).open ? ', your old place is open to you' : ''})`).join(' · ')}${travelBlocker() ? ` — <span class="hl">${escapeHtml(travelBlocker())}</span>` : ''}</div>` : '';
+    ? `<div class="objective-box visit small">🚗 Visiting <b>${escapeHtml(here().place)}</b>. Home: <b>${escapeHtml(chapter().place)}</b> (${CHAPTERS[G.s.chapter].name}). Use your car to drive home (${travelHours(G.s.visit.ch, G.s.chapter)} h).<br><span class="${noticed() ? 'hl' : 'muted'}">${escapeHtml(awayStatus())}</span></div>`
+    : G.s.chapter > 1 ? `<div class="small muted">Home: <b>${escapeHtml(chapter().place)}</b>. Old towns you can drive back to from your car: ${visitableChapters().map((n) => `${escapeHtml(CHAPTERS[n].place)} (${travelHours(G.s.chapter, n)} h${oldHomeStatus(n).open ? ', your old place is open to you' : ''})`).join(' · ')}${travelBlocker() ? ` — <span class="hl">${escapeHtml(travelBlocker())}</span>` : ''}${awayStatus() ? `<br>${escapeHtml(awayStatus())}` : ''}</div>` : '';
   return `<div class="stat-line">You are at: <b>${escapeHtml(m.name)}</b>. ${G.endless || G.prequel || visiting() ? '' : travel}</div>${vis}
     <canvas id="minimap" class="minimap"></canvas>
     <div class="legend"><span><i style="background:#fff"></i>You</span><span><i style="background:#5bc0de"></i>People</span><span><i style="background:#ffd166"></i>Objective</span><span><i style="background:#e74c3c"></i>Attackers</span><span><i style="background:#9b7b55"></i>Buildings</span></div>
@@ -366,7 +367,7 @@ function jStory() {
   const ch = chapter();
   const ph = PHASES[phaseOf()];
   const post = G.s.life && G.s.life.post;
-  const visit = visiting() ? `<div class="objective-box visit"><b>🚗 Visiting ${escapeHtml(here().place)}</b><br>Your home is in ${escapeHtml(ch.place)}. Old friends, a job or old business here — then drive home from your car.</div>` : '';
+  const visit = visiting() ? `<div class="objective-box visit"><b>🚗 Visiting ${escapeHtml(here().place)}</b><br>Your home is in ${escapeHtml(ch.place)}. Old friends, a job or old business here — then drive home from your car.<br><span class="small ${noticed() ? 'hl' : 'muted'}">${escapeHtml(awayStatus())}</span></div>` : '';
   const chores = Object.entries(ERRANDS).filter(([id, e]) => e.chore && e.chapter === G.s.chapter && errandState(id));
   const choreBox = chores.length && !visiting() ? `<div class="objective-box chores"><b>🏠 Settling in</b> <span class="muted">(${chores.filter(([id]) => errandDone(id)).length}/${chores.length} — ${chapter().choresNeeded || 4} are enough)</span>${chores.map(([id, e]) => `<div class="chore ${errandDone(id) ? 'done' : ''}">${errandDone(id) ? '☑' : '☐'} <b>${escapeHtml(e.title)}</b> — ${escapeHtml(errandDone(id) ? e.desc : stageLabel(id))}</div>`).join('')}</div>` : '';
   const life = inLifeStep() ? `<div class="objective-box chores"><b>🏡 Making it home</b> <span class="muted">— any ${LIFE_NEED} of these, at your own pace</span>${lifeIdeas().map((m) => `<div class="chore ${m.done ? 'done' : ''}">${m.done ? '☑' : '☐'} ${escapeHtml(m.label)}</div>`).join('')}</div>` : '';

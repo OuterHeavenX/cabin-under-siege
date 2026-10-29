@@ -1944,6 +1944,47 @@ if (want('life')) {
   check('Life: you can\'t leave town with an attack coming', !!blocked, String(blocked));
   await C(() => { window.__cus.G.s.world.siege = null; });
 
+  // --- Away from home is no hiding place ---
+  await C(() => { window.__cus.G.s.time.minute = 10 * 60; window.__cus.G.s.life.awayDebt = 0; });
+  await mod('./src/game/visits.js', (m) => m.startVisit(2)); await waitTransition(); await skipDialogues(page);
+  await C(() => { const c = window.__cus; c.G.s.visit.since -= 1.5 * 1440; }); await sleep(1300);
+  const short = await mod('./src/game/away.js', (m) => ({ left: m.safeDaysLeft(), status: m.awayStatus(), pursuit: !!window.__cus.G.s.visit.pursuit }));
+  check('Away: a short visit is free — no crew follows, the Journal says how long is safe', short.left > 1 && !short.pursuit && /Safe here/.test(short.status), JSON.stringify(short));
+  const relM = await C(() => { const c = window.__cus; c.G.s.rel.marcus = 50; c.G.s.visit.since -= 1.8 * 1440; c.G.s.time.minute = 21 * 60 + 30; return c.G.s.rel.marcus; });
+  await sleep(1500);
+  const long = await C(() => { const c = window.__cus; const v = c.G.s.visit; const t = c.G.s.time; return { p: v.pursuit, now: t.day * 1440 + t.minute, rel: c.G.s.rel.marcus }; });
+  check('Away: stay past three days and a crew is coming tonight', !!long.p && long.p.at - long.now <= 60 && long.p.size >= 2, JSON.stringify(long));
+  check('Away: an old friend pays for the danger you bring (friendship drops)', long.rel < relM, `${relM} -> ${long.rel}`);
+  await C(() => { const c = window.__cus; const t = c.G.s.time; c.G.s.visit.pursuit.at = t.day * 1440 + t.minute; c.G.enemies = []; });
+  await sleep(600); await skipDialogues(page, 0);
+  const crew = await C(() => window.__cus.G.enemies.filter((e) => e.pursuit && !e.dead).map((e) => ({ a: e.alerted, map: window.__cus.G.map.id })));
+  check('Away: they followed you to the old town — and they know you\'re here', crew.length >= 2 && crew.every((e) => e.a && e.map === 'millbrook'), JSON.stringify(crew));
+  const shake = await C(() => new Promise((res) => { const c = window.__cus; c.G.enemies = c.G.enemies.filter((e) => !e.pursuit); setTimeout(() => { const t = c.G.s.time; const p = c.G.s.visit.pursuit; res(p && { wait: p.at - (t.day * 1440 + t.minute), live: p.live }); }, 300); }));
+  check('Away: you can\'t shake them by driving across town — they pick the trail up within the hour', !!shake && !shake.live && shake.wait > 30 && shake.wait <= 75, JSON.stringify(shake));
+  await C(() => { const c = window.__cus; const t = c.G.s.time; c.G.s.visit.pursuit.at = t.day * 1440 + t.minute; }); await sleep(600); await skipDialogues(page, 0);
+  await C(() => { for (const e of window.__cus.G.enemies) if (e.pursuit) e.dead = true; }); await sleep(600);
+  check('Away: beating the crew only buys a night — the next one will be bigger', await C(() => { const v = window.__cus.G.s.visit; return !v.pursuit && v.beaten === 1 && v.nextAfter > 0; }));
+  await C(() => { const c = window.__cus; c.G.enemies = []; c.G.s.visit.nextAfter = 1e12; });
+  // An empty house gets broken into.
+  const before = await C(() => { const c = window.__cus; const s = c.G.s; s.money = 400; s.home.upgrades.alarm = false; s.home.upgrades.camera = false; s.home.openings.front_door.hp = 100; s.home.projects.cache = null; delete s.home.projects.cache; s.life.awayReport = []; s.life.breakIns = 0; s.companion.dog = { owned: false }; const t = s.time; const at = t.day * 1440 + t.minute - 40; s.world.siege = { day: Math.floor(at / 1440), minute: at % 1440, plan: { kind: 'raid', waves: [{ dir: 'west', types: ['scout', 'gunman', 'enforcer', 'scout'], delay: 0 }] }, warned: true }; return { money: s.money }; });
+  await sleep(600);
+  const bi = await C(() => { const s = window.__cus.G.s; return { siege: s.world.siege, money: s.money, rep: s.life.awayReport.length, n: s.life.breakIns }; });
+  check('Away: a raid on an empty house is a break-in — cash gone, doors forced, a report waiting at home', !bi.siege && bi.money < before.money && bi.rep === 1 && bi.n === 1, JSON.stringify(bi));
+  // A story attack that finds nobody home comes back bigger.
+  await C(() => { const s = window.__cus.G.s; const t = s.time; const at = t.day * 1440 + t.minute - 40; s.world.siege = { day: Math.floor(at / 1440), minute: at % 1440, plan: { kind: 'story', waves: [{ dir: 'west', types: ['scout', 'scout'], delay: 0 }] }, warned: true }; });
+  await sleep(600);
+  const miss = await mod('./src/game/away.js', (m) => { const s = window.__cus.G.s.world.siege; return { missed: s && s.plan.missed, grown: s && m.missedReinforcements(s.plan).waves[0].types.length, minute: s && s.minute }; });
+  check('Away: a story attack doesn\'t go away — it\'s rescheduled and grows every night you miss', miss.missed === 1 && miss.grown === 4 && miss.minute === 22 * 60, JSON.stringify(miss));
+  await C(() => { window.__cus.G.s.time.minute = 21 * 60; });
+  await mod('./src/game/visits.js', (m) => m.endVisit()); await waitTransition(); await skipDialogues(page);
+  const home = await C(() => { const c = window.__cus; const s = c.G.s; const w = s.world.siege; const t = s.time; const now = t.day * 1440 + t.minute; const r = { map: c.G.map.id, wait: w ? w.day * 1440 + w.minute - now : null, warned: w && w.warned, debt: s.life.awayDebt, rep: s.life.awayReport.length }; s.world.siege = null; return r; });
+  check('Away: they\'re waiting when you get home at night', home.map === 'farm' && home.wait !== null && home.wait <= 25 && home.warned, JSON.stringify(home));
+  check('Away: the break-in report is shown when you get home', home.rep === 0);
+  check('Away: hopping home and straight back doesn\'t reset the clock', home.debt >= 3 && /away recently/.test(await mod('./src/game/away.js', (m) => m.awayStatus())), String(home.debt));
+  const decay = await C(() => { const c = window.__cus; const d0 = c.G.s.life.awayDebt; c.G.events.emit('newDay', c.G.s.time.day); return [d0, c.G.s.life.awayDebt]; });
+  check('Away: each day back home forgives a day of being away', decay[1] === decay[0] - 1, decay.join(' -> '));
+  await C(() => { const s = window.__cus.G.s; s.life.awayDebt = 0; s.time.minute = 10 * 60; s.world.siege = null; window.__cus.G.enemies = []; });
+
   // --- Letters ---
   await C(() => { const s = window.__cus.G.s; s.life.mailDrop = true; s.rel.dee = 40; s.life.lastMailDay = -1; s.life.read.l_dee_1 = 1; });
   await mod('./src/game/letters.js', (m) => m.deliverMail());
@@ -2011,6 +2052,8 @@ if (want('life')) {
   check('Life: life after the story has an objective and no attacks scheduled', /Life after the story/.test(await C(() => document.getElementById('objective').textContent)) && await C(() => !window.__cus.G.s.world.siege));
   const vis5 = await mod('./src/game/visits.js', (m) => m.visitableChapters());
   check('Life: every old town can be visited after the story', vis5.join(',') === '1,2,3,4');
+  const postAway = await mod('./src/game/away.js', (m) => { const s = window.__cus.G.s; s.visit = { ch: 1, since: s.time.day * 1440 - 10 * 1440, met: {} }; const r = { n: m.noticed(), st: m.awayStatus() }; s.visit = null; return r; });
+  check('Away: after the story nobody follows you — stay in an old town as long as you like', !postAway.n && /as long as you like/.test(postAway.st), JSON.stringify(postAway));
 
   // --- Every investigation and errand spot is reachable on its map ---
   const bad = await C(() => import('./src/world/mapgen.js').then(async (mg) => {

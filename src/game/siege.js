@@ -11,7 +11,7 @@ import { endlessWaveCleared, endlessDefeat } from './endless.js';
 import { sfx, setMusic } from '../audio.js';
 import { saveGame } from './save.js';
 import { fmtClock } from '../util.js';
-import { chapter, homeMap, homeMapId, atHome, visiting } from './chapters.js';
+import { chapter, here, homeMap, homeMapId, atHome, visiting } from './chapters.js';
 import { NPCS } from '../data/npcs.js';
 import { allyStartSiege, allyEndSiege } from './ally.js';
 import { diff } from './difficulty.js';
@@ -19,6 +19,7 @@ import { playCutscene } from '../ui/cutscene.js';
 import { prequelDefeat } from './prequel.js';
 import { projectDone, cacheProtects } from './projects.js';
 import { adaptPlan, leadBonus, updatePower } from './watch.js';
+import { breakIn, storyMissedAway, missedReinforcements } from './away.js';
 
 export const absNow = () => G.s.time.day * 1440 + G.s.time.minute;
 export const absOf = (s) => s.day * 1440 + s.minute;
@@ -158,7 +159,8 @@ export function dailyProcess() {
 
   if (free) {
     w.threat = clamp(w.threat + 3, 0, 100);
-    if (!w.siege && day >= w.quietUntilDay && !visiting()) {
+    // An empty house is fair game too (see away.js): leaving town is no hiding place.
+    if (!w.siege && day >= w.quietUntilDay) {
       const p = (0.12 + w.threat / 160) * diff().raid;
       if (chance(p)) {
         const size = 2 + Math.floor(w.threat / 25) + Math.floor(G.s.stats.level / 3) + randInt(0, 1);
@@ -218,7 +220,7 @@ export function updateThreatClock() {
   // The neighbor's warning call at 6 PM when an attack is coming and you're friends.
   const nb = chapter().neighbor;
   const nbName = NPCS[nb].name.split(' ')[0];
-  if (s && !s.ruthCalled && siegeTonight() && relOf(nb) >= 2 && G.s.time.minute >= 18 * 60 && G.s.time.minute < 21 * 60) {
+  if (s && !s.ruthCalled && !visiting() && siegeTonight() && relOf(nb) >= 2 && G.s.time.minute >= 18 * 60 && G.s.time.minute < 21 * 60) {
     s.ruthCalled = true;
     if (G.s.home.phoneLine) {
       sfx('phone');
@@ -246,10 +248,11 @@ export function updateThreatClock() {
   const lead = d.warnLead + (s.extraLead || 0) + leadBonus(s.plan);
   if (!s.warned && now >= at - lead && now < at) {
     s.warned = true;
-    warn(s, d);
+    if (!visiting()) warn(s, d);
   }
   if (now >= at) {
     if (atHome() && !G.transition) startSiege(s);
+    else if (visiting() && !G.transition && now - at > 30) missedAway(s);
     else if (G.s.time.minute >= 6 * 60 && G.s.time.minute < 12 * 60 && now - at > 60) missedSiege(s);
   }
 }
@@ -264,6 +267,15 @@ function warn(s, d) {
   banner(text, 'danger', 9);
   if (G.sleeping) G.events.emit('wake', 'You wake with a start.');
   G.events.emit('siegeWarning', s);
+}
+
+/** The attack came while Frank was in another town. */
+function missedAway(s) {
+  const w = G.s.world;
+  w.siege = null;
+  if (s.plan.kind === 'story' || s.plan.retry) storyMissedAway(s);
+  else { breakIn(s); w.quietUntilDay = G.s.time.day + 1; }
+  saveGame('siege');
 }
 
 function missedSiege(s) {
@@ -290,6 +302,8 @@ export function startSiege(s, immediate = false) {
     s = { ...s, plan: { ...s.plan, waves: s.plan.waves.map((w) => ({ ...w, types: [...w.types, ...extra] })) } };
   }
   if (s.plan.kind === 'story' || s.plan.kind === 'probe') s = { ...s, plan: adaptPlan(JSON.parse(JSON.stringify(s.plan))) };
+  // Every night it found the house empty, it came back with more people.
+  if (s.plan.missed) s = { ...s, plan: missedReinforcements(s.plan) };
   G.siegeActive = true;
   clearBanners('danger');
   allyStartSiege();
@@ -500,7 +514,7 @@ export function handleDefeat() {
   const onCabin = atHome();
   const nb = chapter().neighbor;
   const nbName = NPCS[nb].name.split(' ')[0];
-  const skName = NPCS[chapter().shopkeeper].name.split(' ')[0].replace(/"/g, '');
+  const skName = NPCS[here().shopkeeper].name.split(' ')[0].replace(/"/g, '');
   const friend = relOf(nb) >= 1;
   const rescuer = onCabin ? nbName : skName;
   const RESCUE = {

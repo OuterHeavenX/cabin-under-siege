@@ -52,6 +52,7 @@ import { updateLife, initLifeEvents, farewellPending, farewellsSaid, farewellPeo
 import { initWatchEvents, watchSpots } from './game/watch.js';
 import { updateAbilities, abilityLabel } from './game/abilities.js';
 import { updateLetters, initLetterEvents } from './game/letters.js';
+import { updateAway, initAwayEvents } from './game/away.js';
 import { applyProjects, ensureProjectSpots, projectsMorning, PROJECTS, projectName, paidOf } from './game/projects.js';
 import { spawnDog, updateDog, dogMorning } from './game/dog.js';
 import { setWeather } from './game/weather.js';
@@ -217,6 +218,7 @@ function update(dt) {
   else if (G.prequel) updatePrequel(dt);
   else updateTime(dt);
   updateThreatClock();
+  updateAway(dt);
   if (G.sleeping) { G.clockText = `Day ${G.s.time.day} · ${fmtClock(G.s.time.minute)}`; return; }
   updatePlayer(dt);
 
@@ -445,6 +447,7 @@ function initEvents() {
   initRat();
   initLifeEvents();
   initWatchEvents();
+  initAwayEvents();
   initLetterEvents();
   initAchievementEvents();
   initCloudSync();

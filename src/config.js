@@ -1,6 +1,6 @@
 // Global tuning constants.
 
-export const GAME_VERSION = '0.11.0';
+export const GAME_VERSION = '0.11.1';
 export const TILE = 32;
 export const SAVE_VERSION = 3;
 export const SAVE_KEY = 'cabinUnderSiege.save';
@@ -36,4 +36,19 @@ export const DEFAULT_SETTINGS = {
   touchOpacity: 0.85, // on-screen controls, 0.3..1
   touchSize: 'normal', // 'small' | 'normal' | 'large'
   cloudServer: '', // desktop app: override CLOUD_SERVER
+};
+
+/** Being away from home (return visits). All the "no free hiding" numbers live here. */
+export const AWAY = {
+  safeDays: 3, // days in an old town before the family works out where Frank went
+  debtDecay: 1, // days of "recently away" forgiven per day back home
+  pursuitBase: 2, // attackers in the first crew that follows him
+  pursuitPerDay: 1, // one more for every day he stays past that
+  pursuitMax: 6,
+  hostRelLoss: 5, // friendship (of 100) lost each day he keeps bringing danger to a host
+  missedGrowth: 2, // extra attackers per night a story attack finds the house empty
+  missedGrowthMax: 4,
+  breakInCash: 0.25, // share of cash kept at the house taken in a break-in
+  breakInCashCap: 120,
+  breakInDoor: 40, // door damage per break-in (before Duke)
 };
