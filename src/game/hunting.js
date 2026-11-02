@@ -9,6 +9,7 @@ import { addJP, addXP } from './progression.js';
 import { hasPerk } from './perks.js';
 import { toast } from '../ui/hud.js';
 import { sfx } from '../audio.js';
+import { deerBonus, addTrack } from './seasons.js';
 import { inHours } from './calendar.js';
 
 const DEER_HP = 40;
@@ -21,7 +22,7 @@ export function spawnDeer() {
   const m = G.map;
   if (!m || !m.huntZone || G.endless || G.prequel || G.siegeActive) return;
   if (!huntHours()) return;
-  const n = 2 + Math.floor(Math.random() * 2);
+  const n = 2 + Math.floor(Math.random() * 2) + deerBonus(); // autumn: deer on the move
   for (let i = 0; i < n; i++) addDeer();
 }
 
@@ -64,13 +65,13 @@ export function updateAnimals(dt) {
     if (a.state === 'flee') {
       const away = angleTo(p.x, p.y, a.x, a.y) + Math.sin(G.time * 3 + a.x) * 0.3;
       m.moveCircle(a, Math.cos(away) * 230 * dt, Math.sin(away) * 230 * dt, 'npc');
-      a.angle = away; a.walk += dt * 18;
+      a.angle = away; a.walk += dt * 18; addTrack(a, 'deer');
       a.fleeT -= dt;
       if (a.fleeT <= 0) { a.state = 'graze'; a.t = rand(2, 5); }
       if (a.x < 4 || a.y < 4 || a.x > m.w * TILE - 4 || a.y > m.h * TILE - 4) a.gone = true;
     } else if (a.state === 'walk') {
       m.moveCircle(a, Math.cos(a.angle) * 34 * dt, Math.sin(a.angle) * 34 * dt, 'npc');
-      a.walk += dt * 6;
+      a.walk += dt * 6; addTrack(a, 'deer');
       if (a.t <= 0) { a.state = 'graze'; a.t = rand(2, 6); }
     } else if (a.t <= 0) { a.state = 'walk'; a.angle += rand(-1.4, 1.4); a.t = rand(1, 3); }
     a.alert = a.state === 'graze' && sees && pd < 230 * shy; // head up

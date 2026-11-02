@@ -15,6 +15,9 @@ import { checkTrap } from './home.js';
 import { diff } from './difficulty.js';
 import { weatherMods } from './weather.js';
 import { guardGoal, updateGuard } from './assault.js';
+import { SO } from '../world/map.js';
+import { frozenNow } from './season-core.js';
+import { groundSpeed, addTrack } from './seasons.js';
 
 let nextId = 1;
 
@@ -53,7 +56,7 @@ function makeCost(e) {
   return (cx, cy) => {
     const m = G.map;
     const s = m.getSolid(cx, cy);
-    if (s !== 0) return Infinity;
+    if (s !== 0 && !(s === SO.WATER && frozenNow())) return Infinity; // they'll cross the ice too
     const b = m.blockerAt(cx, cy);
     if (b) {
       if (b.kind === 'cover') return Infinity;
@@ -225,7 +228,9 @@ function followPath(e, dt, speed) {
   const d = dist(e.x, e.y, tx, ty);
   if (d < 6) { e.path.shift(); return true; }
   const a = Math.atan2(ty - e.y, tx - e.x);
+  speed *= groundSpeed(e.x, e.y);
   m.moveCircle(e, Math.cos(a) * speed * dt, Math.sin(a) * speed * dt, 'enemy');
+  addTrack(e, 'enemy');
   e.walkPhase += dt * 9;
   if (!e.aimT) e.angle = a;
   return true;

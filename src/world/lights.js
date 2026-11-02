@@ -3,17 +3,13 @@ import { G } from '../game/state.js';
 import { TILE } from '../config.js';
 
 import { homeMapId } from '../game/chapters.js';
+import { seasonDarkness } from '../game/season-core.js';
 
 const homeLights = () => (G.map && G.map.id === homeMapId() && G.map.homeInfo) || null;
 
 /** 0 = full day, 1 = deepest night. Smooth transitions at dusk and dawn. */
 export function darkness() {
-  const m = G.s.time.minute;
-  const h = m / 60;
-  if (h >= 7 && h < 18.5) return 0;
-  if (h >= 18.5 && h < 21) return (h - 18.5) / 2.5;
-  if (h >= 5 && h < 7) return 1 - (h - 5) / 2;
-  return 1;
+  return seasonDarkness(G.s.time.minute); // long winter nights, short summer ones
 }
 
 export function activeLights() {

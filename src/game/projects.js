@@ -16,6 +16,7 @@ import { sfx } from '../audio.js';
 import { saveGame } from './save.js';
 import { homeMap, atHome, chapter } from './chapters.js';
 import { hasPerk } from './perks.js';
+import { harvestBonus } from './seasons.js';
 import { stepAtLeast } from './life.js';
 
 const ALL = ['cabin', 'house', 'farm', 'estate', 'watchhouse'];
@@ -223,7 +224,7 @@ export const cacheProtects = () => projectDone('cache');
 /** Morning chores the projects do for you. */
 export function projectsMorning() {
   if (!G.s || !G.s.home) return;
-  if (projectDone('garden')) G.s.home.gardenReady = 2;
+  if (projectDone('garden')) G.s.home.gardenReady = Math.max(1, 2 + harvestBonus()); // autumn harvest, lean winters
 }
 
 /* ---------------- the car ---------------- */

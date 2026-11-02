@@ -2,6 +2,7 @@
 // danger warnings, toasts and banners.
 import { G } from '../game/state.js';
 import { shortWeekday, eventsToday } from '../game/calendar.js';
+import { season } from '../game/season-core.js';
 import { fmtClock, escapeHtml } from '../util.js';
 
 const $ = (id) => document.getElementById(id);
@@ -90,7 +91,7 @@ export function updateHud(dt, info) {
   els.st.style.width = `${Math.max(0, p.stamina / info.maxStamina) * 100}%`;
   els.money.textContent = `$${s.money}`;
   els.clock.textContent = fmtClock(s.time.minute);
-  els.day.textContent = `${G.endless || G.prequel ? '' : shortWeekday() + ' · '}Day ${s.time.day} ${info.night ? '☾' : '☀'}${G.endless || G.prequel ? '' : eventsToday().map((e) => ' ' + e.icon).join('')}`;
+  els.day.textContent = `${G.endless || G.prequel ? '' : shortWeekday() + ' · '}Day ${s.time.day} ${season().icon}${info.night ? '☾' : ''}${G.endless || G.prequel ? '' : eventsToday().map((e) => ' ' + e.icon).join('')}`;
   els.obj.textContent = info.objective;
   els.job.textContent = info.jobLine || '';
   els.job.classList.toggle('hidden', !info.jobLine);

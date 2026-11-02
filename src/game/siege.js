@@ -20,6 +20,7 @@ import { prequelDefeat } from './prequel.js';
 import { projectDone, cacheProtects } from './projects.js';
 import { adaptPlan, leadBonus, updatePower } from './watch.js';
 import { breakIn, storyMissedAway, missedReinforcements } from './away.js';
+import { hideMult, frozen } from './seasons.js';
 
 export const absNow = () => G.s.time.day * 1440 + G.s.time.minute;
 export const absOf = (s) => s.day * 1440 + s.minute;
@@ -355,12 +356,12 @@ export function updateSiege(dt) {
       if (sg.plan.kind === 'ambush') e.alerted = true;
       sg.spawned++;
     });
-    if (wave.dir === 'lake' || wave.dir === 'shore') {
+    if ((wave.dir === 'lake' || wave.dir === 'shore') && !frozen()) { // in winter they walk across the ice
       (G.boats = G.boats || []).push({ x: sp.x + 40, y: sp.y + 6, a: Math.PI, t: 0 });
       sfx('boat', { x: sp.x, y: sp.y });
     }
     const d = derived();
-    if (d.showDirections || sg.waveIdx === 0) banner(`Attackers approaching from ${sp.label}!`, 'danger', 4);
+    if (d.showDirections || sg.waveIdx === 0) banner(`Attackers approaching from ${frozen() ? sp.label.replace('by boat', 'on foot across the ice') : sp.label}!`, 'danger', 4);
     G.events.emit('waveSpawn', wave);
     sg.waveIdx++;
   }
@@ -372,7 +373,7 @@ export function updateSiege(dt) {
     const hunted = G.enemies.some((e) => !e.dead && !e.gone && e.alerted);
     if (hunted) sg.lastSpot = now;
     sg.searching = !!sg.homeCleared && !hunted && sg.waveIdx >= sg.plan.waves.length;
-    sg.giveUpIn = HIDE_MINUTES - (now - sg.lastSpot);
+    sg.giveUpIn = HIDE_MINUTES * hideMult() - (now - sg.lastSpot); // in snow they follow your tracks
     if (sg.waveIdx >= sg.plan.waves.length && sg.giveUpIn <= 0) giveUp(sg);
   }
   if (sg.gaveUp) {

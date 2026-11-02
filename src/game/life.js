@@ -184,7 +184,7 @@ export function updateLife(dt) {
 }
 
 /** Lines may carry choices `{ text, value, cost, lines }`; the event's `result(s, value)` runs after. */
-function withChoices(lines, pick) {
+export function withChoices(lines, pick) {
   return lines.map((l) => (!l.choices ? l : { ...l, choices: l.choices.map((c) => ({
     text: c.cost ? `${c.text} ($${c.cost})` : c.text,
     effect: () => {

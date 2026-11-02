@@ -40,6 +40,7 @@ import { lifeCh, PHASES, phaseOf, inLifeStep, lifeIdeas, LIFE_NEED, farewellPend
 import { WATCH } from '../data/watch.js';
 import { travelHours, visitableChapters, oldHomeStatus, travelBlocker } from '../game/visits.js';
 import { awayStatus, noticed } from '../game/away.js';
+import { seasonSummary } from '../game/seasons.js';
 import { inWatch, helpOptions, predictAdapt } from '../game/watch.js';
 import { trailBoard, canDeduce, connectTheDots } from '../game/evidence.js';
 import { letterLog, unreadMail, rereadLetter } from '../game/letters.js';
@@ -482,7 +483,9 @@ function jHome() {
 function jCalendar() {
   if (G.endless || G.prequel) return '';
   const ev = eventLog().map((e) => `<div class="small">· Day ${e.day}: ${escapeHtml(e.title)}</div>`).join('');
-  return `${weekHtml()}${ev ? `<h3>Recently</h3>${ev}` : ''}<p class="hint small">Quiet days bring their own things — friends dropping by, invitations, weather. Invitations wait a day or two in Side stories; nothing important is lost if you miss one.</p>`;
+  const ss = seasonSummary();
+  const seasonBox = `<div class="objective-box season"><b>${ss.icon} ${escapeHtml(ss.name)}</b> <span class="muted small">— day ${ss.day} of 12, year ${ss.year}. ${ss.nextIcon} ${escapeHtml(ss.next)} in ${ss.left} day${ss.left === 1 ? '' : 's'}.</span><div class="small">${escapeHtml(ss.change)}</div>${ss.coming.length ? `<div class="small muted">Still to come this season: ${ss.coming.map(escapeHtml).join(' · ')}</div>` : ''}</div>`;
+  return `${seasonBox}${weekHtml()}${ev ? `<h3>Recently</h3>${ev}` : ''}<p class="hint small">Quiet days bring their own things — friends dropping by, invitations, weather. Invitations wait a day or two in Side stories; nothing important is lost if you miss one.</p>`;
 }
 
 function jLog() {

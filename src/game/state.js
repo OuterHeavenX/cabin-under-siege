@@ -1,6 +1,7 @@
 // Central game state. `G.s` is the persistent save data; everything else is runtime.
 import { DEFAULT_SETTINGS, SAVE_VERSION } from '../config.js';
 import { deepClone } from '../util.js';
+import { seasonNight } from './season-core.js';
 
 export const G = {
   s: null, // persistent save
@@ -139,6 +140,5 @@ export function newLife() {
 export const hasSkill = (id) => !!(G.s && G.s.skills.includes(id));
 
 export function isNight() {
-  const m = G.s.time.minute;
-  return m >= 20 * 60 || m < 6 * 60;
+  return seasonNight(G.s.time.minute); // dusk and dawn move with the seasons
 }

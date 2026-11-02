@@ -20,6 +20,7 @@ import { homeMapId } from '../game/chapters.js';
 import { ITEMS } from '../data/items.js';
 import { REGROW_DAYS } from '../game/activities.js';
 import { NATURAL, paintNaturalBase, paintNaturalDetails, paintWater } from './terrain.js';
+import { paintSeason, canopyStyle, drawTracks, frozen, seasonId } from '../game/seasons.js';
 
 let lightCanvas = null, lctx = null;
 
@@ -101,6 +102,8 @@ export function buildGroundCanvas(m) {
     }
   }
   paintNaturalDetails(g, m, flds);
+  // The season (snow and ice, leaves, flowers) under everything built.
+  c.season = paintSeason(g, m);
   // Static solids
   for (let cy = 0; cy < m.h; cy++) {
     for (let cx = 0; cx < m.w; cx++) {
@@ -570,6 +573,43 @@ const PINE_PALS = [
   ['#162d22', '#22443a', '#2f5d4c', '#5a8a72'],
   ['#1a3318', '#284d24', '#386a30', '#5f9550'],
 ];
+/** The same tree, dressed for the season: autumn colours, bare winter branches, snow on pines, spring blossom. */
+const seasonTrees = {};
+function seasonalTree(kind, pal, size) {
+  const base = treeSprite(kind, pal, size);
+  const st = canopyStyle(kind);
+  if (!st) return base;
+  const key = `${seasonId()}:${kind}:${pal}:${size}`;
+  if (seasonTrees[key]) return seasonTrees[key];
+  const c = document.createElement('canvas');
+  c.width = 96; c.height = 96;
+  const g = c.getContext('2d');
+  const rng = (k) => hash2(pal * 17 + size * 5 + k, kind.length * 7 + k * 11);
+  const sc = TREE_SIZES[size] || 1;
+  if (st.bare) {
+    // bare branches, a dusting of snow along the tops
+    const cx = 48, cy = 44;
+    g.strokeStyle = '#4a3624'; g.lineCap = 'round';
+    const branch = (x, y, a, len, w, depth) => {
+      const x2 = x + Math.cos(a) * len, y2 = y + Math.sin(a) * len;
+      g.lineWidth = w; g.beginPath(); g.moveTo(x, y); g.lineTo(x2, y2); g.stroke();
+      if (w > 1.2) { g.strokeStyle = 'rgba(240,245,250,0.85)'; g.lineWidth = w * 0.45; g.beginPath(); g.moveTo(x, y - w * 0.4); g.lineTo(x2, y2 - w * 0.4); g.stroke(); g.strokeStyle = '#4a3624'; }
+      if (depth > 0) { branch(x2, y2, a - 0.45 - rng(depth * 3 + len) * 0.3, len * 0.66, w * 0.6, depth - 1); branch(x2, y2, a + 0.4 + rng(depth * 5 + len) * 0.3, len * 0.62, w * 0.6, depth - 1); }
+    };
+    for (let k = 0; k < 6; k++) branch(cx, cy + 6, (k / 6) * Math.PI * 2 + rng(k) * 0.5, 13 * sc, 3.2, 2);
+    g.fillStyle = 'rgba(10,10,10,0.12)'; g.beginPath(); g.arc(cx + 3, cy + 4, 22 * sc, 0, Math.PI * 2); g.fill();
+  } else {
+    g.drawImage(base, 0, 0);
+    g.globalCompositeOperation = 'source-atop';
+    if (st.tint) { g.fillStyle = st.tint; g.fillRect(0, 0, 96, 96); if (seasonId() === 'autumn') for (let k = 0; k < 26; k++) { g.fillStyle = ['#d9532b', '#e8a23a', '#b8361f'][k % 3]; g.beginPath(); g.arc(20 + rng(k) * 56, 16 + rng(k + 40) * 56, 3 + rng(k + 80) * 4, 0, Math.PI * 2); g.fill(); } }
+    if (st.snow) for (let k = 0; k < 34; k++) { g.fillStyle = 'rgba(246,249,253,0.9)'; g.beginPath(); g.ellipse(18 + rng(k) * 56, 10 + rng(k + 50) * 60, 5 + rng(k + 9) * 5, 2.2, -0.4, 0, Math.PI * 2); g.fill(); }
+    if (st.blossom) for (let k = 0; k < 40; k++) { g.fillStyle = k % 3 ? '#f6d6e4' : '#fbf4f6'; g.beginPath(); g.arc(18 + rng(k) * 60, 14 + rng(k + 30) * 60, 1.8 + rng(k + 60) * 1.4, 0, Math.PI * 2); g.fill(); }
+    g.globalCompositeOperation = 'source-over';
+  }
+  seasonTrees[key] = c;
+  return c;
+}
+
 export function treeVariant(tr) {
   const h = hash2(tr.cx * 13 + 5, tr.cy * 7 + 3), h2 = hash2(tr.cx * 3 + 11, tr.cy * 17 + 1);
   const pals = tr.kind === 'pine' ? PINE_PALS.length : tr.kind === 'fruit' ? 2 : OAK_PALS.length;
@@ -1127,11 +1167,13 @@ export function render(ctx) {
   const vx1 = cam.x + w / 2 / z + TILE, vy1 = cam.y + h / 2 / z + TILE;
   const inView = (x, y, pad = 40) => x > vx0 - pad && x < vx1 + pad && y > vy0 - pad && y < vy1 + pad;
 
-  // Ground
+  // Ground (repainted once when the season turns)
+  if (m.groundCanvas.season !== seasonId()) m.groundCanvas = buildGroundCanvas(m);
   const sx = Math.max(0, Math.floor(vx0)), sy = Math.max(0, Math.floor(vy0));
   const sw = Math.min(m.groundCanvas.width - sx, Math.ceil(vx1 - vx0)), sh = Math.min(m.groundCanvas.height - sy, Math.ceil(vy1 - vy0));
   if (sw > 0 && sh > 0) ctx.drawImage(m.groundCanvas, sx, sy, sw, sh, sx, sy, sw, sh);
   drawDecals(ctx, inView);
+  drawTracks(ctx, inView);
   for (const b of G.boats || []) {
     const bob = Math.sin(G.time * 2 + b.x) * 1.5;
     ctx.save(); ctx.translate(b.x, b.y + bob); ctx.rotate(b.a);
@@ -1171,12 +1213,13 @@ export function render(ctx) {
     }
   }
 
-  // Water shimmer
+  // Water shimmer (not on winter ice)
+  const iceNow = frozen();
   ctx.strokeStyle = 'rgba(200,235,255,0.22)';
   ctx.lineWidth = 1.2;
   for (let cy = Math.max(0, Math.floor(vy0 / TILE)); cy <= Math.min(m.h - 1, Math.ceil(vy1 / TILE)); cy++) {
     for (let cx = Math.max(0, Math.floor(vx0 / TILE)); cx <= Math.min(m.w - 1, Math.ceil(vx1 / TILE)); cx++) {
-      if (m.ground[cy * m.w + cx] !== GR.WATER) continue;
+      if (m.ground[cy * m.w + cx] !== GR.WATER || iceNow) continue;
       const ph = t * 1.5 + hash2(cx, cy) * 6;
       const wx = cx * TILE + 6 + Math.sin(ph) * 4, wy = cy * TILE + 10 + hash2(cy, cx) * 12;
       ctx.beginPath(); ctx.moveTo(wx, wy); ctx.quadraticCurveTo(wx + 6, wy - 3, wx + 12, wy); ctx.stroke();
@@ -1410,7 +1453,7 @@ export function render(ctx) {
     if (!under) for (const e of G.enemies) if (!e.dead && dist(x, cyc, e.x, e.y) < 32) { under = true; break; }
     ctx.globalAlpha = under ? 0.4 : 1;
     const tv = tr.v || (tr.v = treeVariant(tr));
-    ctx.drawImage(treeSprite(tr.kind, tv.pal, tv.size), x - 48 + sh, y - 58);
+    ctx.drawImage(seasonalTree(tr.kind, tv.pal, tv.size), x - 48 + sh, y - 58);
     ctx.globalAlpha = 1;
   }
 

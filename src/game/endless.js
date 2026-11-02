@@ -100,6 +100,8 @@ export function startEndless(siteId, begin, opts = {}) {
   G.prequel = null;
   if (mod === 'pistols') { delete s.inv.shotgun; delete s.inv.rifle; delete s.inv.shells; delete s.inv.rifle_ammo; s.inv.ammo = 96; s.player.weapon = 'pistol'; }
   G.endless = { site, mod, daily: opts.daily || null, rng: opts.daily ? seeded(opts.daily.seed) : null, wave: 0, kills: 0, state: 'break', breakT: 12, nextBanner: 0 };
+  // Each run (and each day's challenge, the same for everyone) happens in a season.
+  G.endless.season = ['autumn', 'winter', 'spring', 'summer'][opts.daily ? opts.daily.seed % 4 : Math.floor(Math.random() * 4)];
   begin(false);
   banner(`${opts.daily ? 'DAILY CHALLENGE' : 'ENDLESS SIEGE'} — ${site.name}${mod !== 'none' ? ` · ${MODIFIERS[mod].name}` : ''}. Board up, find a spot. First wave in 12 seconds.`, 'objective', 6);
   if (opts.daily) G.events.emit('dailyStarted', opts.daily.day);

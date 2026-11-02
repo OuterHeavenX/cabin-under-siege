@@ -38,7 +38,9 @@ const errors = [];
 
 function watch(page, label) {
   // The older sections test the classic systems: switch off optional drop-ins and extra conversations there.
-  if (!label.startsWith('life')) page.addInitScript(() => { window.__cusNoEvents = true; });
+  if (!label.startsWith('life') && !label.startsWith('seasons')) page.addInitScript(() => { window.__cusNoEvents = true; });
+  // Everything written before seasons runs in autumn (the season the game starts in), whatever day it reaches.
+  if (!label.startsWith('seasons')) page.addInitScript(() => { window.__cusSeason = 'autumn'; });
   page.on('console', (m) => { if (m.type() === 'error') errors.push(`[${label}] console: ${m.text()}`); });
   page.on('pageerror', (e) => errors.push(`[${label}] pageerror: ${e.message}`));
 }
@@ -2083,6 +2085,80 @@ if (want('life')) {
   check('Life (touch): the ability button appears once you have one, and tapping it fires it', shown && await tp2.evaluate(() => (window.__cus.G.abilityCd || {}).misdirection > 0));
   await tp2.screenshot({ path: OUT + 'life-touch.png' });
   await tctx.close();
+}
+
+/* ================================================================== */
+/* Seasons (v0.12): the year, day length, weather, ice, tracks, mud,   */
+/* fire, seasonal days, visuals                                        */
+/* ================================================================== */
+if (want('seasons')) {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const page = await ctx.newPage();
+  watch(page, 'seasons');
+  await page.goto(URL); await page.waitForSelector('#t-new');
+  const C = (fn, a) => ev(page, fn, a);
+  const mod = (path, fn, a) => page.evaluate(([p, f, a]) => import(p).then((m) => (new Function('m', 'a', 'return (' + f + ')(m, a)'))(m, a)), [path, fn.toString(), a]);
+  await C(() => window.__cus.newGame('normal')); await sleep(500); await skipDialogues(page);
+  await C(() => { const s = window.__cus.G.s; s.story.flags.firstSiegeDone = true; s.world.quietUntilDay = 9999; s.world.siege = null; window.__cus.dbg.closeAll(); });
+  const setDay = (d, min = 12 * 60) => C(([d, min]) => { const s = window.__cus.G.s; s.time.day = d; s.time.minute = min; s.world.lastDayProcessed = d; s.life.eventDay = d; }, [d, min]);
+
+  const yr = await mod('./src/game/seasons.js', (m) => [1, 12, 13, 25, 37, 48, 49].map((d) => m.seasonIdOf(d)).join(','));
+  check('Seasons: the year runs autumn, winter, spring, summer — twelve days each, then round again', yr === 'autumn,autumn,winter,spring,summer,summer,autumn', yr);
+
+  // Day length.
+  const nights = await C(() => import('./src/game/state.js').then((st) => { const s = window.__cus.G.s; const at = (d, h) => { s.time.day = d; s.time.minute = h * 60; return st.isNight(); }; return { w19: at(14, 19), a19: at(2, 19), a20: at(2, 20), s21: at(40, 21), s22: at(40, 22), w630: at(14, 6.5), s530: at(40, 5.5) }; }));
+  check('Seasons: winter nights come early and leave late, summer nights are short, autumn keeps 8 PM–6 AM', nights.w19 && !nights.a19 && nights.a20 && !nights.s21 && nights.s22 && nights.w630 && !nights.s530, JSON.stringify(nights));
+
+  // Weather by season.
+  const wx = await C(() => import('./src/game/weather.js').then((W) => { const s = window.__cus.G.s; const roll = (d) => { const out = {}; s.time.day = d; s.time.minute = 12 * 60; for (let i = 0; i < 300; i++) { s.world.weather = null; s.world.siege = null; const k = W.weather().kind; out[k] = (out[k] || 0) + 1; } return out; }; return { winter: roll(15), summer: roll(40), spring: roll(26) }; }));
+  check('Seasons: winter brings snow instead of rain; summer is dry', !wx.winter.rain && wx.winter.snow > 30 && !wx.summer.snow && (wx.summer.rain || 0) < 40, JSON.stringify(wx));
+
+  // Winter at home: ice, tracks, hiding, banner, seasonal day.
+  await setDay(12, 9 * 60);
+  await C(() => { window.__cus.loadMap('cabin', window.__cus.G.maps.cabin.points.porch); });
+  await sleep(1800);
+  await setDay(13, 9 * 60); await sleep(1900);
+  const ban = await C(() => [...document.querySelectorAll('.banner, #banner')].map((b) => b.textContent).join(' '));
+  check('Seasons: a new season is announced with what it changes', /Winter/.test(ban) && /freeze/.test(ban), ban.slice(0, 140));
+  const ice = await C(() => import('./src/world/map.js').then(({ SO }) => { const m = window.__cus.G.map; let cell = null; for (let i = 0; i < m.w * m.h && !cell; i++) if (m.solid[i] === SO.WATER) cell = [i % m.w, Math.floor(i / m.w)]; if (!cell) return null; const w = m.blocksMove(cell[0], cell[1], 'player'); window.__cusSeason = 'autumn'; const a = m.blocksMove(cell[0], cell[1], 'player'); window.__cusSeason = null; return { w, a }; }));
+  check('Seasons: in winter the pond freezes hard enough to walk on (in autumn it\'s water)', ice && ice.w === false && ice.a === true, JSON.stringify(ice));
+  await C(() => { const c = window.__cus, mm = c.G.map, p = c.G.player; c.G.tracks = []; for (let y = 4; y < mm.h - 4; y++) for (let x = 4; x < mm.w - 8; x++) { let ok = true; for (let k = 0; k < 6 && ok; k++) ok = mm.ground[mm.idx(x + k, y)] === 0 && !mm.blocksMove(x + k, y, 'player') && !mm.buildingAt((x + k) * 32 + 16, y * 32 + 16); if (ok) { p.x = x * 32 + 16; p.y = y * 32 + 16; return; } } });
+  await page.keyboard.down('KeyD'); await sleep(700); await page.keyboard.up('KeyD');
+  await page.keyboard.down('KeyS'); await sleep(500); await page.keyboard.up('KeyS');
+  const trk = await C(() => (window.__cus.G.tracks || []).filter((t) => t.who === 'player').length);
+  check('Seasons: walking in snow leaves tracks', trk >= 2, String(trk));
+  const hm = await mod('./src/game/seasons.js', (m) => m.hideMult());
+  check('Seasons: in snow they follow your tracks — hiding takes longer to work', hm === 1.5, String(hm));
+  await C(() => { const s = window.__cus.G.s; s.time.minute = 9 * 60; s.life.eventDay = -1; s.time.day = 14; s.world.lastDayProcessed = 14; });
+  await sleep(2500);
+  const snowDay = await C(() => ({ text: document.getElementById('dlg-text').textContent, open: !document.getElementById('dialogue').classList.contains('hidden') }));
+  await skipDialogues(page);
+  check('Seasons: a winter morning at home can bring a snow day (once a year)', snowDay.open && /white/.test(snowDay.text) && await C(() => !!window.__cus.G.s.life.seasonal['snow_day:1']), snowDay.text.slice(0, 80));
+  await page.screenshot({ path: OUT + 'seasons-winter.png' });
+  const layer = await C(() => window.__cus.G.map.groundCanvas.season === 'winter');
+  check('Seasons: the land is drawn for the season (snow cover and ice)', layer);
+  await C(() => window.__cus.dbg.openMenu('journal')); await sleep(300);
+  await page.click('.subtab[data-id="cal"]').catch(() => {}); await sleep(200);
+  const cal = await C(() => document.querySelector('.modal-body').innerText);
+  check('Seasons: the Journal calendar shows the season, its day and what\'s coming', /Winter/.test(cal) && /day 2 of 12/.test(cal) && /Spring in 11 days/.test(cal), cal.slice(0, 200));
+  await C(() => window.__cus.dbg.closeAll());
+
+  // Spring mud, summer fire.
+  const mud = await mod('./src/game/seasons.js', (m) => { const c = window.__cus; const s = c.G.s; s.time.day = 26; s.world.lastRainDay = 26; const p = c.G.map.points.porch; let spot = null; const mm = c.G.map; for (let y = 0; y < mm.h && !spot; y++) for (let x = 0; x < mm.w; x++) if (mm.ground[mm.idx(x, y)] === 0 && !mm.buildingAt(x * 32 + 16, y * 32 + 16)) { spot = [x * 32 + 16, y * 32 + 16]; break; } const wet = m.groundSpeed(spot[0], spot[1]); s.world.lastRainDay = 20; const dry = m.groundSpeed(spot[0], spot[1]); return { wet, dry, p: !!p }; });
+  check('Seasons: spring rain turns open ground to mud that slows everyone; it dries out', mud.wet < 1 && mud.dry === 1, JSON.stringify(mud));
+  const fire = await C(() => import('./src/game/fire.js').then((F) => { const c = window.__cus; const s = c.G.s; c.G.fires = []; s.time.day = 40; F.startFire(0, 0); const summer = c.G.fires[0].life; s.time.day = 2; F.startFire(0, 0); const autumn = c.G.fires[1].life; s.time.day = 15; F.startFire(0, 0); const winter = c.G.fires[2].life; c.G.fires = []; return { summer, autumn, winter }; }));
+  check('Seasons: summer fires burn longer, snow damps them', fire.summer > fire.autumn && fire.winter < fire.autumn, JSON.stringify(fire));
+  await C(() => { const s = window.__cus.G.s; s.time.day = 40; s.time.minute = 12 * 60; });
+  await sleep(300); await page.screenshot({ path: OUT + 'seasons-summer.png' });
+
+  // Estate ice: in winter the lake crew walks over.
+  const est = await C(() => import('./src/game/seasons.js').then((S) => { const c = window.__cus; c.dbg.moveToChapter && null; return S.frozen(); }));
+  check('Seasons: the lake is frozen in winter only (the estate\'s lake crew walks across it)', est === false);
+
+  // Endless runs get a season; the daily challenge's is the same for everyone.
+  const en = await C(() => import('./src/game/endless.js').then((E) => { const a = E.dailyChallenge(20000), b = E.dailyChallenge(20000); return ['autumn', 'winter', 'spring', 'summer'][a.seed % 4] === ['autumn', 'winter', 'spring', 'summer'][b.seed % 4]; }));
+  check('Seasons: the daily challenge picks the same season for everyone', en);
+  await ctx.close();
 }
 
 

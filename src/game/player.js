@@ -16,6 +16,7 @@ import { WEAPONS, WEAPON_ORDER } from '../data/weapons.js';
 import { tryAllyRevive } from './ally.js';
 import { witnessTakedown } from './enemies.js';
 import { assaultRevive } from './assault.js';
+import { groundSpeed, addTrack } from './seasons.js';
 
 const SURFACE = { 0: 'grass', 1: 'dirt', 2: 'hard', 3: 'wood', 4: 'wood', 5: 'grass', 6: 'gravel', 7: 'hard', 8: 'dirt', 9: 'hard', 10: 'hard' };
 function surfaceAt(map, x, y) {
@@ -86,10 +87,11 @@ export function updatePlayer(dt) {
     p.dodgeT -= dt;
     map.moveCircle(p, p.dodgeDx * d.dodgeSpeed * dt, p.dodgeDy * d.dodgeSpeed * dt, 'player');
   } else if (!G.repairHold) {
-    const speed = (sprint ? SPRINT_SPEED : PLAYER_SPEED) * (p.reloadT > 0 ? 0.85 : 1);
+    const speed = (sprint ? SPRINT_SPEED : PLAYER_SPEED) * (p.reloadT > 0 ? 0.85 : 1) * groundSpeed(p.x, p.y);
     p.vx = mv.x * speed; p.vy = mv.y * speed;
     if (moving) {
       map.moveCircle(p, p.vx * dt, p.vy * dt, 'player');
+      addTrack(p, 'player');
       p.walkPhase += dt * (sprint ? 14 : 10);
       if (Math.floor(p.walkPhase / Math.PI) !== Math.floor((p.walkPhase - dt * 10) / Math.PI)) sfx('step', { vol: sprint ? 1 : 0.6, surface: surfaceAt(map, p.x, p.y) });
     }

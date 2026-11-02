@@ -1,5 +1,6 @@
 // Tile map with collision, line-of-sight and A* pathfinding.
 import { TILE } from '../config.js';
+import { frozenNow } from '../game/season-core.js';
 
 // Ground types
 export const GR = {
@@ -61,7 +62,7 @@ export class GameMap {
   /** Can an entity of the given kind move through this cell? */
   blocksMove(cx, cy, who) {
     const s = this.getSolid(cx, cy);
-    if (s !== SO.NONE) return true;
+    if (s !== SO.NONE && !(s === SO.WATER && frozenNow())) return true; // winter ice holds
     const b = this.blockerAt(cx, cy);
     if (b && b.blocksMove(who)) return true;
     return false;

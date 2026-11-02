@@ -7,6 +7,7 @@ import { dist } from '../util.js';
 import { damagePlayer } from './player.js';
 import { damageEnemy, spawnParticles } from './combat.js';
 import { sfx } from '../audio.js';
+import { fireMult } from './seasons.js';
 
 /** Where a thrown bottle actually lands: it shatters on the first wall, rock,
  *  closed door, or boarded/shuttered window in its path (plain glass it smashes
@@ -40,6 +41,8 @@ export function throwMolotov(from, tx, ty) {
 }
 
 export function startFire(x, y, r = 38, life = 6.5) {
+  const sm = fireMult(); // summer burns longer, snow damps it
+  r *= sm.r; life *= sm.life;
   G.fires.push({ x, y, r, life, max: life, tick: 0 });
   sfx('molotov', { x, y });
   spawnParticles(x, y, '#ffb347', 14, 160, 0.5, 3);

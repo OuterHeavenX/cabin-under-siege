@@ -53,6 +53,7 @@ import { initWatchEvents, watchSpots } from './game/watch.js';
 import { updateAbilities, abilityLabel } from './game/abilities.js';
 import { updateLetters, initLetterEvents } from './game/letters.js';
 import { updateAway, initAwayEvents } from './game/away.js';
+import { updateSeasons } from './game/seasons.js';
 import { applyProjects, ensureProjectSpots, projectsMorning, PROJECTS, projectName, paidOf } from './game/projects.js';
 import { spawnDog, updateDog, dogMorning } from './game/dog.js';
 import { setWeather } from './game/weather.js';
@@ -243,6 +244,7 @@ function update(dt) {
   updateTownLife(dt);
   updateRat(dt);
   if (!G.endless && !G.prequel) { updateLife(dt); updateLetters(dt); }
+  updateSeasons(dt);
   updateJobs(dt);
   if (!G.endless && !G.prequel) { updateStory(dt); checkDiscovery(); }
 

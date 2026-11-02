@@ -55,6 +55,8 @@ export function updateAtmosphere(dt) {
   const wk = G.s ? weather().kind : 'clear';
   const target = wk === 'rain' ? 1 : 0;
   G.rainLevel = (G.rainLevel || 0) + (target - (G.rainLevel || 0)) * Math.min(1, dt * 0.4);
+  const snowT = wk === 'snow' ? 1 : 0;
+  G.snowLevel = (G.snowLevel || 0) + (snowT - (G.snowLevel || 0)) * Math.min(1, dt * 0.35);
   const fogT = wk === 'fog' ? 1 : 0;
   G.fogLevel = (G.fogLevel || 0) + (fogT - (G.fogLevel || 0)) * Math.min(1, dt * 0.3);
   const indoor = !!(G.player && G.map && G.map.buildingAt(G.player.x, G.player.y));
@@ -94,7 +96,7 @@ export function drawDecals(ctx, inView) {
 }
 
 /* ---------------- screen-space weather + grading ---------------- */
-let drops = null, splashes = [], grain = null, fogBanks = null;
+let drops = null, splashes = [], grain = null, fogBanks = null, flakes = null;
 
 function makeGrain() {
   const c = document.createElement('canvas');
@@ -174,6 +176,24 @@ export function drawScreenAtmosphere(ctx, w, h, dk, dt) {
       ctx.moveTo(d.x, d.y); ctx.lineTo(d.x + d.l * 0.18, d.y - d.l);
     }
     ctx.stroke();
+  }
+  // Snowfall: slow, drifting flakes.
+  const snow = G.snowLevel || 0;
+  if (snow > 0.03 && !indoor) {
+    const n = Math.round((lq ? 50 : 160) * snow);
+    if (!flakes) flakes = [];
+    while (flakes.length < n) flakes.push({ x: Math.random() * w, y: Math.random() * h, v: 30 + Math.random() * 45, r: 0.8 + Math.random() * 1.8, ph: Math.random() * 6 });
+    flakes.length = Math.min(flakes.length, n);
+    ctx.fillStyle = `rgba(245,248,255,${0.75 * snow})`;
+    ctx.beginPath();
+    for (const f of flakes) {
+      f.y += f.v * dt; f.x += Math.sin(G.time * 0.8 + f.ph) * 14 * dt - 6 * dt;
+      if (f.y > h) { f.y = -4; f.x = Math.random() * w; }
+      if (f.x < -4) f.x = w + 4;
+      ctx.moveTo(f.x + f.r, f.y); ctx.arc(f.x, f.y, f.r, 0, Math.PI * 2);
+    }
+    ctx.fill();
+    ctx.fillStyle = `rgba(200,210,225,${0.07 * snow})`; ctx.fillRect(0, 0, w, h);
   }
   // Film grain: always faint, stronger in attacks and cutscenes.
   if (!lq) {
