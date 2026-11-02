@@ -10,7 +10,7 @@ import { chapter, homeMapId, workMapId, atHome, LAST_CHAPTER, CHAPTERS, mapChapt
 import { setVisitHooks, pastHomeRecord } from './game/visits.js';
 import { QUESTS, questWaypoint } from './game/quests.js';
 import { newHome } from './game/state.js';
-import { showChapterStart, openDifficultyPicker, openEndlessPicker, openCloud, openTrophies } from './ui/menus.js';
+import { showChapterStart, openDifficultyPicker, openEndlessPicker, openCloud, openTrophies, openLongNightPicker, openBoonPicker, showRunResult } from './ui/menus.js';
 import { initCloudSync, cloudCode, cloudCheck, cloudTake } from './game/cloud.js';
 import { canNewGamePlus, makeNewGamePlus } from './game/ngplus.js';
 import { buildGroundCanvas, buildRoofCanvas, render } from './world/render.js';
@@ -55,6 +55,7 @@ import { updateLetters, initLetterEvents } from './game/letters.js';
 import { updateAway, initAwayEvents } from './game/away.js';
 import { updateSeasons } from './game/seasons.js';
 import { updateKeystone, initKeystoneEvents } from './game/keystone.js';
+import { initLongNightEvents } from './game/longnight.js';
 import { applyProjects, ensureProjectSpots, projectsMorning, PROJECTS, projectName, paidOf } from './game/projects.js';
 import { spawnDog, updateDog, dogMorning } from './game/dog.js';
 import { setWeather } from './game/weather.js';
@@ -62,7 +63,7 @@ import { initAchievementEvents, updateAchievements, unlockedCount, ACHIEVEMENTS,
 import { initAtmosphere, updateAtmosphere } from './world/atmosphere.js';
 import { updateCutscene, skipCutscene, endCutscene, playCutscene } from './ui/cutscene.js';
 import { lowQuality } from './game/difficulty.js';
-import { startEndless, updateEndless, unlockEndlessFor } from './game/endless.js';
+import { startEndless, updateEndless, unlockEndlessFor, setRunHooks } from './game/endless.js';
 import { startSiege, makeRaidPlan, scheduleSiege, addSign, storyPlan } from './game/siege.js';
 import { buySkill } from './game/progression.js';
 import { damagePlayer } from './game/player.js';
@@ -454,6 +455,7 @@ function initEvents() {
   initWatchEvents();
   initAwayEvents();
   initKeystoneEvents();
+  initLongNightEvents();
   initLetterEvents();
   initAchievementEvents();
   initCloudSync();
@@ -665,6 +667,9 @@ function continueGame() {
   startGame(false);
 }
 
+/** The Long Night picker (title button, and 'Another night' after a run). */
+function openLongNight() { if (G.running) quitToTitle(); openLongNightPicker((site, opts) => startEndless(site, startGame, opts)); }
+
 function quitToTitle() {
   if (G.cutscene) { G.cutscene.onEnd = null; endCutscene(); }
   G.running = false;
@@ -729,6 +734,7 @@ function initTitle() {
     } else newGame();
   }));
   document.getElementById('t-endless').addEventListener('click', go(() => openEndlessPicker((site, opts) => startEndless(site, startGame, opts))));
+  document.getElementById('t-longnight').addEventListener('click', go(() => openLongNight()));
   document.getElementById('t-ngplus').addEventListener('click', go(() => confirmBox('Start New Game+? Your finished story save becomes the new run: level, skills, money, weapons and gear carry over; the story starts again in Pine Hollow with a tougher family.', 'Start New Game+', () => newGamePlus(), 'Not yet')));
   document.getElementById('t-prequel').addEventListener('click', go(() => confirmBox('Newark, 1999: the night Frankie Corsetti left the family. A prequel episode of about 15 minutes. Your story save isn\'t touched.', 'Play', () => startPrequel(startGame), 'Not now')));
   document.getElementById('t-cloud').addEventListener('click', go(() => openCloud()));
@@ -795,7 +801,8 @@ function boot() {
   initDialogue();
   initReliableTaps();
   initEvents();
-  setMenuHooks({ newGamePlus: () => newGamePlus(), refreshTitle: () => showTitle(), quitApp: desktopApp ? quitApp : null, toggleFullscreen: desktopApp ? toggleFullscreen : null, quitToTitle, reloadFromSave: () => continueGame(), restartEndless: (site, opts) => startEndless(site, startGame, opts) });
+  setMenuHooks({ newGamePlus: () => newGamePlus(), refreshTitle: () => showTitle(), quitApp: desktopApp ? quitApp : null, toggleFullscreen: desktopApp ? toggleFullscreen : null, quitToTitle, reloadFromSave: () => continueGame(), restartEndless: (site, opts) => startEndless(site, startGame, opts), openLongNight: () => openLongNight() });
+  setRunHooks({ offer: (omen) => openBoonPicker(omen), victory: (res) => showRunResult(res) });
   initTitle();
   showTitle();
   if (G.settings.touchControls === 'on' || (G.settings.touchControls === 'auto' && matchMedia('(pointer: coarse)').matches)) setTouchMode(true);
@@ -806,7 +813,7 @@ function boot() {
   }
   // Test/debug handle (harmless in production; used by the automated smoke test).
   window.__cus = {
-    G, newGame, continueGame, travel, loadMap, saveGame, quitToTitle,
+    G, newGame, continueGame, travel, loadMap, saveGame, quitToTitle, startGameForTest: (isNew) => startGame(isNew),
     dbg: { closeAll: () => closeAllModals(), birdCall, renderOffline, musicBar, sfx, audioDebug, input, openingStrength, homeMapId, openMenu, startFire, damageEnemy, spawnEnemy, startSiege, makeRaidPlan, scheduleSiege, addSign, addItem, addXP, addJP, buySkill, derived, damagePlayer, count, moveToChapter, storyPlan, callAllies, startAssault, skipCutscene, endCutscene, setWeather },
   };
 }

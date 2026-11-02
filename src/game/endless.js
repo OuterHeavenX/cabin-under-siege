@@ -8,6 +8,7 @@ import { startSiege } from './siege.js';
 import { addItem, count } from './inventory.js';
 import { banner, toast, centerMessage } from '../ui/hud.js';
 import { sfx, setMusic } from '../audio.js';
+import { newRun, setupRun, runMinute, omenTypes, maybeOmen, finishRun, runMods, RUN_WAVES } from './longnight.js';
 import { relOf } from './progression.js';
 
 const KEY = 'cabin-under-siege-endless';
@@ -77,6 +78,13 @@ export function dailyChallenge(day = utcDay()) {
   return { day, site: site.id, mod: mods[Math.floor(r() * mods.length)], seed: hashStr('waves-' + day) };
 }
 
+/** Today's Long Night: the same home, season and boons for everyone. */
+export function dailyNight(day = utcDay()) {
+  const r = seeded(hashStr('cabin-night-' + day));
+  const site = ENDLESS_SITES[Math.floor(r() * ENDLESS_SITES.length)];
+  return { day, site: site.id, seed: hashStr('night-' + day) };
+}
+
 /** Build a throwaway save for an endless run. `begin` is main.js's startGame. */
 export function startEndless(siteId, begin, opts = {}) {
   const site = ENDLESS_SITES.find((s) => s.id === siteId) || ENDLESS_SITES[0];
@@ -100,9 +108,12 @@ export function startEndless(siteId, begin, opts = {}) {
   G.prequel = null;
   if (mod === 'pistols') { delete s.inv.shotgun; delete s.inv.rifle; delete s.inv.shells; delete s.inv.rifle_ammo; s.inv.ammo = 96; s.player.weapon = 'pistol'; }
   G.endless = { site, mod, daily: opts.daily || null, rng: opts.daily ? seeded(opts.daily.seed) : null, wave: 0, kills: 0, state: 'break', breakT: 12, nextBanner: 0 };
+  // The Long Night: ten waves to dawn, boons between waves (longnight.js).
+  if (opts.run) G.endless.run = newRun(opts.run, opts.run.daily ? seeded(opts.run.daily.seed + 7) : null);
   // Each run (and each day's challenge, the same for everyone) happens in a season.
-  G.endless.season = ['autumn', 'winter', 'spring', 'summer'][opts.daily ? opts.daily.seed % 4 : Math.floor(Math.random() * 4)];
+  G.endless.season = ['autumn', 'winter', 'spring', 'summer'][opts.daily ? opts.daily.seed % 4 : opts.run && opts.run.daily ? opts.run.daily.seed % 4 : Math.floor(Math.random() * 4)];
   begin(false);
+  if (G.endless.run) { setupRun(); banner(`THE LONG NIGHT — ${site.name}, ${G.endless.season[0].toUpperCase() + G.endless.season.slice(1)}. Ten waves to dawn. Pick a boon after each one.`, 'objective', 6); if (G.endless.run.startPick) { G.endless.state = 'boon'; runHooks.offer && runHooks.offer(null); } return; }
   banner(`${opts.daily ? 'DAILY CHALLENGE' : 'ENDLESS SIEGE'} — ${site.name}${mod !== 'none' ? ` · ${MODIFIERS[mod].name}` : ''}. Board up, find a spot. First wave in 12 seconds.`, 'objective', 6);
   if (opts.daily) G.events.emit('dailyStarted', opts.daily.day);
   if (relOf('ruth') >= 3) toast('Ruth is here with Harold\'s shotgun.', 'good', 3);
@@ -124,6 +135,7 @@ function wavePlan(n) {
   for (let g = 0; g < groups; g++) waves.push({ dir: dirs[(n + g * 2) % dirs.length], types: [], delay: g * 10 });
   types.forEach((t, i) => waves[i % groups].types.push(t));
   if (n % 5 === 0) waves[waves.length - 1].types.push('lieutenant');
+  if (E.run) omenTypes(n).forEach((t, i) => waves[i % groups].types.push(t));
   if (['farm', 'estate', 'watchhouse'].includes(G.endless.site.id) && n >= 3 && n % 3 === 0) waves[0].types.unshift('truck');
   return { kind: 'endless', hpMult: (1 + (n - 1) * 0.07) * (horde ? 0.7 : 1), bossName: 'Lieutenant', waves };
 }
@@ -131,7 +143,7 @@ function wavePlan(n) {
 export function updateEndless(dt) {
   const E = G.endless;
   if (!E) return;
-  G.s.time.minute = 22 * 60 + 30; // it's always the longest night
+  G.s.time.minute = E.run ? runMinute(E.wave) : 22 * 60 + 30; // it's always the longest night (or one that ends at dawn)
   if (E.state !== 'break' || G.player.dead) return;
   E.breakT -= dt;
   if (E.breakT <= E.nextBanner && E.breakT > 0.5 && E.wave > 0) {
@@ -158,14 +170,27 @@ export function endlessWaveCleared(sg) {
   setMusic('night');
   // Resupply between waves, scaled a little with the wave number.
   const gifts = [];
-  const top = (id, n, label) => { const got = addItem(id, n, true); if (got) gifts.push(`${got} ${label}`); };
+  const sc = runMods().scav;
+  const top = (id, n, label) => { const got = addItem(id, n * sc, true); if (got) gifts.push(`${got} ${label}`); };
   if (count('ammo') < 48) top('ammo', 24, 'rounds');
   top('shells', 6, 'shells');
   if (E.wave % 2 === 0) top('rifle_ammo', 4, 'rifle rounds');
   top('wood', 6, 'wood');
   if (E.wave % 3 === 0) top('medkit', 1, 'first-aid kit'); else top('bandage', 1, 'bandage');
   centerMessage(`WAVE ${E.wave} CLEARED`, gifts.length ? `Supplies: ${gifts.join(', ')}` : 'Catch your breath', 3);
+  if (E.run) {
+    if (E.wave >= RUN_WAVES) { E.state = 'dawn'; const res = { site: E.site, ...finishRun(true, E.wave, E.kills) }; G.events.emit('longNightDawn', res); setTimeout(() => runHooks.victory && runHooks.victory(res), 2600); return; }
+    const omen = maybeOmen(E.wave);
+    E.state = 'boon'; E.breakT = 16; E.nextBanner = 15;
+    setTimeout(() => runHooks.offer && runHooks.offer(omen), 3300); // after the WAVE CLEARED card
+  }
 }
+
+/** The Long Night's UI (menus.js): `offer(omen)` shows the boon picker, `victory(res)` the dawn screen. */
+const runHooks = {};
+export function setRunHooks(h) { Object.assign(runHooks, h); }
+/** The player chose a boon: the next wave's countdown starts. */
+export function boonChosen() { const E = G.endless; if (E && E.state === 'boon') { E.state = 'break'; if (!E.wave) E.breakT = 12; } }
 
 /** Called instead of the story defeat flow. Returns the result for the summary screen. */
 export function endlessDefeat() {
@@ -175,6 +200,7 @@ export function endlessDefeat() {
   const survived = Math.max(0, E.wave - 1);
   const prev = d.best[E.site.id] || { waves: 0, kills: 0 };
   const record = survived > prev.waves || (survived === prev.waves && kills > prev.kills);
+  if (E.run) return { site: E.site, ...finishRun(false, survived, kills), longNight: true };
   if (record) { d.best[E.site.id] = { waves: survived, kills }; writeData(d); }
   return { site: E.site, mod: E.mod, daily: E.daily, survived, kills, record, best: record ? { waves: survived, kills } : prev };
 }

@@ -140,10 +140,12 @@ function setFocus(el) {
   el.classList.add('pad-focus');
   focusKey = keyOf(el);
   focusRect = el.getBoundingClientRect();
+  focusScreen = G.modal || 'title';
   try { el.focus({ preventScroll: true }); } catch { /* not focusable */ }
   el.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 }
 
+let focusScreen = null;
 function clearFocus() { if (focused) focused.classList.remove('pad-focus'); focused = null; focusKey = null; focusRect = null; }
 
 /** Keep the highlight when a menu redraws itself (buying an item, switching tab). */
@@ -152,7 +154,8 @@ function ensureFocus(ui, list) {
   if (focused && focusKey) {
     const same = list.find((el) => keyOf(el) === focusKey);
     if (same) { focused = null; setFocus(same); return; }
-    if (focusRect && list.length) {
+    // Stay near the old spot only within the same screen; a new menu starts on its default button.
+    if (focusRect && list.length && focusScreen === (G.modal || 'title')) {
       const cx = focusRect.left + focusRect.width / 2, cy = focusRect.top + focusRect.height / 2;
       let best = null, bd = Infinity;
       for (const el of list) { const r = el.getBoundingClientRect(); const d = Math.hypot(r.left + r.width / 2 - cx, r.top + r.height / 2 - cy); if (d < bd) { bd = d; best = el; } }

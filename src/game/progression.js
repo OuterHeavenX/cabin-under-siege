@@ -10,6 +10,7 @@ import { chapter, here } from './chapters.js';
 import { sfx } from '../audio.js';
 import { perkEff, perkShop } from './perks.js';
 import { eventOn } from './calendar.js';
+import { runMods } from './longnight.js';
 import { projectDone } from './projects.js';
 
 /** Prepared (Survivor): carrying a healing item, food and two wood. */
@@ -28,29 +29,30 @@ export function derived() {
   const fed = G.player && G.player.wellFed > 0;
   const prep = isPrepared();
   const steady = G.player && G.player.steadyT > 0; // Controlled Fire
+  const R = runMods(); // The Long Night's boons (neutral otherwise)
   return {
-    maxHp: Math.round((100 + 12 * lvlBonus(a.vit)) * (fed ? 1.1 : 1) * (prep ? 1.1 : 1)),
-    maxStamina: 100 + 10 * lvlBonus(a.end) + (fed ? 25 : 0) + perkEff('stam') + (prep ? 15 : 0),
+    maxHp: Math.round((100 + 12 * lvlBonus(a.vit)) * (fed ? 1.1 : 1) * (prep ? 1.1 : 1)) + R.hp,
+    maxStamina: 100 + 10 * lvlBonus(a.end) + (fed ? 25 : 0) + perkEff('stam') + (prep ? 15 : 0) + R.stam,
     prepared: prep,
     staminaMult: 1 - 0.04 * lvlBonus(a.end),
-    spreadMult: (1 - 0.06 * lvlBonus(a.pre)) * (sk('steady_hands') ? 0.7 : 1) * perkEff('spread') * (steady ? 0.35 : 1),
+    spreadMult: (1 - 0.06 * lvlBonus(a.pre)) * (sk('steady_hands') ? 0.7 : 1) * perkEff('spread') * (steady ? 0.35 : 1) * R.spread,
     moveSpreadMult: (sk('steady_hands') ? 0.5 : 1) * (steady ? 0.4 : 1),
-    reloadTime: 1.45 * (sk('quick_reload') ? 0.7 : 1),
-    healMult: (1 + 0.05 * lvlBonus(a.res)) * (sk('field_recovery') ? 1.35 : 1) * ((G.s.unlocks || {}).firstAid ? 1.15 : 1) * perkEff('heal'),
+    reloadTime: 1.45 * (sk('quick_reload') ? 0.7 : 1) * R.reload,
+    healMult: (1 + 0.05 * lvlBonus(a.res)) * (sk('field_recovery') ? 1.35 : 1) * ((G.s.unlocks || {}).firstAid ? 1.15 : 1) * perkEff('heal') * R.heal,
     regenCap: 0.3 + 0.05 * lvlBonus(a.res),
     graceTime: 0.55 + 0.05 * lvlBonus(a.res),
-    seeRadius: (170 + 20 * lvlBonus(a.awa) + (sk('keen_eye') ? 60 : 0) + perkEff('see')) * weatherMods().see,
+    seeRadius: (170 + 20 * lvlBonus(a.awa) + (sk('keen_eye') ? 60 : 0) + perkEff('see') + R.see) * weatherMods().see,
     warnLead: 15 + 4 * lvlBonus(a.awa) + (sk('watchful') ? 30 : 0) + (G.s.home.upgrades.alarm ? 45 : 0) + (projectDone('radio') ? 60 : 0) + perkEff('warn'),
-    showDirections: sk('watchful') || G.s.home.upgrades.alarm,
+    showDirections: sk('watchful') || G.s.home.upgrades.alarm || R.dirs,
     noticeMult: sk('quiet_steps') ? 0.6 : 1,
     dodgeSpeed: 400 * (sk('escape_artist') ? 1.3 : 1),
     dodgeTime: 0.22,
     dodgeIframes: sk('escape_artist') ? 0.4 : 0.25,
-    dodgeCost: 28 * (sk('escape_artist') ? 0.6 : 1),
-    repairSpeed: sk('quick_fix') ? 1.6 : 1,
+    dodgeCost: 28 * (sk('escape_artist') ? 0.6 : 1) * R.dodge,
+    repairSpeed: (sk('quick_fix') ? 1.6 : 1) * R.repair,
     woodBonus: sk('resourceful') ? 1 : 0,
-    flinchMult: steady ? 0 : sk('composure') ? 0.25 : 1,
-    magSize: (G.s.weaponMods && G.s.weaponMods.extMag) || G.s.home.upgrades.extMag ? 12 : 8,
+    flinchMult: (steady ? 0 : sk('composure') ? 0.25 : 1) * R.flinch,
+    magSize: (G.s.weaponMods && G.s.weaponMods.extMag) || G.s.home.upgrades.extMag || R.mag >= 12 ? 12 : 8,
     jobPayMult: (sk('good_reputation') ? 1.15 : 1) * perkEff('pay'),
   };
 }

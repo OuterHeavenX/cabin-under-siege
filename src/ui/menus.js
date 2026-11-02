@@ -4,7 +4,8 @@ import { G, hasSkill } from '../game/state.js';
 import { ITEMS, SHOPS, RECIPES, COOK_RECIPES } from '../data/items.js';
 import { cook, canCook } from '../game/activities.js';
 import { DIFFICULTY } from '../game/difficulty.js';
-import { endlessData, ENDLESS_SITES, MODIFIERS, dailyChallenge } from '../game/endless.js';
+import { endlessData, ENDLESS_SITES, MODIFIERS, dailyChallenge, dailyNight, boonChosen } from '../game/endless.js';
+import { nightData, buyPerk, PERKS as NIGHT_PERKS, BOONS, OMENS, RUN_WAVES, run as nightRun, drawOffer, takeBoon, rerollOffer } from '../game/longnight.js';
 import { ERRANDS, errandState, errandDone, stageLabel, activeErrands, arcSummary, errandOffer, offerErrand, arcReady } from '../game/errands.js';
 import { caseBoard } from '../game/rat.js';
 import { weekAhead } from '../game/townlife.js';
@@ -1010,7 +1011,83 @@ function boardHtml(r, n = 10, mine = null) {
   return `<ol class="board-list">${r.top.slice(0, n).map((x) => `<li class="${mine && x.name === mine ? 'me' : ''}"><span>${escapeHtml(x.name)}</span><span class="muted">${escapeHtml(x.platform || '')}</span><b>${x.waves} waves · ${x.kills}</b></li>`).join('')}</ol><span class="muted small">${r.players} player${r.players === 1 ? '' : 's'} today</span>`;
 }
 
+/* ---------------- The Long Night ---------------- */
+export function openLongNightPicker(onStart) {
+  const d = nightData();
+  const e = endlessData();
+  const today = dailyNight();
+  const tSite = ENDLESS_SITES.find((x) => x.id === today.site);
+  const online = cloudAvailable();
+  const perks = Object.entries(NIGHT_PERKS).map(([id, p]) => `<button class="btn diff-btn small ${d.perks[id] ? 'owned' : ''}" data-perk="${id}" ${d.perks[id] || d.embers < p.cost ? 'disabled' : ''}><b>${d.perks[id] ? '✓ ' : ''}${escapeHtml(p.name)} <span class="muted">· ${d.perks[id] ? 'owned' : `${p.cost} embers`}</span></b><span>${escapeHtml(p.desc)}</span></button>`).join('');
+  const el = openModal('longnight', `<h2>🌙 The Long Night</h2>
+    <p class="small">Ten waves from dusk to dawn at a random home, in a random season, in a house that's already been through something. After every wave, pick a boon. Every third wave, the night adds an omen. Reach dawn and you've won.</p>
+    <div class="summary"><div><b>${d.embers}</b><span>embers</span></div><div><b>${d.best.wave}/${RUN_WAVES}</b><span>best night</span></div><div><b>${d.dawns}</b><span>dawns</span></div></div>
+    <button class="btn big primary" data-run>Start a run</button>
+    <div class="daily-card">
+      <div class="daily-head"><b>📅 Tonight's Long Night</b><span class="muted small">${today.day} (UTC) · the same night for everyone</span></div>
+      <p class="small"><b>${escapeHtml(tSite.name)}</b> — same home, season, boons and omens for every player.</p>
+      ${online ? '<div class="board" data-board><span class="muted small">Loading tonight\'s board…</span></div>' : '<p class="small muted">The leaderboard needs the cloud server (Settings → Cloud server).</p>'}
+      <button class="btn big" data-daily>Play tonight's</button>
+    </div>
+    <h3>Embers</h3><p class="small muted">Every run earns embers: one per wave survived, one per 10 attackers, ten more for reaching dawn.</p>
+    <div class="diff-list">${perks}</div>
+    <button class="btn" data-close>Back</button>`, { cls: 'small' });
+  if (online) getDailyScores(today.day, 'night').then((r) => { const box = el.querySelector('[data-board]'); if (!box) return; box.innerHTML = r && r.board === 'night' ? boardHtml(r, 5) : '<span class="muted small">This cloud server doesn\'t have a Long Night board yet.</span>'; }).catch(() => { const box = el.querySelector('[data-board]'); if (box) box.innerHTML = '<span class="muted small">Leaderboard unavailable offline.</span>'; });
+  el.addEventListener('click', (ev) => {
+    const pk = ev.target.closest('[data-perk]');
+    if (pk && !pk.disabled) { if (buyPerk(pk.dataset.perk)) { sfx('chime'); closeModal(); openLongNightPicker(onStart); } return; }
+    if (ev.target.closest('[data-run]')) { const open = ENDLESS_SITES.filter((s) => e.unlocked.includes(s.id)); closeModal(); onStart(open[Math.floor(Math.random() * open.length)].id, { run: {} }); return; }
+    if (ev.target.closest('[data-daily]')) { closeModal(); onStart(today.site, { run: { daily: today } }); }
+  });
+}
+
+/** Between waves: pick a boon (the game waits). */
+export function openBoonPicker(omen) {
+  const R = nightRun();
+  if (!R) return;
+  const offer = R.offer || drawOffer();
+  const E = G.endless;
+  const title = E.wave ? `Wave ${E.wave} of ${RUN_WAVES} cleared` : 'Before the first wave';
+  const render = (ids) => ids.map((id) => `<button class="btn big diff-btn" data-boon="${id}"><b>${BOONS[id].icon} ${escapeHtml(BOONS[id].name)}</b><span>${escapeHtml(BOONS[id].desc)}</span></button>`).join('');
+  const el = openModal('boons', `<h2>${escapeHtml(title)}</h2>
+    ${omen ? `<p class="hl small">🌑 Omen — ${escapeHtml(OMENS[omen].name)}: ${escapeHtml(OMENS[omen].desc)}</p>` : ''}
+    <p class="small">Choose one:</p><div class="diff-list" data-list>${render(offer)}</div>
+    ${R.perks.reroll && !R.rerolled ? '<button class="btn" data-reroll>Second Thoughts — reroll (once)</button>' : ''}
+    ${R.boons.length ? `<p class="small muted">So far: ${R.boons.map((b) => BOONS[b].icon + ' ' + escapeHtml(BOONS[b].name)).join(' · ')}</p>` : ''}`, { closable: false, cls: 'small' });
+  el.addEventListener('click', (ev) => {
+    if (ev.target.closest('[data-reroll]')) { const o = rerollOffer(); if (o) { el.querySelector('[data-list]').innerHTML = render(o); ev.target.closest('[data-reroll]').remove(); } return; }
+    const b = ev.target.closest('[data-boon]');
+    if (!b) return;
+    if (takeBoon(b.dataset.boon)) { sfx('chime'); closeModal(); boonChosen(); toast(`${BOONS[b.dataset.boon].icon} ${BOONS[b.dataset.boon].name}`, 'good', 2.5); }
+  });
+}
+
+/** Dawn — or the night won. */
+export function showRunResult(res) {
+  setTimeout(() => {
+    const won = res.won;
+    const el = openModal('night-result', `<h2 class="${won ? '' : 'defeat-title'}">${won ? '🌅 DAWN' : 'The night won — this time'}</h2>
+      <p class="small">${won ? `The sun comes up over ${escapeHtml(res.site.name)}. Whoever's left gets back in their cars.` : `${escapeHtml(res.site.name)}, wave ${res.survived + 1}.`}</p>
+      <div class="summary"><div><b>${res.survived}/${RUN_WAVES}</b><span>waves</span></div><div><b>${res.kills}</b><span>attackers down</span></div><div><b>+${res.embers}</b><span>embers (${res.total})</span></div></div>
+      ${res.boons.length ? `<p class="small">Boons: ${res.boons.map((b) => BOONS[b].icon + ' ' + escapeHtml(BOONS[b].name)).join(' · ')}</p>` : ''}
+      ${res.omens.length ? `<p class="small muted">Omens: ${res.omens.map((o) => escapeHtml(OMENS[o].name)).join(' · ')}</p>` : ''}
+      ${res.record ? '<p class="small hl">New best night!</p>' : ''}
+      ${res.daily ? '<div class="board" data-board><span class="muted small">Posting to tonight\'s board…</span></div>' : ''}
+      <div class="row-btns"><button class="btn big primary" data-again>Another night</button><button class="btn big" data-title>Title screen</button></div>`, { closable: false, cls: 'small' + (won ? '' : ' defeat') });
+    el.querySelector('[data-again]').addEventListener('click', () => { closeModal(); G.transition = null; hooks.openLongNight && hooks.openLongNight(); });
+    el.querySelector('[data-title]').addEventListener('click', () => { closeModal(); G.transition = null; hooks.quitToTitle && hooks.quitToTitle(); });
+    if (res.daily && cloudAvailable()) {
+      const box = el.querySelector('[data-board]');
+      getDailyScores(res.daily.day, 'night').then((r) => {
+        if (!r || r.board !== 'night') { box.innerHTML = '<span class="muted small">This cloud server doesn\'t have a Long Night board yet.</span>'; return null; }
+        return postDailyScore(res.daily.day, res.survived, res.kills, 'night').then((p) => getDailyScores(res.daily.day, 'night').then((r2) => { box.innerHTML = `<p class="small"><b>You're #${p.rank} tonight</b></p>${boardHtml(r2, 10, playerName())}`; }));
+      }).catch((e) => { box.innerHTML = `<span class="muted small">${escapeHtml(e.message)}</span>`; });
+    } else if (res.daily) el.querySelector('[data-board]').innerHTML = '<span class="muted small">The leaderboard needs the cloud server.</span>';
+  }, 1200);
+}
+
 export function showEndlessResult(res) {
+  if (res.longNight) { showRunResult(res); return; }
   setTimeout(() => {
     const el = openModal('endless-result', `<h2 class="defeat-title">The night won — this time</h2>
       <div class="summary"><div><b>${res.survived}</b><span>waves survived</span></div><div><b>${res.kills}</b><span>attackers down</span></div></div>

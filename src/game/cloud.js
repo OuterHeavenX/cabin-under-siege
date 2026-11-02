@@ -8,6 +8,7 @@ import { desktopApp } from '../input.js';
 import { readSaveRaw, writeSaveData, validateSave } from './save.js';
 import { achievementData, mergeAchievements } from './achievements.js';
 import { endlessData, mergeEndless } from './endless.js';
+import { nightData, mergeNight } from './longnight.js';
 import { toast } from '../ui/hud.js';
 
 const KEY = 'cabinUnderSiege.cloud';
@@ -57,7 +58,7 @@ async function call(method, path, body) {
 
 function bundle() {
   const save = readSaveRaw();
-  return { savedAt: (save && save.savedAt) || 0, data: { save, achievements: achievementData(), endless: endlessData(), v: GAME_VERSION } };
+  return { savedAt: (save && save.savedAt) || 0, data: { save, achievements: achievementData(), endless: endlessData(), night: nightData(), v: GAME_VERSION } };
 }
 
 /** Upload this device's save into a brand-new slot. Returns the code. */
@@ -86,6 +87,7 @@ export function cloudLink(peek, useRemote) {
   const d = peek.data || {};
   mergeAchievements(d.achievements);
   if (d.endless) mergeEndless(d.endless);
+  if (d.night) mergeNight(d.night);
   if (useRemote && d.save && !validateSave(d.save)) writeSaveData(d.save);
   setState({ code: peek.code, pushedAt: useRemote ? peek.savedAt : 0, syncedAt: Date.now(), conflict: null });
   if (!useRemote) cloudPush({ force: true });
@@ -127,6 +129,7 @@ export async function cloudCheck() {
   const d = r.data || {};
   mergeAchievements(d.achievements);
   if (d.endless) mergeEndless(d.endless);
+  if (d.night) mergeNight(d.night);
   const local = readSaveRaw();
   const newer = !!d.save && r.savedAt > ((local && local.savedAt) || 0) + 1000;
   setState({ syncedAt: Date.now(), conflict: newer ? { savedAt: r.savedAt, device: r.device } : null });
@@ -170,10 +173,11 @@ export function playerName() {
 
 export const platformName = () => (desktopApp ? 'Deck/PC' : /iPhone|iPad|Android/.test(navigator.userAgent) ? 'Phone' : 'Web');
 
-export async function getDailyScores(day) {
-  return call('GET', `scores?day=${encodeURIComponent(day)}`);
+/** `board`: 'endless' (the daily challenge) or 'night' (the daily Long Night — needs a server that knows it). */
+export async function getDailyScores(day, board = 'endless') {
+  return call('GET', `scores?day=${encodeURIComponent(day)}${board === 'night' ? '&board=night' : ''}`);
 }
 
-export async function postDailyScore(day, waves, kills) {
-  return call('POST', 'scores', { day, waves, kills, name: playerName(), player: playerId(), platform: platformName() });
+export async function postDailyScore(day, waves, kills, board = 'endless') {
+  return call('POST', 'scores', { day, waves, kills, name: playerName(), player: playerId(), platform: platformName(), ...(board === 'night' ? { board } : {}) });
 }

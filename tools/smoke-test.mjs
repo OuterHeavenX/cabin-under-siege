@@ -2239,6 +2239,93 @@ if (want('keystone')) {
   await ctx.close();
 }
 
+/* ================================================================== */
+/* The Long Night (v0.14): a roguelite run of Endless Siege             */
+/* ================================================================== */
+if (want('longnight')) {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const page = await ctx.newPage();
+  watch(page, 'longnight');
+  await page.goto(URL); await page.waitForSelector('#t-new');
+  const C = (fn, a) => ev(page, fn, a);
+  const mod = (path, fn, a) => page.evaluate(([p, f, a]) => import(p).then((m) => (new Function('m', 'a', 'return (' + f + ')(m, a)'))(m, a)), [path, fn.toString(), a]);
+  await C(() => { localStorage.removeItem('cabin-under-siege-longnight'); });
+  check('Night: The Long Night is on the title screen', await page.isVisible('#t-longnight'));
+  await page.click('#t-longnight'); await sleep(400);
+  const pick = await C(() => document.querySelector('.modal-body').innerText);
+  check('Night: its screen explains the run, shows embers and the perks they buy', /Ten waves from dusk to dawn/.test(pick) && /embers/.test(pick) && /Harold's Shotgun/.test(pick), pick.slice(0, 120));
+  await page.screenshot({ path: OUT + 'night-picker.png' });
+  await page.click('[data-run]'); await sleep(1200);
+  const st = await C(() => { const c = window.__cus, E = c.G.endless; return { run: !!(E && E.run), site: E && E.site.id, season: E && E.season, minute: c.G.s.time.minute, open: Object.values(c.G.s.home.openings).filter((o) => !o.gate).map((o) => o.kind === 'door' ? o.hp : (o.glass === 0 ? 'x' : o.boards ? 'b' : 'w')).join(',') }; });
+  check('Night: a run starts at a home you\'ve unlocked, in a season, at dusk, with the house already knocked about', st.run && st.site === 'cabin' && ['autumn', 'winter', 'spring', 'summer'].includes(st.season) && st.minute === 20 * 60, JSON.stringify(st));
+  // Clear wave 1 and choose a boon.
+  const clearWave = async () => {
+    await C(() => { const E = window.__cus.G.endless; if (E.state === 'break') E.breakT = 0; });
+    for (let i = 0; i < 40 && !(await C(() => window.__cus.G.siegeActive)); i++) await sleep(100);
+    for (let i = 0; i < 200; i++) { await sleep(120); await C(() => { const c = window.__cus; c.G.player.invuln = 99999; if (c.G.siege) c.G.siege.t += 30; for (const e of c.G.enemies) if (!e.dead && !e.gone) c.dbg.damageEnemy(e, 9999, 0, 'bullet'); }); if (!(await C(() => window.__cus.G.siegeActive))) break; }
+  };
+  await clearWave(); await sleep(3900);
+  const offer = await C(() => [...document.querySelectorAll('[data-boon]')].map((b) => b.dataset.boon));
+  check('Night: after a wave, the night waits while you pick one of three boons', offer.length === 3 && await C(() => window.__cus.G.endless.state === 'boon'), offer.join(','));
+  await page.screenshot({ path: OUT + 'night-boons.png' });
+  await page.click('[data-boon]'); await sleep(300);
+  check('Night: picking a boon starts the next countdown', await C(() => window.__cus.G.endless.state === 'break' && window.__cus.G.endless.run.boons.length === 1 && !window.__cus.G.modal));
+  check('Night: the clock moves an hour a wave toward dawn', await C(() => window.__cus.G.s.time.minute === 21 * 60));
+  // Boons change the numbers.
+  const fx = await mod('./src/game/longnight.js', (m) => Promise.all([import('./src/game/progression.js'), import('./src/game/player.js')]).then(([P, PL]) => {
+    const c = window.__cus, R = m.run();
+    const hp0 = P.derived().maxHp, rl0 = P.derived().reloadTime;
+    R.offer = ['tough', 'quick_hands', 'iron']; m.takeBoon('tough'); R.offer = ['quick_hands']; m.takeBoon('quick_hands'); R.offer = ['iron']; m.takeBoon('iron');
+    const hp1 = P.derived().maxHp, rl1 = P.derived().reloadTime;
+    const p = c.G.player; p.invuln = 0; p.hp = 100; PL.damagePlayer(20, p.x + 10, p.y); const took = 100 - p.hp; p.invuln = 99999;
+    R.offer = ['fortify']; m.takeBoon('fortify'); const fort = Object.values(c.G.s.home.openings).filter((o) => !o.gate).every((o) => o.kind === 'door' ? o.reinforced : o.boards);
+    return { hp: hp1 - hp0, rl: Math.round((rl1 / rl0) * 100), took, fort };
+  }));
+  check('Night: boons work — Thick Skin, Quick Hands, Iron Will, Fortify', fx.hp === 25 && fx.rl === 70 && fx.took === 17 && fx.fort, JSON.stringify(fx));
+  const om = await mod('./src/game/longnight.js', (m) => { const o = m.maybeOmen(3); const t = m.omenTypes(6); return { o, t: t.length, none: m.maybeOmen(4) }; });
+  check('Night: every third wave brings an omen that changes the waves', !!om.o && om.none === null, JSON.stringify(om));
+  // Dawn: wave 10.
+  await C(() => { const E = window.__cus.G.endless; E.wave = 9; E.state = 'break'; });
+  await clearWave(); await sleep(4200);
+  const dawn = await C(() => ({ t: (document.querySelector('.modal-body') || {}).innerText || '', d: JSON.parse(localStorage.getItem('cabin-under-siege-longnight')) }));
+  check('Night: survive wave ten and the sun comes up — embers earned, a dawn counted', /DAWN/.test(dawn.t) && dawn.d.dawns === 1 && dawn.d.embers >= 20, JSON.stringify(dawn.d));
+  await page.screenshot({ path: OUT + 'night-dawn.png' });
+  await page.click('[data-again]'); await sleep(600);
+  check('Night: "Another night" goes back to the Long Night screen', /The Long Night/.test(await C(() => (document.querySelector('.modal-body') || {}).innerText || '')));
+  await page.click('[data-perk="start_shotgun"]'); await sleep(300);
+  const owned = await C(() => JSON.parse(localStorage.getItem('cabin-under-siege-longnight')).perks.start_shotgun === true);
+  check('Night: embers buy a permanent perk', owned);
+  await page.click('[data-run]'); await sleep(1200);
+  check('Night: the perk applies to the next run (start with the shotgun)', await C(() => (window.__cus.G.s.inv.shotgun || 0) > 0));
+  // Losing.
+  await C(() => { const E = window.__cus.G.endless; E.breakT = 0; });
+  for (let i = 0; i < 40 && !(await C(() => window.__cus.G.siegeActive)); i++) await sleep(100);
+  await C(() => import('./src/game/player.js').then((PL) => { const p = window.__cus.G.player; p.invuln = 0; p.hp = 1; PL.damagePlayer(999, p.x + 5, p.y); }));
+  await sleep(3200);
+  check('Night: if the night wins, the run ends with what it earned', /The night won/.test(await C(() => (document.querySelector('.modal-body') || {}).innerText || '')) && await C(() => JSON.parse(localStorage.getItem('cabin-under-siege-longnight')).runs === 2));
+  await page.click('[data-title]').catch(() => {}); await sleep(500);
+  // The daily Long Night: the same for everyone.
+  const daily = await mod('./src/game/endless.js', (m) => { const a = m.dailyNight('2026-11-02'), b = m.dailyNight('2026-11-02'), c = m.dailyNight('2026-11-03'); return a.site === b.site && a.seed === b.seed && a.seed !== c.seed; });
+  check('Night: the daily Long Night is seeded by the date', daily);
+  const offers = [];
+  for (let k = 0; k < 2; k++) {
+    await C(() => window.__cus.dbg.closeAll());
+    await mod('./src/game/endless.js', (m) => { m.startEndless(m.dailyNight('2026-11-02').site, window.__cus.startGameForTest, { run: { daily: m.dailyNight('2026-11-02') } }); });
+    await sleep(800);
+    offers.push(await mod('./src/game/longnight.js', (m) => m.drawOffer().join(',') + '|' + window.__cus.G.endless.season));
+  }
+  check('Night: two players on the same daily get the same season and the same boons', offers[0] === offers[1] && offers[0].length > 5, offers.join(' / '));
+  const board = await C(async () => {
+    const day = new Date().toISOString().slice(0, 10);
+    const post = await fetch('/api/scores', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ day, waves: 7, kills: 60, name: 'Night Owl', player: 'p-night', platform: 'Web', board: 'night' }) }).then((r) => r.json());
+    const night = await fetch(`/api/scores?day=${day}&board=night`).then((r) => r.json());
+    const endless = await fetch(`/api/scores?day=${day}`).then((r) => r.json());
+    return { rank: post.rank, nb: night.board, n: night.top.some((x) => x.name === 'Night Owl'), e: endless.top.some((x) => x.name === 'Night Owl') };
+  });
+  check('Night: the daily Long Night has its own leaderboard, separate from the Endless one', board.rank === 1 && board.nb === 'night' && board.n && !board.e, JSON.stringify(board));
+  await ctx.close();
+}
+
 
 await browser.close();
 server.kill();

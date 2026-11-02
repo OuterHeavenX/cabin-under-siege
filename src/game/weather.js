@@ -23,13 +23,13 @@ export function weather() {
   if (!G.s) return { kind: 'clear' };
   const w = G.s.world;
   const key = periodKey();
-  if (!w.weather || w.weather.key !== key) {
+  if (!w.weather || w.weather.key !== key || (G.endless && G.endless.run && G.endless.run.omens.includes('fog') && w.weather.kind !== 'fog')) {
     const night = key % 2 === 1;
     const siegeTonight = !!(w.siege && night);
     const r = Math.random();
     let kind = 'clear';
     if (G.prequel) kind = 'rain';
-    else if (G.endless && G.endless.mod === 'fog') kind = 'fog';
+    else if (G.endless && (G.endless.mod === 'fog' || (G.endless.run && G.endless.run.omens.includes('fog')))) kind = 'fog';
     else if (G.endless) kind = r < 0.35 ? 'rain' : r < 0.5 ? 'fog' : 'clear';
     else if (siegeTonight) kind = r < 0.45 ? 'rain' : r < 0.6 ? 'fog' : 'clear';
     else kind = r < (night ? 0.2 : 0.15) ? 'rain' : r < (night ? 0.33 : 0.24) ? 'fog' : 'clear';

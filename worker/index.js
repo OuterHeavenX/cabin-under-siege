@@ -91,14 +91,18 @@ async function api(req, env, url) {
   if (parts[1] === 'scores') {
     if (req.method === 'GET') {
       const day = /^\d{4}-\d{2}-\d{2}$/.test(url.searchParams.get('day') || '') ? url.searchParams.get('day') : utcDay();
-      const { results } = await db.prepare('SELECT name, waves, kills, platform FROM scores WHERE day = ? ORDER BY waves DESC, kills DESC, created ASC LIMIT 20').bind(day).all();
-      const total = await db.prepare('SELECT COUNT(*) AS n FROM scores WHERE day = ?').bind(day).first();
-      return json({ day, top: results, players: total ? total.n : 0 });
+      // The daily Long Night keeps its own board under a prefixed key.
+      const board = url.searchParams.get('board') === 'night' ? 'night' : 'endless';
+      const key = board === 'night' ? 'N' + day : day;
+      const { results } = await db.prepare('SELECT name, waves, kills, platform FROM scores WHERE day = ? ORDER BY waves DESC, kills DESC, created ASC LIMIT 20').bind(key).all();
+      const total = await db.prepare('SELECT COUNT(*) AS n FROM scores WHERE day = ?').bind(key).first();
+      return json({ day, board, top: results, players: total ? total.n : 0 });
     }
     if (req.method === 'POST') {
       const b = await body(req);
       const day = String(b.day || '');
       if (day !== utcDay() && day !== utcDay(-1)) return json({ error: 'That challenge has closed.' }, 400);
+      const key = b.board === 'night' ? 'N' + day : day;
       const name = clean(b.name, 16) || 'Anonymous';
       const player = clean(b.player, 40);
       const waves = Math.max(0, Math.min(200, Math.floor(Number(b.waves) || 0)));
@@ -107,9 +111,9 @@ async function api(req, env, url) {
       await db.prepare(`INSERT INTO scores (day, name, waves, kills, platform, player, created) VALUES (?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(day, player) DO UPDATE SET name = excluded.name, waves = excluded.waves, kills = excluded.kills, platform = excluded.platform, created = excluded.created
         WHERE excluded.waves > scores.waves OR (excluded.waves = scores.waves AND excluded.kills > scores.kills)`)
-        .bind(day, name, waves, kills, clean(b.platform, 12), player, Date.now()).run();
-      const best = await db.prepare('SELECT waves, kills FROM scores WHERE day = ? AND player = ?').bind(day, player).first();
-      const rank = await db.prepare('SELECT COUNT(*) AS n FROM scores WHERE day = ? AND (waves > ? OR (waves = ? AND kills > ?))').bind(day, best.waves, best.waves, best.kills).first();
+        .bind(key, name, waves, kills, clean(b.platform, 12), player, Date.now()).run();
+      const best = await db.prepare('SELECT waves, kills FROM scores WHERE day = ? AND player = ?').bind(key, player).first();
+      const rank = await db.prepare('SELECT COUNT(*) AS n FROM scores WHERE day = ? AND (waves > ? OR (waves = ? AND kills > ?))').bind(key, best.waves, best.waves, best.kills).first();
       return json({ ok: true, rank: (rank ? rank.n : 0) + 1, best });
     }
   }

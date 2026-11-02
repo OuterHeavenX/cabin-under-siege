@@ -16,6 +16,7 @@ import { WEAPONS, WEAPON_ORDER } from '../data/weapons.js';
 import { tryAllyRevive } from './ally.js';
 import { witnessTakedown } from './enemies.js';
 import { assaultRevive } from './assault.js';
+import { runMods } from './longnight.js';
 import { groundSpeed, addTrack } from './seasons.js';
 
 const SURFACE = { 0: 'grass', 1: 'dirt', 2: 'hard', 3: 'wood', 4: 'wood', 5: 'grass', 6: 'gravel', 7: 'hard', 8: 'dirt', 9: 'hard', 10: 'hard' };
@@ -341,6 +342,7 @@ export function damagePlayer(dmg, fromX, fromY, kind = 'bullet') {
   let amount = dmg;
   if (p.inCover && kind === 'bullet') amount *= 0.65;
   if (inSafeRoom()) amount *= 0.5;
+  amount *= runMods().armor; // The Long Night: Iron Will
   amount = Math.round(amount);
   p.hp -= amount;
   G.events.emit('playerHurt', p.x, p.y, amount);
