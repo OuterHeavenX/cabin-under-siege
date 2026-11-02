@@ -14,7 +14,7 @@ import { addPickup } from './combat.js';
 import { jobWaypoint } from './jobs.js';
 import { scheduleSpot } from './npcs.js';
 import { NPCS } from '../data/npcs.js';
-import { choresStatus, errandWaypoint, errandGiverWaypoint, startErrand, townErrandsDone } from './errands.js';
+import { choresStatus, errandWaypoint, errandGiverWaypoint, startErrand, townErrandsDone, stageLabel } from './errands.js';
 import { startQuest } from './quests.js';
 import { input } from '../input.js';
 import { NG_TWISTS } from './ngplus.js';
@@ -24,6 +24,7 @@ import { startWatch, setWatchStory, scheduleProbe as scheduleWatchProbe, onProbe
 import { addEvidence } from './evidence.js';
 import { answerCall } from './letters.js';
 import { visiting, here } from './chapters.js';
+import { keystoneObjective, keystoneStage, keystoneWaypoint } from './keystone.js';
 import { LIFE_STEPS } from '../data/life.js';
 
 const ME = 'Frank';
@@ -113,6 +114,8 @@ export const STEPS = {
 /** After the story: a gentle nudge toward whatever's left, never a requirement. */
 function postObjective() {
   const L = G.s.life;
+  const ko = keystoneObjective(keystoneStage() === 'case' && G.s.errands.k6_case && G.s.errands.k6_case.state === 'active' ? stageLabel('k6_case') : null);
+  if (ko) return ko;
   if (L.mail.length) return 'Life after the story. There\'s a letter in the mailbox.';
   if (L.guest) return 'Life after the story. You have company on the porch.';
   return 'Life after the story. Work, visit old friends, finish what you started — or just sit on the porch. (Journal → Story)';
@@ -172,6 +175,7 @@ const npcPoint = (id) => {
 export function storyWaypoint() {
   const st = G.s.story;
   if (visiting()) return errandWaypoint();
+  if (st.step === 'ch5_free' && keystoneStage()) { const kw = keystoneWaypoint(errandWaypoint); if (kw) return kw; }
   const cab = G.maps.cabin, town = G.maps.town;
   switch (st.step) {
     case 'arrive': return { map: 'cabin', ...cab.points.cabin_front, label: 'Cabin' };
@@ -718,7 +722,7 @@ export function initStoryEvents() {
     }
   });
   ev.on('siegeWon', (sg) => {
-    if (sg.plan.kind !== 'story') return;
+    if (sg.plan.kind !== 'story' || sg.plan.keystone) return; // Chapter 6 handles its own (keystone.js)
     const f = G.s.story.flags;
     if (G.s.chapter === 5) {
       f.firstSiegeDone = true;

@@ -2,7 +2,7 @@
 import { G, newSave, isNight } from './game/state.js';
 import { TILE } from './config.js';
 import { clamp, dist, fmtClock, escapeHtml } from './util.js';
-import { buildCabinMap, buildTownMap, buildMillbrookMap, buildFarmMap, buildEstateMap, buildShortHillsMap, buildMansionMap, buildNewarkMap } from './world/mapgen.js';
+import { buildCabinMap, buildTownMap, buildMillbrookMap, buildFarmMap, buildEstateMap, buildShortHillsMap, buildMansionMap, buildNewarkMap, buildBroadMap } from './world/mapgen.js';
 import { startPrequel, updatePrequel, prequelObjective } from './game/prequel.js';
 import { startAssault, updateAssault, endAssault } from './game/assault.js';
 import { callAllies } from './game/story.js';
@@ -54,6 +54,7 @@ import { updateAbilities, abilityLabel } from './game/abilities.js';
 import { updateLetters, initLetterEvents } from './game/letters.js';
 import { updateAway, initAwayEvents } from './game/away.js';
 import { updateSeasons } from './game/seasons.js';
+import { updateKeystone, initKeystoneEvents } from './game/keystone.js';
 import { applyProjects, ensureProjectSpots, projectsMorning, PROJECTS, projectName, paidOf } from './game/projects.js';
 import { spawnDog, updateDog, dogMorning } from './game/dog.js';
 import { setWeather } from './game/weather.js';
@@ -107,6 +108,7 @@ const MAP_BUILDERS = {
   shorthills: (h) => buildShortHillsMap(h),
   mansion: () => buildMansionMap(),
   newark: () => buildNewarkMap(),
+  broad: () => buildBroadMap(),
 };
 
 function buildMaps() {
@@ -245,6 +247,7 @@ function update(dt) {
   updateRat(dt);
   if (!G.endless && !G.prequel) { updateLife(dt); updateLetters(dt); }
   updateSeasons(dt);
+  updateKeystone(dt);
   updateJobs(dt);
   if (!G.endless && !G.prequel) { updateStory(dt); checkDiscovery(); }
 
@@ -450,6 +453,7 @@ function initEvents() {
   initLifeEvents();
   initWatchEvents();
   initAwayEvents();
+  initKeystoneEvents();
   initLetterEvents();
   initAchievementEvents();
   initCloudSync();

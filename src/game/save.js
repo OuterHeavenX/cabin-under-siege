@@ -128,7 +128,7 @@ export function migrate(data) {
     else d.inv[k] = Math.min(ITEMS[k].cap, Math.floor(d.inv[k]));
   }
   d.skills = Array.isArray(d.skills) ? [...new Set(d.skills.filter((s) => SKILLS[s]))] : [];
-  const mapsByChapter = { 1: ['cabin', 'town'], 2: ['millbrook'], 3: ['farm'], 4: ['estate'], 5: ['shorthills', 'mansion'] };
+  const mapsByChapter = { 1: ['cabin', 'town'], 2: ['millbrook'], 3: ['farm'], 4: ['estate'], 5: ['shorthills', 'mansion', 'broad'] };
   if (!mapsByChapter[d.chapter]) d.chapter = 1;
   // A visit to an earlier town only makes sense to a town you've already left.
   if (d.visit && !(Number.isInteger(d.visit.ch) && d.visit.ch >= 1 && d.visit.ch < d.chapter && d.visit.ch <= 4)) d.visit = null;

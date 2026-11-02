@@ -102,6 +102,10 @@ export const ITEMS = {
     name: 'Mansion Floor Plan', icon: '🗺', cat: 'Story', cap: 1, sell: 0, story: true,
     desc: 'Carlo Bruno\'s copy of the Vescari mansion plans: the guard posts, the service gate, and Leo\'s study.',
   },
+  keycard: {
+    name: 'Keystone Keycard', icon: '💳', cat: 'Story', cap: 1, sell: 0, story: true,
+    desc: 'Carmine Ventura\'s card for the records room at Keystone Title & Escrow.',
+  },
   study_key: {
     name: 'Brass Key', icon: '🗝', cat: 'Story', cap: 1, sell: 0, story: true,
     desc: 'Dante Ruggiero\'s key to Leo Vescari\'s study.',

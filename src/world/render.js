@@ -16,6 +16,7 @@ import { questProps } from '../game/quests.js';
 import { errandProps } from '../game/errands.js';
 import { ratProps } from '../game/rat.js';
 import { watchProps } from '../game/watch.js';
+import { keystoneProps } from '../game/keystone.js';
 import { homeMapId } from '../game/chapters.js';
 import { ITEMS } from '../data/items.js';
 import { REGROW_DAYS } from '../game/activities.js';
@@ -1284,6 +1285,7 @@ export function render(ctx) {
   for (const pr of m.props) {
     if (pr.kind === 'car' && inView(pr.x, pr.y)) drawCar(ctx, pr.x - 0, pr.y, '#8c2f2f', true);
     if (pr.kind === 'strange_car' && inView(pr.x, pr.y)) drawCar(ctx, pr.x, pr.y, '#16181c', false, true);
+    if (pr.kind === 'parked' && inView(pr.x, pr.y)) drawCar(ctx, pr.x, pr.y, pr.color || '#333', false, false);
   }
   // Job props
   for (const pr of jobProps(m.id)) {
@@ -1315,6 +1317,17 @@ export function render(ctx) {
     } else if (pr.kind === 'quest_repair') {
       ctx.strokeStyle = '#9aa0a6'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(pr.x - 4, pr.y - 30); ctx.lineTo(pr.x + 10, pr.y - 12); ctx.stroke();
       ctx.fillStyle = '#ffd166'; ctx.font = 'bold 14px system-ui'; ctx.textAlign = 'center'; ctx.fillText('⚡', pr.x + 12, pr.y - 30);
+    }
+  }
+
+  // Chapter 6: the list — file boxes stacked in Keystone's records room.
+  for (const pr of keystoneProps(m.id)) {
+    if (!inView(pr.x, pr.y)) continue;
+    for (let k = 0; k < 6; k++) {
+      const bx = pr.x - 26 + (k % 3) * 18, by = pr.y - 8 + Math.floor(k / 3) * 13;
+      ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.fillRect(bx + 2, by + 2, 16, 11);
+      ctx.fillStyle = '#c9b48a'; ctx.fillRect(bx, by, 16, 11);
+      ctx.fillStyle = '#8a7650'; ctx.fillRect(bx + 5, by + 4, 6, 2);
     }
   }
 

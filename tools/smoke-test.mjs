@@ -38,7 +38,7 @@ const errors = [];
 
 function watch(page, label) {
   // The older sections test the classic systems: switch off optional drop-ins and extra conversations there.
-  if (!label.startsWith('life') && !label.startsWith('seasons')) page.addInitScript(() => { window.__cusNoEvents = true; });
+  if (!label.startsWith('life') && !label.startsWith('seasons') && !label.startsWith('keystone')) page.addInitScript(() => { window.__cusNoEvents = true; });
   // Everything written before seasons runs in autumn (the season the game starts in), whatever day it reaches.
   if (!label.startsWith('seasons')) page.addInitScript(() => { window.__cusSeason = 'autumn'; });
   page.on('console', (m) => { if (m.type() === 'error') errors.push(`[${label}] console: ${m.text()}`); });
@@ -2158,6 +2158,84 @@ if (want('seasons')) {
   // Endless runs get a season; the daily challenge's is the same for everyone.
   const en = await C(() => import('./src/game/endless.js').then((E) => { const a = E.dailyChallenge(20000), b = E.dailyChallenge(20000); return ['autumn', 'winter', 'spring', 'summer'][a.seed % 4] === ['autumn', 'winter', 'spring', 'summer'][b.seed % 4]; }));
   check('Seasons: the daily challenge picks the same season for everyone', en);
+  await ctx.close();
+}
+
+/* ================================================================== */
+/* Chapter 6 (v0.13): Keystone — the call, casing Broad Street, the    */
+/* strike on the watch house, the night inside, the list               */
+/* ================================================================== */
+if (want('keystone')) {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const page = await ctx.newPage();
+  watch(page, 'keystone');
+  await page.goto(URL); await page.waitForSelector('#t-new');
+  const C = (fn, a) => ev(page, fn, a);
+  const mod = (path, fn, a) => page.evaluate(([p, f, a]) => import(p).then((m) => (new Function('m', 'a', 'return (' + f + ')(m, a)'))(m, a)), [path, fn.toString(), a]);
+  const waitTransition = async () => { for (let i = 0; i < 40 && await C(() => !!window.__cus.G.transition); i++) await sleep(100); await sleep(200); };
+  await C(() => window.__cus.newGame('normal')); await sleep(500); await skipDialogues(page);
+  await C(() => { const c = window.__cus; const d = {}; for (let i = 1; i < 5; i++) d[i] = true; c.G.s.story.done = d; c.G.s.story.chapterComplete = true; c.G.s.world.siege = null; c.dbg.moveToChapter(5); });
+  await sleep(500); await page.click('[data-go]').catch(() => {}); await sleep(300); await skipDialogues(page);
+  await C(() => { const c = window.__cus; if (c.G.cutscene) c.dbg.skipCutscene(); c.dbg.closeAll(); });
+  await skipDialogues(page);
+  await C(() => { const c = window.__cus, s = c.G.s; s.story.done[5] = true; s.story.step = 'ch5_free'; s.ending = 'justice'; s.life.post = { ending: 'justice', day: s.time.day }; s.world.quietUntilDay = s.time.day + 9999; s.world.siege = null; s.story.flags.firstSiegeDone = true; s.story.flags.blueprintRead = true; s.time.day += 3; s.time.minute = 10 * 60; s.life.eventDay = -1; s.world.lastDayProcessed = s.time.day; c.loadMap('shorthills', c.G.maps.shorthills.points.porch); });
+  let call = '';
+  for (let i = 0; i < 12 && !call; i++) { await sleep(800); const t = await C(() => document.getElementById('dialogue').classList.contains('hidden') ? '' : document.getElementById('dlg-text').textContent); if (/phone rings/.test(t)) call = t; else if (t) await skipDialogues(page); }
+  await skipDialogues(page); await sleep(600);
+  const st1 = await C(() => ({ stage: window.__cus.G.s.keystone && window.__cus.G.s.keystone.stage, errand: (window.__cus.G.s.errands.k6_case || {}).state, obj: document.getElementById('objective').textContent }));
+  check('Keystone: a few days after the ending, Marcus calls — and Chapter 6 opens', st1.stage === 'case' && st1.errand === 'active' && /Keystone/.test(st1.obj), JSON.stringify(st1));
+  const car = await mod('./src/game/keystone.js', (m) => (m.keystoneCar(() => {}) || {}).label);
+  check('Keystone: the car offers the drive to Broad Street', /Broad Street/.test(car || ''), car);
+  await C(() => { const c = window.__cus; c.loadMap('broad', c.G.maps.broad.points.car); }); await sleep(800);
+  await page.screenshot({ path: OUT + 'keystone-broad.png' });
+  check('Keystone: Broad Street, Newark loads — Keystone Title, Club Ventura, the luncheonette, the garage', await C(() => { const m = window.__cus.G.map; return m.id === 'broad' && ['keystone', 'ventura', 'luncheonette', 'garage6'].every((id) => m.buildings.some((b) => b.id === id)); }));
+  const stepVisit = () => mod('./src/game/errands.js', (m) => { const pr = m.errandProps('broad')[0]; if (pr) m.errandPropAction(pr); return !!pr; });
+  await stepVisit(); await sleep(200); await skipDialogues(page);
+  await C(() => { window.__cus.G.s.time.minute = 12 * 60; }); await sleep(1800);
+  check('Keystone: the clerk is at her lunch booth while that part is open', await C(() => window.__cus.G.npcs.some((n) => n.id === 'gloria')));
+  await stepVisit(); await sleep(200); await skipDialogues(page, 0);
+  const st2 = await C(() => window.__cus.G.s.errands.k6_case);
+  check('Keystone: Gloria talks — your choice is remembered for the night', st2.stage === 2 && st2.choice === 'kind', JSON.stringify(st2));
+  await C(() => { window.__cus.G.s.time.minute = 18 * 60; });
+  await stepVisit(); await sleep(300);
+  const tailing = await C(() => !!window.__cus.G.tail && /Carmine/.test(window.__cus.G.tail.name));
+  await C(() => { const c = window.__cus; const T = c.G.tail; c.G.npcs = c.G.npcs.filter((n) => n !== T.n); c.G.tail = null; T.onDone(true); });
+  await sleep(300); await skipDialogues(page);
+  check('Keystone: tailing Carmine Ventura from the office', tailing && await C(() => window.__cus.G.s.errands.k6_case.stage === 3));
+  await stepVisit(); await sleep(300); await skipDialogues(page); await sleep(600); await skipDialogues(page);
+  const st3 = await C(() => { const s = window.__cus.G.s; return { stage: s.keystone.stage, card: s.inv.keycard || 0, siege: !!(s.world.siege && s.world.siege.plan.keystone), errand: s.errands.k6_case.state }; });
+  check('Keystone: the keycard is in Carmine\'s car — and now they\'ll come for the watch house', st3.stage === 'strike' && st3.card === 1 && st3.siege && st3.errand === 'done', JSON.stringify(st3));
+  // The strike on the watch house.
+  await C(() => { const c = window.__cus; c.loadMap('shorthills', c.G.maps.shorthills.points.cabin_in); const sg = c.G.s.world.siege; c.G.s.time.day = sg.day; c.G.s.time.minute = sg.minute - 2; c.G.player.invuln = 99999; });
+  for (let i = 0; i < 100 && !(await C(() => window.__cus.G.siegeActive)); i++) await sleep(100);
+  await sleep(400);
+  for (let i = 0; i < 40; i++) { await C(() => { const c = window.__cus; if (c.G.cutscene) c.dbg.skipCutscene(); if (c.G.siege) c.G.siege.t += 30; }); await sleep(120); }
+  const sonny = await C(() => window.__cus.G.enemies.some((e) => e.name === 'Sonny Ventura'));
+  for (let i = 0; i < 200; i++) { await sleep(150); await C(() => { const c = window.__cus; if (c.G.cutscene) c.dbg.skipCutscene(); if (c.G.siege) c.G.siege.t += 30; for (const e of c.G.enemies) if (!e.dead && !e.gone) c.dbg.damageEnemy(e, 9999, 0, 'bullet'); }); if (!(await C(() => window.__cus.G.siegeActive))) break; }
+  await sleep(2400); await page.locator('#modal-root button', { hasText: 'Continue' }).click().catch(() => {}); await sleep(3800); await skipDialogues(page);
+  check('Keystone: Sonny Ventura leads the strike on the watch house; holding it opens the way to Broad Street', sonny && await C(() => window.__cus.G.s.keystone.stage === 'break'));
+  // The night inside.
+  await C(() => { const c = window.__cus; c.G.s.time.minute = 22 * 60; c.G.player.invuln = 99999; c.loadMap('broad', c.G.maps.broad.points.car); });
+  await sleep(500); await C(() => { if (window.__cus.G.cutscene) window.__cus.dbg.skipCutscene(); }); await sleep(300);
+  const night = await C(() => { const c = window.__cus, m = c.G.map; const dr = (id) => [...m.blockers.values()].find((b) => b.id === id); return { guards: c.G.enemies.filter((e) => e.keystone && !e.dead).length, back: dr('ks_back').rec.locked, front: dr('ks_front_l').rec.locked, rec: dr('records_door').rec.locked, carmine: c.G.npcs.some((n) => n.id === 'carmine') }; });
+  check('Keystone: at night guards walk their posts; Gloria left the back door open; the records room is locked', night.guards === 5 && night.back === false && night.front === true && night.rec === true && night.carmine, JSON.stringify(night));
+  await page.screenshot({ path: OUT + 'keystone-night.png' });
+  const opened = await mod('./src/game/keystone.js', (m) => { const b = [...window.__cus.G.map.blockers.values()].find((x) => x.id === 'records_door'); m.tryKeystoneDoor(b); return b.rec.locked === false && b.rec.open === true; });
+  check('Keystone: Carmine\'s keycard opens the records room', opened);
+  const alarm = await C(() => new Promise((res) => { const c = window.__cus; const g = c.G.enemies.find((e) => e.keystone && !e.dead); g.alerted = true; setTimeout(() => { const N = c.G.ksNight; const a = N.alarm; N.reinfT = 0.01; setTimeout(() => res({ a, n: c.G.enemies.filter((e) => e.keystone && !e.dead).length }), 400); }, 400); }));
+  check('Keystone: if a guard raises the alarm, Club Ventura sends three more', alarm.a && alarm.n === 8, JSON.stringify(alarm));
+  await mod('./src/game/keystone.js', (m) => { const pr = m.keystoneProps('broad')[0]; m.keystonePropAction(pr).action(); });
+  await sleep(300); await skipDialogues(page, 0); await sleep(600);
+  const fin = await C(() => { const s = window.__cus.G.s; return { stage: s.keystone.stage, choice: s.choices.keystone, card: s.inv.keycard || 0, fleeing: window.__cus.G.enemies.filter((e) => e.keystone && !e.dead && !e.retreating).length }; });
+  check('Keystone: in the records room, Carmine and the list — and the choice (handed to Reyes) ends the chapter', fin.stage === 'done' && fin.choice === 'reyes' && fin.card === 0 && fin.fleeing === 0, JSON.stringify(fin));
+  await C(() => { const c = window.__cus, s = c.G.s; c.G.enemies = []; c.G.ksNight = null; s.time.day += 5; s.time.minute = 10 * 60; s.life.eventDay = -1; s.world.lastDayProcessed = s.time.day; c.loadMap('shorthills', c.G.maps.shorthills.points.porch); });
+  let letter = '';
+  for (let i = 0; i < 14 && !(await C(() => window.__cus.G.s.keystone.letter)); i++) { await sleep(800); await skipDialogues(page); await C(() => { window.__cus.G.s.life.eventDay = -1; }); }
+  letter = await C(() => document.getElementById('dlg-text').textContent);
+  await skipDialogues(page);
+  check('Keystone: a week later, a letter about what the list became', await C(() => window.__cus.G.s.keystone.letter === true), letter.slice(0, 80));
+  await C(() => window.__cus.saveGame('t', { force: true })); await C(() => window.__cus.continueGame()); await sleep(800); await skipDialogues(page);
+  check('Keystone: the finished chapter survives a reload', await C(() => window.__cus.G.s.keystone.stage === 'done' && window.__cus.G.s.choices.keystone === 'reyes'));
   await ctx.close();
 }
 

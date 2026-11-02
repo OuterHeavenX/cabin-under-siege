@@ -9,6 +9,7 @@ import { installBoards, installBrace, installShutters, pickUpCover, repairNeed, 
 import { atHome, chapter, LAST_CHAPTER, here } from './chapters.js';
 import { isVisitMap, visitCarOptions, visitOptions } from './visits.js';
 import { watchProps, watchPropAction } from './watch.js';
+import { keystoneProps, keystonePropAction, keystoneCar, tryKeystoneDoor } from './keystone.js';
 import { readMail, unreadMail, pendingCall } from './letters.js';
 import { questProps, questPropAction } from './quests.js';
 import { errandProps, errandPropAction, errandState } from './errands.js';
@@ -53,7 +54,7 @@ function candidates() {
     add(n.x, n.y, n.folk ? 50 : 64, `Talk to ${n.def.name}`, 'TALK', () => interactNpc(n), n.folk ? -1 : 2);
   }
 
-  const props = [...m.props, ...jobProps(m.id), ...questProps(m.id), ...errandProps(m.id), ...projectProps(m.id), ...ratProps(m.id), ...watchProps(m.id)];
+  const props = [...m.props, ...jobProps(m.id), ...questProps(m.id), ...errandProps(m.id), ...projectProps(m.id), ...ratProps(m.id), ...watchProps(m.id), ...keystoneProps(m.id)];
   for (const pr of props) {
     const a = propAction(pr);
     if (a) add(pr.x, pr.y, pr.r, a.label, a.short, a.action, a.prio || 0);
@@ -93,6 +94,8 @@ function propAction(pr) {
   const s = G.s;
   if (pr.rat) return { label: pr.label, short: 'LOOK', action: () => ratPropAction(pr), prio: 3 };
   if (pr.watch) return { label: pr.label, short: 'LOOK', action: () => watchPropAction(pr), prio: 3 };
+  if (pr.keystone) return keystonePropAction(pr);
+  if (pr.kind === 'parked') return null;
   if (pr.errand) return { label: pr.label, short: pr.kind === 'quest_chop' ? 'CHOP' : pr.kind === 'quest_repair' ? 'FIX' : pr.kind === 'quest_find' ? 'LOOK' : 'ACT', action: () => errandPropAction(pr), prio: 3 };
   if (G.prequel && (pr.kind === 'car' || pr.kind === 'prequel')) return prequelProp(pr);
   if (isVisitMap() && ['phone', 'mailbox', 'phonepole'].includes(pr.kind)) {
@@ -159,7 +162,12 @@ function carAction() {
   if (G.s.chapter === 1 && G.map.id === 'cabin' && drive && drive.state === 'active') {
     return { label: 'A fallen pine blocks the driveway — chop it, or walk the east road to town', short: 'CAR', action: () => toast('The pine across the driveway has to go before the car can. (Or walk: the road east leads to Pine Hollow.)', 'warn', 3.5) };
   }
-  if (G.s.chapter === 5) { const mc = mansionCar(); const cw = G.map.id === 'shorthills' ? carProjectOption() : null; return mc.drive ? mc : carMenu([...(cw ? [cw] : []), ...visitOptions()], mc); }
+  if (G.s.chapter === 5) {
+    const kc = keystoneCar((t, md) => travelFn && travelFn(t, md));
+    if (G.map.id === 'broad') return kc || { label: 'Your car', short: 'CAR', action: () => travelFn && travelFn('shorthills', 'car') };
+    const mc = mansionCar(); const cw = G.map.id === 'shorthills' ? carProjectOption() : null;
+    return mc.drive ? mc : carMenu([...(kc ? [kc] : []), ...(cw ? [cw] : []), ...visitOptions()], mc, kc ? 2 : 0);
+  }
   const opts = [];
   if (ch.maps.length > 1) {
     const toWork = G.map.id === ch.homeMap;
@@ -224,6 +232,7 @@ function blockerAction(b) {
 
 function toggleDoor(b) {
   if (b.broken) return;
+  if (b.rec.locked && tryKeystoneDoor(b)) return;
   if (b.rec.locked && b.rec.lockedMsg) { toast(b.rec.lockedMsg, 'info', 4); return; }
   if (b.rec.locked && tryStudyDoor(b)) return;
   if (b.rec.open) {

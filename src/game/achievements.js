@@ -36,6 +36,8 @@ export const ACHIEVEMENTS = [
   { id: 'letters5', icon: '✉', name: 'Three Hops', desc: 'Read 5 letters or calls from old friends.' },
   { id: 'paper_trail', icon: '📎', name: 'The Paper Trail', desc: 'Work out how the family keeps finding you.' },
   { id: 'homemaker', icon: '🏡', name: 'Somewhere With a Porch', desc: 'Make three different places home.' },
+  { id: 'keystone', icon: '🗂', name: 'Keystone', desc: 'Take Carmine Ventura\'s list out of the records room (Chapter 6).' },
+  { id: 'four_seasons', icon: '🍂', name: 'All Four Seasons', desc: 'Live through a whole year: autumn, winter, spring and summer.' },
   // Fighting
   { id: 'kills50', icon: '🎯', name: 'Not Today', desc: 'Defeat 50 attackers.' },
   { id: 'kills300', icon: '🔥', name: 'Army of One', desc: 'Defeat 300 attackers.' },
@@ -144,6 +146,8 @@ function checkSave() {
   if (L.read && Object.keys(L.read).filter((k) => !k.startsWith('c_marcus_intro')).length >= 5) unlock('letters5');
   if (L.deduced === 'title') unlock('paper_trail');
   if (L.ch && Object.values(L.ch).filter((c) => c && c.lifeDone).length >= 3) unlock('homemaker');
+  if (s.keystone && s.keystone.stage === 'done') unlock('keystone');
+  if ((s.time.day || 0) >= 37 && !G.endless && !G.prequel) unlock('four_seasons');
   const o = Object.values((s.home && s.home.openings) || {});
   if (o.length && o.every((x) => (x.kind === 'door' ? x.reinforced : x.boards || x.shutters))) unlock('fortress');
 }

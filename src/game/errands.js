@@ -41,6 +41,7 @@ import { LATER_ARCS } from '../data/storylines.js';
 import { LIFE_ERRANDS } from '../data/life.js';
 import { COUNTER_ERRANDS } from '../data/counter.js';
 import { SIDE_STORIES } from '../data/sidestories.js';
+import { KEYSTONE_ERRAND } from '../data/keystone.js';
 
 const T = (x, y) => ({ x: x * TILE, y: y * TILE });
 const FOOD = new Set(['sandwich', 'stew']);
@@ -520,7 +521,7 @@ export const ERRANDS = {
     reward: { money: 80, xp: 40, jp: ['survivor', 6], perk: 'tracker', flag: 'hendersonRoll' },
   },
 
-};Object.assign(ERRANDS, LATER_ARCS, LIFE_ERRANDS, Object.fromEntries(Object.entries(COUNTER_ERRANDS).filter(([, e]) => !e.help)), SIDE_STORIES);
+};Object.assign(ERRANDS, LATER_ARCS, LIFE_ERRANDS, Object.fromEntries(Object.entries(COUNTER_ERRANDS).filter(([, e]) => !e.help)), SIDE_STORIES, { k6_case: KEYSTONE_ERRAND });
 // Side stories are one-part arcs: offered by their giver like a storyline.
 for (const [id, e] of Object.entries(SIDE_STORIES)) { e.arc = e.arc || id; e.part = e.part || 1; }
 

@@ -1270,3 +1270,75 @@ export function buildNewarkMap() {
   m.lights.push({ x: 52 * TILE, y: 38 * TILE, r: 110 });
   return m;
 }
+
+/* ------------------------------------------------------------------ */
+/* Chapter 6: Broad Street, Newark — Keystone Title & Escrow           */
+/* ------------------------------------------------------------------ */
+export function buildBroadMap() {
+  const W = 64, H = 44;
+  const m = new GameMap('broad', W, H, 'Broad Street, Newark');
+  m.stone = new Set();
+  m.fillGround(0, 0, W, H, GR.SIDEWALK);
+  // Broad Street runs east-west; Halsey Street north-south on the east; an alley on the west.
+  m.fillGround(0, 18, W, 3, GR.ROAD);
+  m.fillGround(60, 0, 3, H, GR.ROAD);
+  m.fillGround(2, 0, 3, 18, GR.DIRT); // the alley behind Keystone
+
+  // Keystone Title & Escrow: lobby on the street, offices and the records room upstairs-in-spirit at the back.
+  building(m, { id: 'keystone', name: 'Keystone Title & Escrow', x: 8, y: 4, w: 24, h: 12, roof: '#2c3038', floor: GR.TILEFLOOR });
+  for (let cx = 9; cx <= 30; cx++) if (cx !== 14 && cx !== 26) m.setSolid(cx, 10, SO.WALL);
+  for (let cy = 5; cy <= 9; cy++) m.setSolid(21, cy, SO.WALL);
+  addDoor(m, 'ks_front_l', 19, 15, npcDoorRec(), 'Keystone — Front Doors');
+  addDoor(m, 'ks_front_r', 20, 15, npcDoorRec(), 'Keystone — Front Doors');
+  addDoor(m, 'ks_back', 8, 12, npcDoorRec(), 'Keystone — Back Door', true);
+  addDoor(m, 'records_door', 26, 10, { kind: 'door', hp: 140, reinforced: true, open: false, npc: true, locked: true }, 'Records Room');
+  for (const cx of [11, 15, 24, 28]) addWindow(m, 'ksw' + cx, cx, 15, npcWinRec(), 'Window');
+  // furnishings: lobby counter, Carmine's office, the records shelves
+  m.fillSolid(16, 12, 8, 1, SO.COUNTER); m.decor.push({ kind: 'counter', x: 16, y: 12, w: 8, h: 1 });
+  m.fillSolid(10, 6, 4, 2, SO.FURN); m.decor.push({ kind: 'table', x: 10, y: 6, w: 4, h: 2 });
+  m.fillSolid(9, 5, 1, 4, SO.FURN); m.decor.push({ kind: 'shelf', x: 9, y: 5, w: 1, h: 4 });
+  m.decor.push({ kind: 'rug', x: 15, y: 6, w: 4, h: 3 });
+  for (const [cx, cy, h] of [[23, 5, 3], [25, 5, 3], [27, 5, 2], [30, 5, 4]]) { m.fillSolid(cx, cy, 1, h, SO.FURN); m.decor.push({ kind: 'shelf', x: cx, y: cy, w: 1, h }); }
+  m.fillSolid(10, 12, 2, 2, SO.FURN); m.decor.push({ kind: 'table', x: 10, y: 12, w: 2, h: 2 });
+
+  // Club Ventura, Carmine's other office.
+  building(m, { id: 'ventura', name: 'Club Ventura', x: 36, y: 4, w: 16, h: 11, roof: '#3a1420', floor: GR.TILEFLOOR });
+  addDoor(m, 'club_door', 43, 14, { ...npcDoorRec(), open: true }, 'Club Ventura');
+  m.fillSolid(38, 6, 6, 1, SO.COUNTER); m.decor.push({ kind: 'counter', x: 38, y: 6, w: 6, h: 1 });
+  m.fillSolid(46, 9, 3, 2, SO.FURN); m.decor.push({ kind: 'table', x: 46, y: 9, w: 3, h: 2 });
+
+  // South side: the Broad Street Luncheonette, a pawn shop, and the parking garage.
+  building(m, { id: 'luncheonette', name: 'Broad Street Luncheonette', x: 6, y: 23, w: 14, h: 9, roof: '#5a2a24', floor: GR.TILEFLOOR });
+  addDoor(m, 'lunch_door', 12, 23, { ...npcDoorRec(), open: true }, 'Luncheonette');
+  m.fillSolid(8, 25, 9, 1, SO.COUNTER); m.decor.push({ kind: 'counter', x: 8, y: 25, w: 9, h: 1 });
+  m.fillSolid(8, 28, 2, 2, SO.FURN); m.decor.push({ kind: 'table', x: 8, y: 28, w: 2, h: 2 });
+  m.fillSolid(14, 28, 2, 2, SO.FURN); m.decor.push({ kind: 'table', x: 14, y: 28, w: 2, h: 2 });
+  building(m, { id: 'pawn', name: 'Pawn & Loan', x: 22, y: 23, w: 10, h: 8, roof: '#3a3630' });
+  building(m, { id: 'garage6', name: 'Halsey Street Garage', x: 36, y: 24, w: 22, h: 16, roof: '#40444a', floor: GR.ROAD });
+  for (let cx = 44; cx <= 47; cx++) m.setSolid(cx, 24, SO.NONE); // the ramp in
+  for (let cy = 30; cy <= 33; cy++) m.setSolid(57, cy, SO.NONE); // and out onto Halsey
+  const parked = [[39, 27, '#2a2a30'], [39, 31, '#7a1c1c'], [39, 35, '#d8d4c8'], [51, 27, '#1c2a44'], [51, 35, '#3a3a2a'], [45, 36, '#101012']];
+  for (const [cx, cy, color] of parked) { m.fillSolid(cx, cy, 3, 2, SO.CAR); m.props.push({ id: `parked_${cx}_${cy}`, kind: 'parked', color, x: (cx + 1.5) * TILE, y: (cy + 1) * TILE, r: 0, label: '' }); }
+
+  // Frank's car at the curb by the alley.
+  m.fillSolid(1, 21, 3, 2, SO.CAR);
+  addProp(m, { id: 'car', kind: 'car', x: 2.5 * TILE, y: 21.6 * TILE, label: 'Your Car', r: 64 });
+  // A payphone and a newsstand.
+  m.fillSolid(33, 16, 1, 1, SO.FURN); m.decor.push({ kind: 'phone', x: 33, y: 16, w: 1, h: 1 });
+  m.fillSolid(52, 16, 2, 1, SO.FURN); m.decor.push({ kind: 'stall', x: 52, y: 16, w: 2, h: 1 });
+
+  m.spawns = { east: { ...P(63.5, 19.5), label: 'Broad Street' }, west: { ...P(0.5, 19.5), label: 'Broad Street' }, alley: { ...P(3.5, 0.5), label: 'the alley' } };
+  m.points = {
+    start: P(4.5, 21.4), arrive: P(4.5, 21.4), car: P(4.5, 21.4), recovery: P(4.5, 21.4),
+    across: P(20, 22), gloria: P(15.5, 29.5), carmine_office: P(12, 9), carmine_club: P(44, 16.5),
+    carmine_car: P(52.5, 29.5), records: P(28.5, 7.5), list: P(29, 6.5),
+    k_g1: P(20, 13.5), k_g2: P(12, 13.5), k_g3: P(16, 8.5), k_g4: P(24, 13), k_g5: P(3.5, 2.5), k_g6: P(3.5, 9), k_g7: P(28, 8.5),
+    back_alley: P(5, 12.5),
+  };
+  m.discover = [{ id: 'keystone', name: 'Keystone Title & Escrow', ...P(20, 10), r: 220 }];
+  m.lights = [];
+  for (let cx = 4; cx < W; cx += 8) { m.lights.push({ x: cx * TILE, y: 17.2 * TILE, r: 130, street: true }); m.lights.push({ x: (cx + 4) * TILE, y: 21.8 * TILE, r: 120, street: true }); }
+  for (const b of m.buildings) if (b.id !== 'pawn') m.lights.push({ x: (b.x + b.w / 2) * TILE, y: (b.y + b.h / 2) * TILE, r: Math.max(b.w, b.h) * 13, building: b.id });
+  m.lights.push({ x: 44 * TILE, y: 15.5 * TILE, r: 90 }); // the club's neon
+  return m;
+}
