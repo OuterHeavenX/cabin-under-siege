@@ -154,7 +154,7 @@ export function drawScreenAtmosphere(ctx, w, h, dk, dt) {
   if (fog > 0.02) { ctx.fillStyle = `rgba(150,155,160,${(dk > 0.5 ? 0.08 : 0.16) * fog})`; ctx.fillRect(0, 0, w, h); }
   // Attacks run red.
   if (siege) {
-    const pulse = 0.5 + 0.5 * Math.sin(G.time * 1.6);
+    const pulse = G.settings.reduceFlashes ? 0.5 : 0.5 + 0.5 * Math.sin(G.time * 1.6);
     // A tense red edge rather than a red wash, so attackers stay easy to see.
     ctx.fillStyle = `rgba(120,0,0,${0.025 + pulse * 0.02})`; ctx.fillRect(0, 0, w, h);
     const vg = ctx.createRadialGradient(w / 2, h / 2, Math.min(w, h) * 0.42, w / 2, h / 2, Math.max(w, h) * 0.72);

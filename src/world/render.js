@@ -1942,6 +1942,8 @@ function drawOverlays(ctx, dk, inView) {
     const pd = dist(e.x, e.y, p.x, p.y);
     const visible = dk < 0.4 || pd < d.seeRadius || e.spotted > 0 || inFloodlight(e.x, e.y) || litByStatic(e.x, e.y);
     if (!visible) continue;
+    // Settings → Accessibility → High-contrast attackers: a thick yellow-and-black ring above the darkness.
+    if (G.settings.highContrast) { ctx.strokeStyle = '#111'; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(e.x, e.y, e.radius + 7, 0, Math.PI * 2); ctx.stroke(); ctx.strokeStyle = '#ffe14a'; ctx.lineWidth = 3; ctx.stroke(); }
     if (dk >= 0.4) {
       // Re-draw a crisp outline above the darkness so attackers stay readable.
       ctx.strokeStyle = e.retreating ? '#f0c040' : '#ff3b30';

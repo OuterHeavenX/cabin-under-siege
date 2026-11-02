@@ -1,6 +1,6 @@
 // Global tuning constants.
 
-export const GAME_VERSION = '0.14.0';
+export const GAME_VERSION = '0.15.0';
 export const TILE = 32;
 export const SAVE_VERSION = 3;
 export const SAVE_KEY = 'cabinUnderSiege.save';
@@ -36,6 +36,11 @@ export const DEFAULT_SETTINGS = {
   touchOpacity: 0.85, // on-screen controls, 0.3..1
   touchSize: 'normal', // 'small' | 'normal' | 'large'
   cloudServer: '', // desktop app: override CLOUD_SERVER
+  // Accessibility
+  captions: false, // sound captions: "Gunshot (east)"
+  reduceFlashes: false, // softer muzzle and hit flashes, no red pulse in attacks
+  gameSpeed: 'normal', // 'normal' | 'slow' | 'slower'
+  highContrast: false, // bright outlines on attackers
 };
 
 /** Being away from home (return visits). All the "no free hiding" numbers live here. */

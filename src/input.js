@@ -28,7 +28,7 @@ export function setPadMode(on) {
 const KEYMAP = {
   KeyE: 'interact', Enter: 'interact', KeyR: 'reload', KeyQ: 'use', KeyF: 'melee', Space: 'dodge',
   Digit1: 'weapon1', Digit2: 'weapon2', Digit3: 'weapon3', Tab: 'swap',
-  Escape: 'pause', KeyP: 'pause', KeyI: 'inv', KeyC: 'char', KeyK: 'skills', KeyM: 'map', KeyJ: 'journal', KeyH: 'help', KeyV: 'home', KeyG: 'ability',
+  Escape: 'pause', KeyP: 'pause', KeyI: 'inv', KeyC: 'char', KeyK: 'skills', KeyM: 'map', KeyJ: 'journal', KeyH: 'help', KeyV: 'home', KeyG: 'ability', KeyO: 'orders',
 };
 
 export function press(action) { input.pressed.add(action); }
@@ -264,6 +264,7 @@ function initTouchControls() {
   bind('btn-dodge', 'dodge');
   bind('btn-swap', 'swap');
   bind('btn-skill', 'ability');
+  bind('btn-order', 'orders');
 }
 
 /** Called when the game pauses (tab hidden, menu) so stuck inputs don't linger. */

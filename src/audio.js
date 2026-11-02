@@ -335,7 +335,12 @@ function gunshot(out, t, kind) {
 /* Sound effects                                                       */
 /* ------------------------------------------------------------------ */
 /** Play a named effect. `opts.x/y` place it in the world; `opts.vol` scales it. */
+/** Sound captions (accessibility): the HUD registers a listener for what plays and where. */
+let captionHook = null;
+export function setCaptionHook(fn) { captionHook = fn; }
+
 export function sfx(name, opts = {}) {
+  if (captionHook) captionHook(name, opts); // captions work with the sound off, too
   if (!ctx || (ctx.state !== 'running' && !offline)) return;
   const t = ctx.currentTime + 0.005;
   if (lastPlayed[name] && t - lastPlayed[name] < 0.025) return;

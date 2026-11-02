@@ -29,6 +29,7 @@ import { townLifeProp } from './townlife.js';
 import { ratProps, ratPropAction } from './rat.js';
 import { projectProps, projectAction, carProjectOption } from './projects.js';
 import { openPoker } from '../ui/poker.js';
+import { orderOptions } from './orders.js';
 import { eventOn } from './calendar.js';
 
 let travelFn = null;
@@ -51,8 +52,10 @@ function candidates() {
 
   for (const n of G.npcs) {
     if (!n.present || n.scripted) continue;
+    if (n.id === 'ruth' && n.ally && G.siegeActive) { if (!n.downed) add(n.x, n.y, 64, 'Give Ruth an order', 'ORDER', () => openActions('Orders', orderOptions()), 2); continue; }
     add(n.x, n.y, n.folk ? 50 : 64, `Talk to ${n.def.name}`, 'TALK', () => interactNpc(n), n.folk ? -1 : 2);
   }
+  if (G.dog && !G.dog.hurt && G.siegeActive) add(G.dog.x, G.dog.y, 54, `Give ${G.s.companion.dog.name || 'Duke'} an order`, 'ORDER', () => openActions('Orders', orderOptions()), 1);
 
   const props = [...m.props, ...jobProps(m.id), ...questProps(m.id), ...errandProps(m.id), ...projectProps(m.id), ...ratProps(m.id), ...watchProps(m.id), ...keystoneProps(m.id)];
   for (const pr of props) {

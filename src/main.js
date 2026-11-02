@@ -20,7 +20,7 @@ import { initFxEvents, updateFx } from './world/fx.js';
 import { initAudio, setVolumes, updateAudio, setMusic, setAmbient, suspendAudio, resumeAudio, sfx, setListener, setFireLevel, audioDebug, renderOffline, musicBar, birdCall } from './audio.js';
 import { initHud, updateHud, toast, banner } from './ui/hud.js';
 import { initDialogue, updateDialogue, playDialogue } from './ui/dialogue.js';
-import { initReliableTaps, openMenu, closeModal, topModal, setMenuHooks, openHelp, confirmBox, pickImport, modalOpen, closeAllModals, openModal } from './ui/menus.js';
+import { initReliableTaps, openMenu, closeModal, topModal, setMenuHooks, openHelp, confirmBox, pickImport, modalOpen, closeAllModals, openModal, openActions } from './ui/menus.js';
 import { createPlayer, updatePlayer, inCombat } from './game/player.js';
 import { updateBullets, updateEffects } from './game/combat.js';
 import { updateEnemies, initEnemyEvents } from './game/enemies.js';
@@ -66,6 +66,7 @@ import { lowQuality } from './game/difficulty.js';
 import { startEndless, updateEndless, unlockEndlessFor, setRunHooks } from './game/endless.js';
 import { startSiege, makeRaidPlan, scheduleSiege, addSign, storyPlan } from './game/siege.js';
 import { buySkill } from './game/progression.js';
+import { canOrder, orderOptions } from './game/orders.js';
 import { damagePlayer } from './game/player.js';
 
 /* ---------------- tiny event bus ---------------- */
@@ -217,6 +218,9 @@ function updateMood(force) {
 }
 
 /* ---------------- game update ---------------- */
+/** Settings → Accessibility → Game speed: everything runs a little slower. */
+const gameSpeed = () => ({ slow: 0.8, slower: 0.65 }[G.settings.gameSpeed] || 1);
+
 function update(dt) {
   if (G.endless) updateEndless(dt);
   else if (G.prequel) updatePrequel(dt);
@@ -228,6 +232,7 @@ function update(dt) {
 
   G.interactTarget = findTarget();
   if (consume('interact') && !G.repairHold) doInteract(G.interactTarget);
+  if (consume('orders') && canOrder()) openActions('Orders', orderOptions());
   updateRepair(dt);
 
   updateEnemies(dt);
@@ -341,7 +346,7 @@ function computeHudInfo(dt) {
   hudInfo = {
     maxHp: d.maxHp, maxStamina: d.maxStamina, reloadTime: reloadTime(G.player.weapon), magSize: magSize(G.player.weapon), weapon: WEAPONS[G.player.weapon], weaponCount: WEAPON_ORDER.filter(ownsWeapon).length, objective: G.prequel ? prequelObjective() : objectiveText(), jobLine, danger,
     quickLabel: q ? `${ITEMS[q].icon}×${count(q)}` : 'USE', night: isNight(), combat: inCombat(), target: null,
-    ability: G.prequel ? null : abilityLabel(), prepared: d.prepared,
+    ability: G.prequel ? null : abilityLabel(), prepared: d.prepared, canOrder: canOrder(),
   };
 }
 
@@ -379,7 +384,7 @@ function frame(ts) {
       handleGlobalKeys();
       if (G.cutscene) updateCutscene(dt);
       if (G.transition) updateTransition(dt);
-      else if (!G.paused && !G.modal) update(dt * (G.cutscene ? 1 : updateFx(dt)));
+      else if (!G.paused && !G.modal) update(dt * (G.cutscene ? 1 : updateFx(dt)) * gameSpeed());
       if (G.modal === 'dialogue') updateDialogue(dt);
       if (G.player) {
         updateEye();

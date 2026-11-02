@@ -129,6 +129,11 @@ body.touch .prompt { bottom: auto; top: calc(48% + 26px); font-size: 12px; paddi
 #btn-swap { right: calc(14px + var(--sar)); bottom: calc(226px + var(--sab)); font-size: 9px; background: rgba(60,50,20,0.6); border-color: #e0c060; }
 #btn-skill { right: calc(84px + var(--sar)); bottom: calc(226px + var(--sab)); font-size: 9px; background: rgba(70,40,110,0.6); border-color: #b9a4e0; }
 #btn-skill.cooling { opacity: 0.55; }
+#btn-order { right: calc(154px + var(--sar)); bottom: calc(226px + var(--sab)); font-size: 9px; background: rgba(30,70,60,0.6); border-color: #8fd0b8; }
+#captions { position: absolute; left: 50%; bottom: calc(150px + var(--sab)); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 4px; pointer-events: none; z-index: 6; }
+#captions .cap { background: rgba(0,0,0,0.72); color: #f2ead8; font-size: 14px; padding: 3px 10px; border-radius: 4px; transition: opacity .4s; }
+#captions .cap.out { opacity: 0; }
+body.large-text #captions .cap { font-size: 18px; }
 .tbtn.dim { opacity: 0.45; }
 
 /* Short landscape phones: shrink a little so everything fits */
@@ -143,6 +148,7 @@ body.touch .prompt { bottom: auto; top: calc(48% + 26px); font-size: 12px; paddi
   #btn-use { right: calc(228px + var(--sar)); bottom: calc(80px + var(--sab)); }
   #btn-swap { right: calc(14px + var(--sar)); bottom: calc(200px + var(--sab)); }
   #btn-skill { right: calc(76px + var(--sar)); bottom: calc(200px + var(--sab)); }
+  #btn-order { right: calc(138px + var(--sar)); bottom: calc(200px + var(--sab)); }
   .hud-tc { width: min(40vw, 380px); }
   .objective { font-size: 11px; padding: 3px 8px; }
   #danger { top: calc(70px + var(--sat)); font-size: 11px; }
@@ -160,6 +166,7 @@ body.portrait #btn-dodge { right: calc(10px + var(--sar)); bottom: calc(194px + 
 body.portrait #btn-use { right: calc(68px + var(--sar)); bottom: calc(222px + var(--sab)); }
 body.portrait #btn-swap { right: calc(10px + var(--sar)); bottom: calc(256px + var(--sab)); }
 body.portrait #btn-skill { right: calc(68px + var(--sar)); bottom: calc(282px + var(--sab)); }
+body.portrait #btn-order { right: calc(126px + var(--sar)); bottom: calc(282px + var(--sab)); }
 body.portrait #joy-zone { width: 50%; height: 50%; }
 body.portrait .hud-tl { width: 40vw; }
 body.portrait .hud-tc { top: calc(60px + var(--sat)); width: 92vw; }

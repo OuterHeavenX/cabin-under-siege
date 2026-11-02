@@ -76,7 +76,7 @@ export function drawScreenFlash(ctx) {
   const f = G.fx;
   if (!f || f.flash <= 0) return;
   const { w, h } = G.view;
-  ctx.fillStyle = `rgba(${f.flashColor},${Math.min(0.75, f.flash)})`;
+  ctx.fillStyle = `rgba(${f.flashColor},${Math.min(0.75, f.flash) * (G.settings.reduceFlashes ? 0.25 : 1)})`;
   ctx.fillRect(0, 0, w, h);
 }
 

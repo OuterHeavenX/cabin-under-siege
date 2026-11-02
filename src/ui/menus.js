@@ -604,6 +604,11 @@ function settingsTab() {
     <label>Frame rate ${sel('fpsCap', [['auto', 'Smooth (60 fps)'], ['30', desktopApp ? 'Battery saver (30 fps)' : 'Battery saver (30 fps)']])}</label>
     <label>${chk('rumble')} Controller rumble</label>
     <label>Graphics ${sel('quality', [['auto', `Automatic${G.autoLow ? ' (low)' : ''}`], ['high', 'High'], ['low', desktopApp ? 'Low (saves battery)' : 'Low (older phones)']])}</label>
+    <h3 class="set-head">Accessibility</h3>
+    <label>${chk('captions')} Sound captions (what you hear, and from which way)</label>
+    <label>${chk('reduceFlashes')} Reduce flashes (softer muzzle and hit flashes, no red pulse in attacks)</label>
+    <label>${chk('highContrast')} High-contrast attackers (bright outline)</label>
+    <label>Game speed ${sel('gameSpeed', [['normal', 'Normal'], ['slow', 'Slower (80%)'], ['slower', 'Slowest (65%)']])}</label>
     ${G.s ? `<label>Difficulty <select data-diff>${Object.entries(DIFFICULTY).map(([k, d]) => `<option value="${k}" ${(G.s.difficulty || 'normal') === k ? 'selected' : ''}>${d.name}</option>`).join('')}</select></label>` : ''}
   </div>
   <h3>Cloud save</h3>
@@ -749,14 +754,14 @@ export function openHelp() {
         <li><kbd>R</kbd> Reload · <kbd>E</kbd> Interact / talk / open doors</li>
         <li><kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd>, <kbd>Tab</kbd> or <kbd>Mouse wheel</kbd> Switch weapon</li>
         <li><kbd>F</kbd> or <kbd>Right click</kbd> Melee shove</li>
-        <li><kbd>Space</kbd> Dodge roll · <kbd>Q</kbd> Use quick item · <kbd>G</kbd> Ability (Tier-2 skills)</li>
+        <li><kbd>Space</kbd> Dodge roll · <kbd>Q</kbd> Use quick item · <kbd>G</kbd> Ability (Tier-2 skills) · <kbd>O</kbd> Orders for Ruth and Duke (during an attack)</li>
         <li><kbd>Esc</kbd>/<kbd>P</kbd> Pause menu · <kbd>I</kbd> Items · <kbd>C</kbd> Character · <kbd>K</kbd> Skills · <kbd>V</kbd> Home · <kbd>M</kbd> Map · <kbd>J</kbd> Journal · <kbd>H</kbd> Help</li>
       </ul></div>
       <div><h3>Controller / Steam Deck</h3><ul>
         <li><kbd>L stick</kbd> Move (full tilt or <kbd>LT</kbd> / <kbd>L3</kbd> sprints) · <kbd>R stick</kbd> Aim</li>
         <li><kbd>RT</kbd> Fire · <kbd>X</kbd> Reload · <kbd>Y</kbd> Switch weapon</li>
         <li><kbd>A</kbd> Interact / talk / continue · <kbd>B</kbd> Dodge roll</li>
-        <li><kbd>RB</kbd> Melee shove · <kbd>LB</kbd> Use quick item · <kbd>R3</kbd> (click the right stick) Ability</li>
+        <li><kbd>RB</kbd> Melee shove · <kbd>LB</kbd> Use quick item · <kbd>R3</kbd> (click the right stick) Ability · walk up to Ruth or Duke in an attack and press <kbd>A</kbd> for orders</li>
         <li>Left stick or D-pad: move · <kbd>☰ Menu</kbd> Pause (Map, Items, Home, Character are tabs there — <kbd>LB</kbd>/<kbd>RB</kbd>) · <kbd>⧉ View</kbd> Journal</li>
         <li>In menus: D-pad / stick to move, <kbd>A</kbd> select, <kbd>B</kbd> back, <kbd>LB</kbd>/<kbd>RB</kbd> tabs, <kbd>R stick</kbd> scroll</li>
       </ul></div>
@@ -765,7 +770,7 @@ export function openHelp() {
         <li>Right stick: aim — push it far to fire</li>
         <li><b>FIRE</b>: shoots where you aim (aim assist picks a target)</li>
         <li><b>ACT</b>: talk, open doors, chop, repair — label shows the action</li>
-        <li><b>RELOAD</b>, <b>MELEE</b>, <b>DODGE</b>, <b>USE</b> (quick item), <b>SWAP</b> (next weapon), and a purple ability button once you learn a Tier-2 ability</li>
+        <li><b>RELOAD</b>, <b>MELEE</b>, <b>DODGE</b>, <b>USE</b> (quick item), <b>SWAP</b> (next weapon), a purple ability button once you learn a Tier-2 ability, and a green <b>ORDERS</b> button during attacks when Ruth or Duke is fighting beside you</li>
         <li>☰ top-right: pause menu</li>
       </ul></div>`}
     </div>
@@ -1076,7 +1081,8 @@ export function showRunResult(res) {
       <div class="row-btns"><button class="btn big primary" data-again>Another night</button><button class="btn big" data-title>Title screen</button></div>`, { closable: false, cls: 'small' + (won ? '' : ' defeat') });
     el.querySelector('[data-again]').addEventListener('click', () => { closeModal(); G.transition = null; hooks.openLongNight && hooks.openLongNight(); });
     el.querySelector('[data-title]').addEventListener('click', () => { closeModal(); G.transition = null; hooks.quitToTitle && hooks.quitToTitle(); });
-    if (res.daily && cloudAvailable()) {
+    if (res.daily && G.settings.gameSpeed && G.settings.gameSpeed !== 'normal') el.querySelector('[data-board]').innerHTML = '<span class="muted small">Played at a slower game speed — not posted to the leaderboard.</span>';
+    else if (res.daily && cloudAvailable()) {
       const box = el.querySelector('[data-board]');
       getDailyScores(res.daily.day, 'night').then((r) => {
         if (!r || r.board !== 'night') { box.innerHTML = '<span class="muted small">This cloud server doesn\'t have a Long Night board yet.</span>'; return null; }
@@ -1097,7 +1103,8 @@ export function showEndlessResult(res) {
       <div class="row-btns"><button class="btn big primary" data-again>Try again</button><button class="btn big" data-title>Title screen</button></div>`, { closable: false, cls: 'small defeat' });
     el.querySelector('[data-again]').addEventListener('click', () => { closeModal(); G.transition = null; hooks.restartEndless && hooks.restartEndless(res.site.id, { mod: res.mod, daily: res.daily }); });
     el.querySelector('[data-title]').addEventListener('click', () => { closeModal(); G.transition = null; hooks.quitToTitle && hooks.quitToTitle(); });
-    if (res.daily) {
+    if (res.daily && G.settings.gameSpeed && G.settings.gameSpeed !== 'normal') el.querySelector('[data-board]').innerHTML = '<span class="muted small">Played at a slower game speed — not posted to the leaderboard.</span>';
+    else if (res.daily) {
       const box = el.querySelector('[data-board]');
       postDailyScore(res.daily.day, res.survived, res.kills)
         .then((p) => { G.events.emit('dailyPosted', p.rank); return getDailyScores(res.daily.day).then((r) => { box.innerHTML = `<p class="small"><b>You're #${p.rank} today</b> (your best: ${p.best.waves} waves · ${p.best.kills})</p>${boardHtml(r, 10, playerName())}`; }); })

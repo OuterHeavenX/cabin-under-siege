@@ -10,6 +10,7 @@ import { spawnBullet, spawnParticles, addFloater } from './combat.js';
 import { derived } from './progression.js';
 import { sfx } from '../audio.js';
 import { banner, toast } from '../ui/hud.js';
+import { ruthOrder, backPost, resetOrders } from './orders.js';
 import { isNight } from './state.js';
 
 export const ALLY_MAX_HP = 140;
@@ -39,6 +40,7 @@ export function allyStartSiege() {
 }
 
 export function allyEndSiege() {
+  resetOrders();
   const r = allyEntity();
   if (r) { r.ally = false; r.aimT = 0; if (r.downed) toast('Ruth is hurt, but she\'ll be all right by morning.', 'info', 3.5); r.downed = false; r.hp = ALLY_MAX_HP; r.path = null; }
 }
@@ -78,6 +80,9 @@ export function allyBulletCheck(b) {
 function allyPost() {
   const m = G.map;
   const hi = m.homeInfo;
+  const o = ruthOrder();
+  if (o === 'follow' && G.player) return { x: G.player.x - Math.cos(G.player.angle) * 30, y: G.player.y - Math.sin(G.player.angle) * 30 };
+  if (o === 'back') return backPost(m);
   return hi && hi.allyPost ? hi.allyPost : null;
 }
 

@@ -2326,6 +2326,55 @@ if (want('longnight')) {
   await ctx.close();
 }
 
+/* ================================================================== */
+/* v0.15: orders for Ruth and Duke; accessibility options              */
+/* ================================================================== */
+if (want('access')) {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const page = await ctx.newPage();
+  watch(page, 'access');
+  await page.goto(URL); await page.waitForSelector('#t-new');
+  const C = (fn, a) => ev(page, fn, a);
+  const mod = (path, fn, a) => page.evaluate(([p, f, a]) => import(p).then((m) => (new Function('m', 'a', 'return (' + f + ')(m, a)'))(m, a)), [path, fn.toString(), a]);
+  await C(() => window.__cus.newGame('normal')); await sleep(500); await skipDialogues(page);
+  await C(() => { const c = window.__cus, s = c.G.s; c.dbg.closeAll(); s.rel.ruth = 60; s.story.flags.firstSiegeDone = true; s.companion.dog = { owned: true, name: 'Duke', hurtDay: -1 }; s.time.minute = 21 * 60; c.loadMap('cabin', c.G.maps.cabin.points.porch); });
+  await sleep(400);
+  await C(() => { const c = window.__cus; c.G.player.invuln = 99999; c.dbg.startSiege({ plan: { kind: 'raid', hpMult: 1, waves: [{ dir: Object.keys(c.G.map.spawns)[0], types: ['scout'], delay: 999 }] } }); });
+  await sleep(600);
+  const can = await C(() => import('./src/game/orders.js').then((o) => ({ can: o.canOrder(), opts: o.orderOptions().map((x) => x.label) })));
+  check('Orders: in an attack, Ruth and Duke both take orders', can.can && can.opts.some((l) => /Ruth: Cover the back door/.test(l)) && can.opts.some((l) => /Duke: Hold the porch/.test(l)), JSON.stringify(can));
+  await page.keyboard.press('KeyO'); await sleep(300);
+  const om = await C(() => ({ m: window.__cus.G.modal, t: (document.querySelector('.modal-body') || {}).innerText || '' }));
+  check('Orders: O opens the orders menu (and pauses)', om.m && /Ruth: Stay with me/.test(om.t), JSON.stringify(om).slice(0, 120));
+  await C(() => window.__cus.dbg.closeAll());
+  const follow = await C(() => import('./src/game/orders.js').then((o) => new Promise((res) => { const c = window.__cus, p = c.G.player, r = c.G.npcs.find((n) => n.id === 'ruth'); const d0 = Math.hypot(r.x - p.x, r.y - p.y); o.giveOrder('ruth', 'follow'); setTimeout(() => res({ d0: Math.round(d0), d1: Math.round(Math.hypot(r.x - p.x, r.y - p.y)), ord: o.ruthOrder() }), 9000); })));
+  check('Orders: "Stay with me" brings Ruth to your side', follow.ord === 'follow' && follow.d1 < 90, JSON.stringify(follow));
+  const yard = await C(() => import('./src/game/orders.js').then((o) => new Promise((res) => { const c = window.__cus, dg = c.G.dog, pc = c.G.map.homeInfo.porch; c.G.player.x += 400; o.giveOrder('duke', 'yard'); setTimeout(() => res({ d: Math.round(Math.hypot(dg.x - pc.x, dg.y - pc.y)) }), 3500); })));
+  check('Orders: "Hold the porch" keeps Duke at the porch, even when you walk off', yard.d < 60, JSON.stringify(yard));
+  const lbl = await C(() => { const c = window.__cus, r = c.G.npcs.find((n) => n.id === 'ruth'); c.G.player.x = r.x + 20; c.G.player.y = r.y; return new Promise((res) => setTimeout(() => res(c.G.interactTarget && c.G.interactTarget.label), 300)); });
+  check('Orders: walking up to Ruth in an attack offers orders, not small talk', /Give Ruth an order/.test(lbl || ''), lbl);
+  await C(() => { const c = window.__cus; c.G.siegeActive = false; c.G.siege = null; c.G.enemies = []; import('./src/game/ally.js').then((a) => a.allyEndSiege()); });
+  await sleep(200);
+  check('Orders: orders reset when the attack ends', await C(() => import('./src/game/orders.js').then((o) => o.ruthOrder() === 'post' && o.dukeOrder() === 'hunt')));
+  // Accessibility.
+  await C(() => window.__cus.dbg.openMenu('settings')); await sleep(300);
+  const setTxt = await C(() => document.querySelector('.modal-body').innerText);
+  check('Access: Settings has an Accessibility section (captions, flashes, contrast, game speed)', /Accessibility/.test(setTxt) && /Sound captions/.test(setTxt) && /Reduce flashes/.test(setTxt) && /High-contrast/.test(setTxt) && /Game speed/.test(setTxt));
+  await page.click('[data-set="captions"]'); await sleep(150);
+  await C(() => window.__cus.dbg.closeAll());
+  await C(() => { const c = window.__cus, p = c.G.player; c.dbg.sfx('enemyShot', { x: p.x + 300, y: p.y }); });
+  await sleep(200);
+  const cap = await C(() => document.getElementById('captions').innerText);
+  check('Access: sound captions say what you heard and from which way', /Gunshot \(east\)/.test(cap) && await C(() => window.__cus.G.settings.captions === true), cap);
+  await page.screenshot({ path: OUT + 'access-captions.png' });
+  const speed = await C(() => new Promise((res) => { const c = window.__cus; const t0 = c.G.s.time.minute; setTimeout(() => { const n = c.G.s.time.minute - t0; c.G.settings.gameSpeed = 'slower'; const t1 = c.G.s.time.minute; setTimeout(() => { const sl = c.G.s.time.minute - t1; c.G.settings.gameSpeed = 'normal'; res({ n, sl, r: sl / n }); }, 2000); }, 2000); }));
+  check('Access: a slower game speed slows the whole game', speed.r > 0.5 && speed.r < 0.8, JSON.stringify(speed));
+  await C(() => { window.__cus.G.settings.reduceFlashes = true; window.__cus.G.settings.highContrast = true; window.__cus.dbg.spawnEnemy('gunman', window.__cus.G.player.x + 120, window.__cus.G.player.y); });
+  await sleep(400); await page.screenshot({ path: OUT + 'access-contrast.png' });
+  check('Access: reduced flashes and high contrast render without errors', await C(() => window.__cus.G.running));
+  await ctx.close();
+}
+
 
 await browser.close();
 server.kill();

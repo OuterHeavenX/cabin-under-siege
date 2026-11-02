@@ -3,6 +3,7 @@
 import { G } from '../game/state.js';
 import { shortWeekday, eventsToday } from '../game/calendar.js';
 import { season } from '../game/season-core.js';
+import { setCaptionHook } from '../audio.js';
 import { fmtClock, escapeHtml } from '../util.js';
 
 const $ = (id) => document.getElementById(id);
@@ -134,6 +135,8 @@ export function updateHud(dt, info) {
   const sb = els.skillBtn || (els.skillBtn = document.getElementById('btn-skill'));
   const sl = els.skillLbl || (els.skillLbl = document.getElementById('btn-skill-label'));
   const tag = els.abTag || (els.abTag = document.getElementById('ability-tag'));
+  const ob = els.orderBtn || (els.orderBtn = document.getElementById('btn-order'));
+  if (ob) ob.classList.toggle('hidden', !info.canOrder);
   if (sb) {
     sb.classList.toggle('hidden', !ab);
     if (ab) { sl.textContent = ab.ready ? ab.short : `${ab.left}s`; sb.classList.toggle('cooling', !ab.ready); }
@@ -145,3 +148,34 @@ export function updateHud(dt, info) {
     if (tag._h !== html) { tag.innerHTML = html; tag._h = html; }
   }
 }
+
+/* ---------------- sound captions (Settings → Accessibility) ---------------- */
+const CAPTIONS = {
+  enemyShot: 'Gunshot', rifle: 'Rifle shot', bark: 'Dog barking', growl: 'Growling', glass: 'Glass breaking',
+  wood: 'Wood splintering', warning: 'Warning', alarm: 'Alarm', car: 'Car engine', phone: 'Phone ringing',
+  boat: 'Boat motor', molotov: 'Bottle smashing — fire', swing: 'Swing', door: 'Door', explosion: 'Explosion',
+};
+const DIRS = ['east', 'south-east', 'south', 'south-west', 'west', 'north-west', 'north', 'north-east'];
+const lastCap = {};
+export function soundCaption(name, opts = {}) {
+  if (!G.settings || !G.settings.captions || !CAPTIONS[name]) return;
+  const p = G.player;
+  let where = '';
+  if (p && opts.x != null) {
+    const dx = opts.x - p.x, dy = opts.y - p.y, d = Math.hypot(dx, dy);
+    if (d > 900) return; // too far to hear over everything else
+    where = d < 60 ? ' (close)' : ` (${DIRS[Math.round(((Math.atan2(dy, dx) + Math.PI * 2) % (Math.PI * 2)) / (Math.PI / 4)) % 8]}${d > 420 ? ', far' : ''})`;
+  }
+  const text = `🔊 ${CAPTIONS[name]}${where}`;
+  const now = performance.now();
+  if (lastCap[text] && now - lastCap[text] < 1200) return;
+  lastCap[text] = now;
+  const box = document.getElementById('captions');
+  if (!box) return;
+  const div = document.createElement('div');
+  div.className = 'cap'; div.textContent = text;
+  box.appendChild(div);
+  while (box.children.length > 3) box.firstChild.remove();
+  setTimeout(() => { div.classList.add('out'); setTimeout(() => div.remove(), 400); }, 2200);
+}
+setCaptionHook(soundCaption);
