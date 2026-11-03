@@ -52,6 +52,10 @@ The places you live in move now:
   and summer, ducks on ponds and lakes (not on winter ice).
 - **Traffic** on town roads by day and evening, with headlights after dark. Cars stop for whoever is
   standing in the lane, and clear off when an attack starts, along with the animals.
+- **Cars** are drawn as real cars seen from above (`src/world/vehicles.js`): Frank's car is a red modern
+  fastback after the 2026 Mustang GT — long vented hood, shark nose, wide rear haunches, tri-bar LED lights
+  front and rear, quad exhausts (no badges). Traffic and parked cars are sedans, SUVs, pickups, hatchbacks
+  and the odd muscle car, all with shaded paint, sky reflections, glass, mirrors and soft shadows.
 - **Light** — a soft vignette and a touch of warm midday sun on top of the existing dawn, golden-hour and
   sunset colours.
 - Smoother surfaces: roads and gravel no longer show a tile-by-tile checkerboard, and the season tints on
@@ -789,6 +793,7 @@ src/game/                     Systems: player & weapons, combat, fire, enemy AI,
   ../i18n.js                  Interface language (Spanish strings)
   prequel_ac.js               The second prequel: Atlantic City, 1994
   ../world/ambient.js         Wind in the grass, cloud shadows, wildlife and traffic
+  ../world/vehicles.js        Top-down car sprites (Frank's fastback, sedans, SUVs, pickups, hatchbacks)
   abilities.js                Tier-2 active skills (one ability slot)
 src/data/life.js, watch.js, counter.js, evidence.js, letters.js, sidestories.js, reunions.js
                               The expansion's content (dialogue, signs, missions, letters, side stories)

@@ -23,6 +23,7 @@ import { REGROW_DAYS } from '../game/activities.js';
 import { NATURAL, paintNaturalBase, paintNaturalDetails, paintWater } from './terrain.js';
 import { paintSeason, canopyStyle, drawTracks, frozen, seasonId } from '../game/seasons.js';
 import { drawGrass, drawCritters, drawAir, drawCloudShadows, drawTraffic } from './ambient.js';
+import { drawVehicle } from './vehicles.js';
 
 let lightCanvas = null, lctx = null;
 
@@ -1290,9 +1291,10 @@ export function render(ctx) {
   // Cars & props with bodies (and traffic on town roads)
   drawTraffic(ctx, inView, drawCar);
   for (const pr of m.props) {
-    if (pr.kind === 'car' && inView(pr.x, pr.y)) drawCar(ctx, pr.x - 0, pr.y, '#8c2f2f', true);
-    if (pr.kind === 'strange_car' && inView(pr.x, pr.y)) drawCar(ctx, pr.x, pr.y, '#16181c', false, true);
-    if (pr.kind === 'parked' && inView(pr.x, pr.y)) drawCar(ctx, pr.x, pr.y, pr.color || '#333', false, false);
+    // Frank's car: a red modern fastback (in the prequels, whatever the family was driving).
+    if (pr.kind === 'car' && inView(pr.x, pr.y)) drawCar(ctx, pr.x, pr.y, G.prequel ? '#2a2a30' : '#a5161d', true, darkness() > 0.5, G.prequel ? 'sedan' : 'muscle');
+    if (pr.kind === 'strange_car' && inView(pr.x, pr.y)) drawCar(ctx, pr.x, pr.y, '#16181c', false, true, 'sedan');
+    if (pr.kind === 'parked' && inView(pr.x, pr.y)) drawCar(ctx, pr.x, pr.y, pr.color || '#333', false, false, ['sedan', 'suv', 'pickup', 'hatch'][Math.floor(hash2(pr.x, pr.y) * 4)]);
   }
   // Job props
   for (const pr of jobProps(m.id)) {
@@ -1628,18 +1630,9 @@ function gradeScreen(ctx, hr, dk, w, h, dpr) {
   }
 }
 
-function drawCar(ctx, x, y, color, vertical, lights) {
-  ctx.save();
-  ctx.translate(x, y);
-  if (!vertical) ctx.rotate(Math.PI / 2);
-  ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.fillRect(-28, -44, 60, 94);
-  ctx.fillStyle = color; roundRect(ctx, -26, -46, 52, 92, 10); ctx.fill();
-  ctx.fillStyle = 'rgba(160,200,230,0.75)'; roundRect(ctx, -20, -28, 40, 18, 4); ctx.fill();
-  ctx.fillStyle = 'rgba(120,160,190,0.6)'; roundRect(ctx, -20, 18, 40, 14, 4); ctx.fill();
-  ctx.fillStyle = 'rgba(255,255,255,0.15)'; ctx.fillRect(-18, -8, 36, 24);
-  ctx.fillStyle = lights ? '#fff6c4' : '#f4e6a1'; ctx.fillRect(-22, -46, 10, 4); ctx.fillRect(12, -46, 10, 4);
-  ctx.fillStyle = '#b52a2a'; ctx.fillRect(-22, 42, 10, 4); ctx.fillRect(12, 42, 10, 4);
-  ctx.restore();
+/** A car seen from above (vehicles.js). `vertical`: front up; otherwise front to the right. */
+function drawCar(ctx, x, y, color, vertical, lights, model = 'sedan') {
+  drawVehicle(ctx, x, y, vertical ? 0 : Math.PI / 2, model, color, lights);
 }
 
 function roundRect(ctx, x, y, w, h, r) {

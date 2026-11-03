@@ -253,7 +253,7 @@ export function updateTraffic(dt) {
     carT = 9 + Math.random() * 16;
     const road = lanes.list[Math.floor(Math.random() * lanes.list.length)], east = Math.random() < 0.5;
     const W = m.w * TILE;
-    cars.push({ x: east ? -80 : W + 80, y: east ? road.east : road.west, dir: east ? 1 : -1, sp: 95 + Math.random() * 50, col: CAR_COLS[Math.floor(Math.random() * CAR_COLS.length)] });
+    cars.push({ x: east ? -80 : W + 80, y: east ? road.east : road.west, dir: east ? 1 : -1, sp: 95 + Math.random() * 50, col: CAR_COLS[Math.floor(Math.random() * CAR_COLS.length)], model: ['sedan', 'sedan', 'suv', 'pickup', 'hatch', 'muscle'][Math.floor(Math.random() * 6)] });
   }
   const p = G.player;
   for (const c of cars) {
@@ -270,7 +270,7 @@ export function drawTraffic(ctx, inView, drawCar) {
   for (const c of cars) {
     if (!inView(c.x, c.y, 120)) continue;
     ctx.save(); ctx.translate(c.x, c.y); ctx.rotate(c.dir > 0 ? 0 : Math.PI);
-    drawCar(ctx, 0, 0, c.col, false, lights);
+    drawCar(ctx, 0, 0, c.col, false, lights, c.model);
     ctx.restore();
     if (lights) { ctx.save(); ctx.globalCompositeOperation = 'lighter'; const gx = c.x + c.dir * 70, g = ctx.createRadialGradient(gx, c.y, 4, gx, c.y, 70); g.addColorStop(0, 'rgba(255,240,190,0.35)'); g.addColorStop(1, 'rgba(255,240,190,0)'); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(gx, c.y, 70, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
   }
