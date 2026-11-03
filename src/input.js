@@ -28,7 +28,7 @@ export function setPadMode(on) {
 const KEYMAP = {
   KeyE: 'interact', Enter: 'interact', KeyR: 'reload', KeyQ: 'use', KeyF: 'melee', Space: 'dodge',
   Digit1: 'weapon1', Digit2: 'weapon2', Digit3: 'weapon3', Tab: 'swap',
-  Escape: 'pause', KeyP: 'pause', KeyI: 'inv', KeyC: 'char', KeyK: 'skills', KeyM: 'map', KeyJ: 'journal', KeyH: 'help', KeyV: 'home', KeyG: 'ability', KeyO: 'orders',
+  Escape: 'pause', KeyP: 'pause', KeyI: 'inv', KeyC: 'char', KeyK: 'skills', KeyM: 'map', KeyJ: 'journal', KeyH: 'help', KeyV: 'home', KeyG: 'ability', KeyO: 'orders', KeyB: 'plan',
 };
 
 export function press(action) { input.pressed.add(action); }

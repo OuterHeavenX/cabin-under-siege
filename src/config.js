@@ -1,6 +1,6 @@
 // Global tuning constants.
 
-export const GAME_VERSION = '0.15.0';
+export const GAME_VERSION = '0.17.0';
 export const TILE = 32;
 export const SAVE_VERSION = 3;
 export const SAVE_KEY = 'cabinUnderSiege.save';
@@ -41,6 +41,7 @@ export const DEFAULT_SETTINGS = {
   reduceFlashes: false, // softer muzzle and hit flashes, no red pulse in attacks
   gameSpeed: 'normal', // 'normal' | 'slow' | 'slower'
   highContrast: false, // bright outlines on attackers
+  language: 'auto', // 'auto' | 'en' | 'es' (Spanish interface; the story stays in English)
 };
 
 /** Being away from home (return visits). All the "no free hiding" numbers live here. */

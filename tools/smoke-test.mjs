@@ -1908,7 +1908,7 @@ if (want('life')) {
   const subs = await C(() => [...document.querySelectorAll('.subtab')].map((b) => b.textContent.replace(/[!✉]/g, '').trim()));
   await page.click('.subtab[data-id="cases"]'); await sleep(200);
   const casesTxt = await C(() => document.querySelector('.modal-body').innerText);
-  check('Life: Journal has Story, Cases, Side stories, People, Home, Calendar and Log sections', ['Story', 'Cases', 'Side stories', 'People', 'Home', 'Calendar', 'Log'].every((k) => subs.includes(k)), subs.join(','));
+  check('Life: Journal has Story, Cases, Side stories, People, Home, Calendar, Scrapbook and Log sections', ['Story', 'Cases', 'Side stories', 'People', 'Home', 'Calendar', 'Scrapbook', 'Log'].every((k) => subs.includes(k)), subs.join(','));
   check('Life: found clues and the Paper Trail can be reviewed in the Journal', /meter reader/i.test(casesTxt) && /Paper Trail/.test(casesTxt));
   await page.screenshot({ path: OUT + 'life-journal-cases.png' });
   await page.click('.subtab[data-id="log"]'); await sleep(300);
@@ -2372,6 +2372,113 @@ if (want('access')) {
   await C(() => { window.__cus.G.settings.reduceFlashes = true; window.__cus.G.settings.highContrast = true; window.__cus.dbg.spawnEnemy('gunman', window.__cus.G.player.x + 120, window.__cus.G.player.y); });
   await sleep(400); await page.screenshot({ path: OUT + 'access-contrast.png' });
   check('Access: reduced flashes and high contrast render without errors', await C(() => window.__cus.G.running));
+  await ctx.close();
+}
+
+/* ================================================================== */
+/* v0.16: the Defense Plan and the Scrapbook                           */
+/* ================================================================== */
+if (want('plan')) {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const page = await ctx.newPage();
+  watch(page, 'plan');
+  await page.goto(URL); await page.waitForSelector('#t-new');
+  const C = (fn, a) => ev(page, fn, a);
+  const mod = (path, fn, a) => page.evaluate(([p, f, a]) => import(p).then((m) => (new Function('m', 'a', 'return (' + f + ')(m, a)'))(m, a)), [path, fn.toString(), a]);
+  await C(() => { localStorage.removeItem('cabin-under-siege-scrapbook'); window.__cus.newGame('normal'); }); await sleep(500); await skipDialogues(page);
+  await C(() => { const c = window.__cus, s = c.G.s; c.dbg.closeAll(); s.inv.sandbags = 2; s.inv.bear_trap = 2; s.rel.ruth = 60; s.story.flags.firstSiegeDone = true; s.time.minute = 12 * 60; c.loadMap('cabin', c.G.maps.cabin.points.porch); });
+  await sleep(300);
+  await page.keyboard.press('KeyB'); await sleep(400);
+  const pl = await C(() => ({ m: window.__cus.G.modal, w: (document.querySelector('[data-plan]') || {}).width || 0, t: document.querySelector('.modal-body').innerText }));
+  check('Plan: B opens the Defense Plan — your property from above, with a legend', pl.m === 'plan' && pl.w > 200 && /Defense Plan/.test(pl.t) && /where they come from/.test(pl.t), JSON.stringify({ m: pl.m, w: pl.w }));
+  await page.screenshot({ path: OUT + 'plan.png' });
+  // Find open cells near the porch for cover and a trap.
+  const cells = await mod('./src/game/home.js', (m) => { const c = window.__cus, mm = c.G.maps.cabin, p = mm.points.porch; const out = []; for (let r = 2; r < 10 && out.length < 3; r++) for (let dx = -r; dx <= r && out.length < 3; dx++) { const cx = Math.floor(p.x / 32) + dx, cy = Math.floor(p.y / 32) + r; if (!m.coverBlocked('sandbags', cx, cy) && !m.trapBlocked(cx, cy) && !out.some((o) => Math.abs(o[0] - cx) + Math.abs(o[1] - cy) < 2)) out.push([cx, cy]); } return { out, w: mm.w, h: mm.h }; });
+  const clickCell = async ([cx, cy]) => { const box = await page.locator('[data-plan]').boundingBox(); await page.mouse.click(box.x + (cx + 0.5) / cells.w * box.width, box.y + (cy + 0.5) / cells.h * box.height); await sleep(350); };
+  await clickCell(cells.out[0]);
+  check('Plan: tap a cell to set cover there (from your pack)', await C(() => window.__cus.G.s.home.covers.length === 1 && window.__cus.G.s.inv.sandbags === 1));
+  await page.click('[data-tool="bear_trap"]'); await sleep(150);
+  await clickCell(cells.out[1]);
+  check('Plan: or a bear trap', await C(() => (window.__cus.G.s.home.traps || []).length === 1 && window.__cus.G.s.inv.bear_trap === 1));
+  await page.click('[data-tool="fallback"]'); await sleep(150);
+  await clickCell(cells.out[2]);
+  const fb = await C(() => window.__cus.G.s.home.fallback);
+  check('Plan: mark a fallback point', !!fb && fb[0] === cells.out[2][0] && fb[1] === cells.out[2][1], JSON.stringify(fb));
+  await page.click('[data-tool="remove"]'); await sleep(150);
+  await clickCell(cells.out[0]);
+  check('Plan: and pick things back up', await C(() => window.__cus.G.s.home.covers.length === 0 && window.__cus.G.s.inv.sandbags === 2));
+  // Keyboard cursor.
+  const k0 = await mod('./src/ui/menus.js', (m) => m.planState().cursor);
+  await page.keyboard.press('ArrowRight'); await page.keyboard.press('ArrowRight'); await page.keyboard.press('ArrowDown'); await sleep(150);
+  const k1 = await mod('./src/ui/menus.js', (m) => m.planState().cursor);
+  check('Plan: the arrow keys move the cursor (and so does the D-pad)', k1[0] === k0[0] + 2 && k1[1] === k0[1] + 1, JSON.stringify([k0, k1]));
+  await C(() => window.__cus.dbg.closeAll());
+  // With a controller: D-pad down onto the map, move the cursor, A places.
+  await C(() => { window.__fakePad = { connected: true, mapping: 'standard', buttons: Array.from({ length: 17 }, () => ({ pressed: false, value: 0 })), axes: [0, 0, 0, 0] }; });
+  const pbtn = async (i) => { await C((i) => { window.__fakePad.buttons[i] = { pressed: true, value: 1 }; }, i); await sleep(120); await C((i) => { window.__fakePad.buttons[i] = { pressed: false, value: 0 }; }, i); await sleep(150); };
+  await sleep(300);
+  await C(() => import('./src/ui/menus.js').then((m) => m.openPlanner())); await sleep(400);
+  for (let i = 0; i < 3 && !(await C(() => !!(document.querySelector('.pad-focus') || {}).dataset?.grid !== undefined && document.querySelector('.pad-focus[data-grid]'))); i++) await pbtn(13);
+  const onGrid = await C(() => !!document.querySelector('.pad-focus[data-grid]'));
+  const pc0 = await mod('./src/ui/menus.js', (m) => m.planState().cursor);
+  await pbtn(15); await pbtn(15);
+  const pc1 = await mod('./src/ui/menus.js', (m) => m.planState().cursor);
+  check('Plan (controller): D-pad onto the map, then it moves the cursor', onGrid && pc1[0] === pc0[0] + 2, JSON.stringify({ onGrid, pc0, pc1 }));
+  await C(() => { delete window.__fakePad; window.__cus.dbg.closeAll(); }); await sleep(300);
+  // In an attack: look, don't build — and Ruth can fall back.
+  await C(() => { const c = window.__cus; c.G.s.time.minute = 21 * 60; c.G.player.invuln = 99999; c.dbg.startSiege({ plan: { kind: 'raid', hpMult: 1, waves: [{ dir: Object.keys(c.G.map.spawns)[0], types: ['scout'], delay: 999 }] } }); });
+  await sleep(500);
+  const blocked = await mod('./src/game/planner.js', (m) => ({ edit: m.canEditPlan(), r: m.applyTool('sandbags', 1, 1) }));
+  check('Plan: during an attack you can look but not build', !blocked.edit && blocked.r === false, JSON.stringify(blocked));
+  const fall = await C(() => import('./src/game/orders.js').then((o) => new Promise((res) => { const c = window.__cus; const has = o.orderOptions().some((x) => /Fall back/.test(x.label)); o.giveOrder('ruth', 'fallback'); const r = c.G.npcs.find((n) => n.id === 'ruth'); const f = o.fallbackPoint(); setTimeout(() => res({ has, d: Math.round(Math.hypot(r.x - f.x, r.y - f.y)) }), 9000); })));
+  check('Plan: with a fallback point marked, Ruth can be ordered back to it', fall.has && fall.d < 60, JSON.stringify(fall));
+  await C(() => { const c = window.__cus; c.G.siegeActive = false; c.G.siege = null; c.G.enemies = []; import('./src/game/ally.js').then((a) => a.allyEndSiege()); c.G.s.time.minute = 12 * 60; });
+  // Scrapbook.
+  await C(() => window.__cus.dbg.openMenu('journal')); await sleep(300);
+  await page.click('.subtab[data-id="scrap"]'); await sleep(200);
+  await page.click('[data-act="photo"]'); await sleep(900);
+  const ph = await mod('./src/game/scrapbook.js', (m) => m.photos().map((p) => ({ c: p.caption, img: p.img.slice(0, 15), auto: p.auto })));
+  check('Scrapbook: take a photo from the Journal', ph.length === 1 && ph[0].img === 'data:image/jpeg' && !ph[0].auto, JSON.stringify(ph));
+  await C(() => window.__cus.G.events.emit('seasonalEvent', 'thanksgiving')); await sleep(1600);
+  const ph2 = await mod('./src/game/scrapbook.js', (m) => m.photos().map((p) => p.caption));
+  check('Scrapbook: the moments that matter get a photo on their own', ph2.includes('Thanksgiving'), ph2.join(','));
+  await C(() => window.__cus.dbg.openMenu('journal')); await sleep(300);
+  await page.click('.subtab[data-id="scrap"]'); await sleep(200);
+  const figs = await C(() => document.querySelectorAll('.photo').length);
+  await page.screenshot({ path: OUT + 'scrapbook.png' });
+  await page.locator('[data-act="delphoto"]').first().click(); await sleep(300);
+  check('Scrapbook: the Journal shows the photos, and you can remove one', figs === 2 && await mod('./src/game/scrapbook.js', (m) => m.photos().length === 1), String(figs));
+  await ctx.close();
+}
+
+/* ================================================================== */
+/* v0.17: the Spanish interface                                        */
+/* ================================================================== */
+if (want('lang')) {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const page = await ctx.newPage();
+  watch(page, 'lang');
+  await page.addInitScript(() => { try { const k = 'cabinUnderSiege.settings'; const s = JSON.parse(localStorage.getItem(k) || '{}'); if (!s.language) { s.language = 'es'; localStorage.setItem(k, JSON.stringify(s)); } } catch { /* */ } });
+  await page.goto(URL); await page.waitForSelector('#t-new'); await sleep(300);
+  const C = (fn, a) => ev(page, fn, a);
+  const title = await C(() => ({ n: document.getElementById('t-new').textContent.trim(), e: document.getElementById('t-endless').textContent.trim(), lang: document.documentElement.lang, tag: document.querySelector('.tagline').textContent }));
+  check('Lang: in Spanish the title screen speaks Spanish', title.n === 'Nueva partida' && title.e === 'Asedio sin fin' && title.lang === 'es' && /Dejaste a la familia/.test(title.tag), JSON.stringify(title));
+  await page.screenshot({ path: OUT + 'lang-title.png' });
+  await page.click('#t-new'); await sleep(400);
+  const diff = await C(() => document.querySelector('.modal-body').innerText);
+  check('Lang: menus come up in Spanish (difficulty picker)', /Elige la dificultad/.test(diff) && /Difícil/.test(diff), diff.slice(0, 80));
+  await page.click('[data-diff-pick="normal"]'); await sleep(1200);
+  const dlg = await C(() => document.getElementById('dialogue').classList.contains('hidden') ? '' : document.getElementById('dlg-text').textContent);
+  const foot = await C(() => document.querySelector('.dlg-foot').innerText);
+  check('Lang: the story itself stays in English (as written), the dialogue buttons are Spanish', !!dlg && /Population|Newark|Pine Hollow/.test(dlg) && /Toca|Saltar/.test(foot), (dlg || '(no dialogue)').slice(0, 60) + ' | ' + foot);
+  await skipDialogues(page);
+  await C(() => { window.__cus.dbg.closeAll(); window.__cus.dbg.openMenu('settings'); }); await sleep(300);
+  const set = await C(() => document.querySelector('.modal-body').innerText + ' ' + [...document.querySelectorAll('.tab')].map((t) => t.textContent).join(','));
+  check('Lang: pause menu tabs and Settings are Spanish, with a note about the story', /Ajustes/.test(set) && /Volumen de efectos/.test(set) && /Accesibilidad/.test(set) && /siguen en inglés/.test(set), set.slice(0, 160));
+  await page.screenshot({ path: OUT + 'lang-settings.png' });
+  await page.selectOption('[data-set="language"]', 'en'); await sleep(400);
+  const back = await C(() => [...document.querySelectorAll('.tab')].map((t) => t.textContent).join(',') + ' ' + document.querySelector('.modal-body').innerText.slice(0, 200));
+  check('Lang: switching back to English takes effect right away', /Settings/.test(back) && /Sound volume/.test(back), back.slice(0, 120));
   await ctx.close();
 }
 

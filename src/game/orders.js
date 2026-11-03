@@ -12,12 +12,17 @@ export const RUTH_ORDERS = {
   post: { label: 'Hold the front window', say: '"Front window. Got it."' },
   back: { label: 'Cover the back door', say: '"Back door. Nobody comes through my kitchen."' },
   follow: { label: 'Stay with me', say: '"Right behind you, Frank."' },
+  fallback: { label: 'Fall back to the fallback point', say: '"Falling back!"', needsFallback: true },
 };
 export const DUKE_ORDERS = {
   hunt: { label: 'Go get \'em', say: 'Duke is off like a shot.' },
   guard: { label: 'Guard me', say: 'Duke plants himself at your heel, hackles up.' },
   yard: { label: 'Hold the porch', say: 'Duke trots to the porch and lies down facing the dark.' },
+  fallback: { label: 'Fall back', say: 'Duke wheels and runs for the fallback point.', needsFallback: true },
 };
+
+/** The spot marked on the Defense Plan (Home → Defense Plan). */
+export const fallbackPoint = () => (G.s && G.s.home && G.s.home.fallback ? { x: G.s.home.fallback[0] * TILE + 16, y: G.s.home.fallback[1] * TILE + 16 } : null);
 
 const ord = () => G.orders || (G.orders = { ruth: 'post', duke: 'hunt' });
 export const ruthOrder = () => ord().ruth;
@@ -42,8 +47,8 @@ export const canOrder = () => !!(G.siegeActive && (ruthHere() || dukeHere()));
 /** The actions for the quick menu (openActions-style). */
 export function orderOptions() {
   const out = [];
-  if (ruthHere()) for (const [k, v] of Object.entries(RUTH_ORDERS)) out.push({ label: `Ruth: ${v.label}${ruthOrder() === k ? ' ✓' : ''}`, action: () => giveOrder('ruth', k) });
-  if (dukeHere()) for (const [k, v] of Object.entries(DUKE_ORDERS)) out.push({ label: `Duke: ${v.label}${dukeOrder() === k ? ' ✓' : ''}`, action: () => giveOrder('duke', k) });
+  if (ruthHere()) for (const [k, v] of Object.entries(RUTH_ORDERS)) if (!v.needsFallback || fallbackPoint()) out.push({ label: `Ruth: ${v.label}${ruthOrder() === k ? ' ✓' : ''}`, action: () => giveOrder('ruth', k) });
+  if (dukeHere()) for (const [k, v] of Object.entries(DUKE_ORDERS)) if (!v.needsFallback || fallbackPoint()) out.push({ label: `Duke: ${v.label}${dukeOrder() === k ? ' ✓' : ''}`, action: () => giveOrder('duke', k) });
   return out;
 }
 

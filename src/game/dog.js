@@ -9,7 +9,7 @@ import { homeMapId } from './chapters.js';
 import { damageEnemy, spawnParticles } from './combat.js';
 import { sfx } from '../audio.js';
 import { dogTrained } from './projects.js';
-import { dukeOrder } from './orders.js';
+import { dukeOrder, fallbackPoint } from './orders.js';
 import { toast } from '../ui/hud.js';
 
 export const DOG_MAX_HP = 90;
@@ -66,7 +66,8 @@ export function updateDog(dt) {
     // Orders (during an attack): guard you, or hold the porch.
     const order = G.siegeActive ? dukeOrder() : 'hunt';
     const porch = m.homeInfo && m.homeInfo.porch;
-    const anchor = order === 'guard' ? p : order === 'yard' && porch ? porch : null;
+    const fb = order === 'fallback' ? fallbackPoint() : null;
+    const anchor = order === 'guard' ? p : order === 'yard' && porch ? porch : fb;
     for (const e of G.enemies) {
       if (e.dead || e.gone || e.def.vehicle) continue;
       if (anchor && dist(anchor.x, anchor.y, e.x, e.y) > (order === 'guard' ? 150 : 220)) continue;
@@ -87,7 +88,7 @@ export function updateDog(dt) {
       }
     } else {
       d.target = null;
-      if (order === 'yard' && porch) { if (dist(d.x, d.y, porch.x, porch.y) > 20) { goal = porch; speed = 120; } }
+      if (fb) { if (dist(d.x, d.y, fb.x, fb.y) > 20) { goal = fb; speed = 150; } } else if (order === 'yard' && porch) { if (dist(d.x, d.y, porch.x, porch.y) > 20) { goal = porch; speed = 120; } }
       // Heel: trot after you, lie down when close.
       else if (dist(d.x, d.y, p.x, p.y) > 46) { goal = { x: p.x - Math.cos(p.angle) * 26, y: p.y - Math.sin(p.angle) * 26 }; speed = dist(d.x, d.y, p.x, p.y) > 160 ? 160 : 95; }
     }

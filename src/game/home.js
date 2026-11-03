@@ -136,15 +136,23 @@ export function installShutters(w) {
 export const MAX_TRAPS = 6;
 
 function placeTrap() {
-  const traps = G.s.home.traps || (G.s.home.traps = []);
-  if (traps.length >= MAX_TRAPS) { toast(`Trap limit reached (${MAX_TRAPS}).`, 'warn'); return false; }
-  if (count('bear_trap') < 1) return false;
   const p = G.player;
-  const m = G.map;
-  const cx = Math.floor((p.x + Math.cos(p.angle) * 30) / TILE), cy = Math.floor((p.y + Math.sin(p.angle) * 30) / TILE);
-  if (!m.inBounds(cx, cy) || m.blocksMove(cx, cy, 'enemy') || m.blockerAt(cx, cy) || traps.some((t) => t.cx === cx && t.cy === cy) || m.buildingAt(cx * TILE + 16, cy * TILE + 16)) {
-    toast('Can\'t set a trap there. Face open ground outside.', 'warn'); return false;
-  }
+  return placeTrapAt(Math.floor((p.x + Math.cos(p.angle) * 30) / TILE), Math.floor((p.y + Math.sin(p.angle) * 30) / TILE));
+}
+
+/** Why a trap can't go in this cell (null if it can). The Defense Plan uses the same rules. */
+export function trapBlocked(cx, cy) {
+  const traps = G.s.home.traps || [];
+  const m = homeMap();
+  if (traps.length >= MAX_TRAPS) return `Trap limit reached (${MAX_TRAPS}).`;
+  if (count('bear_trap') < 1) return 'You have no bear traps.';
+  if (!m.inBounds(cx, cy) || m.blocksMove(cx, cy, 'enemy') || m.blockerAt(cx, cy) || traps.some((t) => t.cx === cx && t.cy === cy) || m.buildingAt(cx * TILE + 16, cy * TILE + 16)) return 'Can\'t set a trap there. Open ground outside only.';
+  return null;
+}
+export function placeTrapAt(cx, cy) {
+  const why = trapBlocked(cx, cy);
+  if (why) { toast(why, 'warn'); return false; }
+  const traps = G.s.home.traps || (G.s.home.traps = []);
   removeItem('bear_trap', 1);
   traps.push({ cx, cy, armed: true });
   sfx('trap');
@@ -218,24 +226,32 @@ export function installUpgrade(id) {
 export function placeCover(type) {
   if (!atHome()) { toast('You can only place this on your own property.', 'warn'); return false; }
   if (type === 'trap' || type === 'bear_trap') return placeTrap();
-  if (G.s.home.covers.length >= MAX_COVERS) { toast(`Cover limit reached (${MAX_COVERS}). Pick one up first.`, 'warn'); return false; }
-  if (count(type) < 1) return false;
   const p = G.player;
-  const m = G.map;
-  const tx = p.x + Math.cos(p.angle) * 30, ty = p.y + Math.sin(p.angle) * 30;
-  const cx = Math.floor(tx / TILE), cy = Math.floor(ty / TILE);
-  const pcx = Math.floor(p.x / TILE), pcy = Math.floor(p.y / TILE);
-  if ((cx === pcx && cy === pcy) || !m.inBounds(cx, cy) || m.getSolid(cx, cy) !== 0 || m.blockerAt(cx, cy) || m.trees.has(m.idx(cx, cy))) {
-    toast('Can\'t place cover there. Face an open spot.', 'warn'); return false;
-  }
+  return placeCoverAt(type, Math.floor((p.x + Math.cos(p.angle) * 30) / TILE), Math.floor((p.y + Math.sin(p.angle) * 30) / TILE));
+}
+
+/** Why cover can't go in this cell (null if it can). The Defense Plan uses the same rules. */
+export function coverBlocked(type, cx, cy) {
+  if (G.s.home.covers.length >= MAX_COVERS) return `Cover limit reached (${MAX_COVERS}). Pick one up first.`;
+  if (count(type) < 1) return `You have no ${ITEMS[type] ? ITEMS[type].name : type}.`;
+  const m = homeMap(), p = G.player;
+  if (p && G.map === m && Math.floor(p.x / TILE) === cx && Math.floor(p.y / TILE) === cy) return 'You\'re standing there.';
+  if (!m.inBounds(cx, cy) || m.getSolid(cx, cy) !== 0 || m.blockerAt(cx, cy) || m.trees.has(m.idx(cx, cy))) return 'Can\'t place cover there. It needs an open spot.';
   // Keep it out of doorways so you can't wall yourself in.
-  for (const b of homeBlockers()) if (b.kind === 'door' && Math.abs(b.cx - cx) + Math.abs(b.cy - cy) <= 1) { toast('Don\'t block the doorway.', 'warn'); return false; }
+  for (const b of homeBlockers()) if (b.kind === 'door' && Math.abs(b.cx - cx) + Math.abs(b.cy - cy) <= 1) return 'Don\'t block the doorway.';
+  return null;
+}
+export function placeCoverAt(type, cx, cy) {
+  const why = coverBlocked(type, cx, cy);
+  if (why) { toast(why, 'warn'); return false; }
+  const p = G.player;
+  const m = homeMap();
   const rec = { type, cx, cy, hp: Math.round(COVER_HP[type] * defenseMult()) };
   removeItem(type, 1);
   G.s.home.covers.push(rec);
   syncCovers();
   // Nudge the player out if overlapping
-  m.pushOut(p, p.radius, 'player');
+  if (p && G.map === m) m.pushOut(p, p.radius, 'player');
   sfx('wood');
   toast(`${ITEMS[type].name} placed. Bullets can't get through.`, 'info', 2);
   addJP('handyman', 4, 'install', 6);

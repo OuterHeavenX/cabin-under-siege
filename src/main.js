@@ -20,7 +20,7 @@ import { initFxEvents, updateFx } from './world/fx.js';
 import { initAudio, setVolumes, updateAudio, setMusic, setAmbient, suspendAudio, resumeAudio, sfx, setListener, setFireLevel, audioDebug, renderOffline, musicBar, birdCall } from './audio.js';
 import { initHud, updateHud, toast, banner } from './ui/hud.js';
 import { initDialogue, updateDialogue, playDialogue } from './ui/dialogue.js';
-import { initReliableTaps, openMenu, closeModal, topModal, setMenuHooks, openHelp, confirmBox, pickImport, modalOpen, closeAllModals, openModal, openActions } from './ui/menus.js';
+import { initReliableTaps, openMenu, closeModal, topModal, setMenuHooks, openHelp, confirmBox, pickImport, modalOpen, closeAllModals, openModal, openActions, openPlanner } from './ui/menus.js';
 import { createPlayer, updatePlayer, inCombat } from './game/player.js';
 import { updateBullets, updateEffects } from './game/combat.js';
 import { updateEnemies, initEnemyEvents } from './game/enemies.js';
@@ -67,6 +67,8 @@ import { startEndless, updateEndless, unlockEndlessFor, setRunHooks } from './ga
 import { startSiege, makeRaidPlan, scheduleSiege, addSign, storyPlan } from './game/siege.js';
 import { buySkill } from './game/progression.js';
 import { canOrder, orderOptions } from './game/orders.js';
+import { updateScrapbook, initScrapbookEvents } from './game/scrapbook.js';
+import { applyLanguage } from './i18n.js';
 import { damagePlayer } from './game/player.js';
 
 /* ---------------- tiny event bus ---------------- */
@@ -233,6 +235,8 @@ function update(dt) {
   G.interactTarget = findTarget();
   if (consume('interact') && !G.repairHold) doInteract(G.interactTarget);
   if (consume('orders') && canOrder()) openActions('Orders', orderOptions());
+  if (consume('plan') && !G.prequel) openPlanner();
+  updateScrapbook(G.frameDt || 0.016);
   updateRepair(dt);
 
   updateEnemies(dt);
@@ -461,6 +465,7 @@ function initEvents() {
   initAwayEvents();
   initKeystoneEvents();
   initLongNightEvents();
+  initScrapbookEvents();
   initLetterEvents();
   initAchievementEvents();
   initCloudSync();
@@ -792,6 +797,7 @@ function toggleFullscreen() {
 /* ---------------- boot ---------------- */
 function boot() {
   loadSettings();
+  applyLanguage(); // Spanish interface if chosen (or the browser is in Spanish)
   document.body.classList.toggle('large-text', G.settings.textSize === 'large');
   applyTouchStyle();
   // Desktop app: the Deck going to sleep pauses the game.

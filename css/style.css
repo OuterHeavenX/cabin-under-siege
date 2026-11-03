@@ -569,3 +569,20 @@ body.touch .trophy-card .tr-name { font-size: 13px; }
 .tag.tier { background: #3a2a55; color: #d9ccf5; }
 .skill.locked { opacity: 0.75; }
 .move-sum { text-align: left; margin: 8px auto; max-width: 520px; }
+
+/* Defense Plan */
+.modal-wrap.plan .modal { max-width: min(960px, 96vw); }
+.plan-tools { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0; }
+.plan-tools .btn.on { outline: 2px solid #ffd166; }
+.plan-grid { display: block; padding: 0; border: 2px solid #444; background: #111; margin: 6px auto; max-width: 100%; overflow: auto; }
+.plan-grid canvas { display: block; max-width: 100%; height: auto; image-rendering: pixelated; cursor: crosshair; }
+.plan-grid.pad-focus, .plan-grid:focus { border-color: #ffd166; outline: none; }
+.plan-legend .lg.g { color: #5bc06a; } .plan-legend .lg.y { color: #e8b030; } .plan-legend .lg.r { color: #e0402f; } .plan-legend .lg.c { color: #c8a46a; } .plan-legend .lg.b { color: #6db3ff; } .plan-legend .lg.f { color: #ffd166; }
+/* Scrapbook */
+.photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+.photo { margin: 0; background: #f3ead6; color: #2a2118; padding: 8px 8px 6px; border-radius: 3px; box-shadow: 0 2px 6px rgba(0,0,0,.4); transform: rotate(-0.6deg); }
+.photo:nth-child(2n) { transform: rotate(0.7deg); }
+.photo img { display: block; width: 100%; height: auto; border: 1px solid #c9bda2; }
+.photo figcaption { display: flex; flex-direction: column; gap: 2px; margin: 6px 0 4px; font-size: 13px; }
+.photo figcaption .muted { color: #6a5e4c; }
+.photo .btn { background: #e2d6bd; color: #3a2a1a; border-color: #b8a888; }

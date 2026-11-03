@@ -33,7 +33,7 @@ import { resetInput, setTouchMode, input, desktopApp, applyTouchStyle } from '..
 import { drawMinimap } from '../world/render.js';
 import { equipWeapon, magSize } from '../game/player.js';
 import { WEAPONS } from '../data/weapons.js';
-import { GAME_VERSION } from '../config.js';
+import { GAME_VERSION, TILE } from '../config.js';
 import { ACHIEVEMENTS, isUnlocked, unlockedCount, achievementData } from '../game/achievements.js';
 import { projectDone } from '../game/projects.js';
 import { romanceEpilogue } from '../game/letters.js';
@@ -48,6 +48,9 @@ import { letterLog, unreadMail, rereadLetter } from '../game/letters.js';
 import { setAbility, currentAbility } from '../game/abilities.js';
 import { fmtWindow } from '../game/calendar.js';
 import { helpOnProject, projectList } from '../game/projects.js';
+import { photos, takePhoto, deletePhoto, MAX_PHOTOS } from '../game/scrapbook.js';
+import { planTools, applyTool, drawPlan, canEditPlan, planView, toolBlocked } from '../game/planner.js';
+import { LANGS, lang, applyLanguage } from '../i18n.js';
 import { cloudCode, cloudState, cloudAvailable, cloudEnable, cloudPeek, cloudLink, cloudUnlink, cloudPush, cloudCheck, cloudTake, deviceName, playerName, getDailyScores, postDailyScore } from '../game/cloud.js';
 
 const root = () => document.getElementById('modal-root');
@@ -212,6 +215,9 @@ function handleMenuClick(e, entry) {
     case 'quit': confirmBox('Return to the title screen? Unsaved progress since your last save will be lost.', 'Quit to title', () => { closeAllModals(); hooks.quitToTitle && hooks.quitToTitle(); }); return;
     case 'resume': closeAllModals(); return;
     case 'cloud': openCloud(); return;
+    case 'photo': closeAllModals(); setTimeout(() => takePhoto(), 250); return;
+    case 'delphoto': deletePhoto(t.dataset.id); break;
+    case 'plan': openPlanner(); return;
     case 'fullscreen': hooks.toggleFullscreen && hooks.toggleFullscreen(); return;
     case 'quitapp': confirmBox('Quit to the desktop? The game saves first if it\'s safe to.', 'Quit', () => { hooks.quitApp && hooks.quitApp(); }); return;
     default: return;
@@ -238,6 +244,7 @@ function handleSettingsInput(e, commit) {
   }
   if (k === 'quality') G.events.emit('qualityChanged');
   if (k === 'textSize') document.body.classList.toggle('large-text', t.value === 'large');
+  if (k === 'language') { applyLanguage(); if (commit) setTimeout(() => refreshMenu(), 0); }
   if (k === 'touchOpacity' || k === 'touchSize') applyTouchStyle();
   saveSettings();
   if (commit && t.type === 'range') sfx('blip');
@@ -329,6 +336,7 @@ function homeTab() {
     <div class="def-row wide"><div class="def-name">📷 Cameras</div><div class="def-stat">${up.camera ? 'Installed — every attacker on the property is marked during an attack' : `None (${chapter().hardwareName} sells a camera kit)`}</div></div>
     <p class="hint">Repair doors and windows by walking up to them and pressing ACT/E when no attackers are around. Repairs cost wood. Board kits and door braces are installed the same way.</p>
     ${predictAdapt().length ? `<h3>What a crew would notice</h3>${predictAdapt().map((a) => `<div class="small">⚠ ${escapeHtml(a.text)} <span class="muted">${escapeHtml(a.counter)}</span></div>`).join('')}` : ''}
+    <div class="row-btns"><button class="btn" data-act="plan">🗺 Defense Plan</button></div>
     <h3>Projects</h3><p class="small muted">Walk to a build site at home (or your car, for the car) and press ACT. One day's work per project per day; nothing decays.</p>${projectsHtml()}`;
 }
 
@@ -354,11 +362,11 @@ function mapTab() {
 // The journal is split into sections so a phone screen never has to scroll
 // through everything at once: Story · Cases · Side stories · People · Home · Calendar · Log.
 let journalSub = 'story';
-const JSUB = [['story', 'Story'], ['cases', 'Cases'], ['side', 'Side stories'], ['people', 'People'], ['homep', 'Home'], ['cal', 'Calendar'], ['log', 'Log']];
+const JSUB = [['story', 'Story'], ['cases', 'Cases'], ['side', 'Side stories'], ['people', 'People'], ['homep', 'Home'], ['cal', 'Calendar'], ['scrap', 'Scrapbook'], ['log', 'Log']];
 function journalTab() {
   const pips = { cases: caseAlert(), side: sideAlert(), people: unreadMail() ? '✉' : '' };
   const subs = JSUB.map(([k, l]) => `<button class="subtab ${k === journalSub ? 'on' : ''}" data-act="jsub" data-id="${k}">${l}${pips[k] ? ` <span class="pip">${pips[k]}</span>` : ''}</button>`).join('');
-  const body = { story: jStory, cases: jCases, side: jSide, people: jPeople, homep: jHome, cal: jCalendar, log: jLog }[journalSub]();
+  const body = { story: jStory, cases: jCases, side: jSide, people: jPeople, homep: jHome, cal: jCalendar, scrap: jScrapbook, log: jLog }[journalSub]();
   return `<div class="subtabs" role="tablist">${subs}</div>${body}`;
 }
 const caseAlert = () => (G.s.story.flags.rat && caseBoard() && caseBoard().open) || inWatch() || canDeduce() === null ? '!' : '';
@@ -489,6 +497,14 @@ function jCalendar() {
   return `${seasonBox}${weekHtml()}${ev ? `<h3>Recently</h3>${ev}` : ''}<p class="hint small">Quiet days bring their own things — friends dropping by, invitations, weather. Invitations wait a day or two in Side stories; nothing important is lost if you miss one.</p>`;
 }
 
+function jScrapbook() {
+  const list = photos().slice().reverse();
+  const grid = list.map((p) => `<figure class="photo"><img src="${p.img}" alt="${escapeHtml(p.caption)}" data-photo="${p.id}"><figcaption><b>${escapeHtml(p.caption)}</b><span class="muted small">Day ${p.day} · ${escapeHtml(p.season)} · ${escapeHtml(p.place)}</span></figcaption><button class="btn sm" data-act="delphoto" data-id="${p.id}">Remove</button></figure>`).join('');
+  return `<div class="row-btns"><button class="btn" data-act="photo">📷 Take a photo</button></div>
+    <p class="small muted">The moments that mattered get a photo on their own — a night you held the house, an old friend, a holiday. Take your own any time. Up to ${MAX_PHOTOS} are kept on this device.</p>
+    ${grid ? `<div class="photos">${grid}</div>` : '<p class="small muted">No photos yet.</p>'}`;
+}
+
 function jLog() {
   const homes = HOMES.map((h) => {
     const done = (G.s.story.done || {})[h.chapter] || (h.chapter === 1 && G.s.story.chapterComplete);
@@ -590,6 +606,8 @@ function settingsTab() {
   const saved = G.s.savedAt ? new Date(G.s.savedAt).toLocaleString() : 'never';
   const why = canSaveNow();
   return `<div class="set-grid">
+    <label>Language ${sel('language', LANGS)}</label>
+    ${lang() === 'es' ? '<p class="small muted">The story and conversations stay in English.</p>' : ''}
     <label>Sound volume <input type="range" min="0" max="100" value="${Math.round(s.sfxVolume * 100)}" data-set="sfxVolume"></label>
     <label>Music volume <input type="range" min="0" max="100" value="${Math.round(s.musicVolume * 100)}" data-set="musicVolume"></label>
     <label>${chk('aimAssist')} Aim assist (nudges aim toward nearby attackers)</label>
@@ -1014,6 +1032,47 @@ export function openEndlessPicker(onPick) {
 function boardHtml(r, n = 10, mine = null) {
   if (!r || !r.top || !r.top.length) return '<span class="muted small">No scores yet today. Be the first.</span>';
   return `<ol class="board-list">${r.top.slice(0, n).map((x) => `<li class="${mine && x.name === mine ? 'me' : ''}"><span>${escapeHtml(x.name)}</span><span class="muted">${escapeHtml(x.platform || '')}</span><b>${x.waves} waves · ${x.kills}</b></li>`).join('')}</ol><span class="muted small">${r.players} player${r.players === 1 ? '' : 's'} today</span>`;
+}
+
+/* ---------------- Defense Plan ---------------- */
+let planTool = 'sandbags', planCursor = null;
+/** For the automated test: which tool and cell the plan has selected. */
+export const planState = () => ({ tool: planTool, cursor: planCursor && [...planCursor] });
+export function openPlanner() {
+  if (!G.s || G.prequel) return;
+  const v = planView();
+  const tools = planTools();
+  if (!tools.some((t) => t.id === planTool)) planTool = tools[0].id;
+  const edit = canEditPlan();
+  const el = openModal('plan', `<h2>🗺 Defense Plan</h2>
+    <p class="small">${edit ? 'Pick what to set out, then tap a cell (or move the cursor with the arrow keys / D-pad and press Enter / A). Everything comes out of your pack.' : 'You can look, but you can only set things out when you\'re home and nobody is shooting.'}</p>
+    <div class="plan-tools">${tools.map((t) => `<button class="btn sm tab ${t.id === planTool ? 'on' : ''}" data-tool="${t.id}" ${t.n < 1 ? 'disabled' : ''}>${escapeHtml(t.label)}</button>`).join('')}</div>
+    <div class="plan-grid" data-grid tabindex="0" role="application" aria-label="Defense plan map — arrow keys move, Enter places"><canvas data-plan></canvas></div>
+    <p class="small muted plan-legend"><span class="lg g">■</span> strong <span class="lg y">■</span> worn <span class="lg r">■</span> weak (D door, W window) · <span class="lg c">■</span> cover · ○ trap · <span class="lg r">●</span> where they come from · <span class="lg b">●</span> Ruth's post · <span class="lg f">⚑</span> fallback point · ⚪ you. Cover ${v.covers} · traps ${v.traps}.</p>
+    <p class="small hl" data-msg></p>
+    <button class="btn" data-close>Done</button>`, { cls: 'wide plan' });
+  const cv = el.querySelector('[data-plan]'), grid = el.querySelector('[data-grid]');
+  const avail = Math.min(window.innerWidth - 60, 900);
+  const s = Math.max(5, Math.min(16, Math.floor(avail / v.w), Math.floor((window.innerHeight - 300) / v.h))); // the whole property fits on screen
+  if (!planCursor) { const p = G.player; planCursor = p && G.map && G.map.homeInfo ? [Math.floor(p.x / TILE), Math.floor(p.y / TILE)] : [Math.floor(v.w / 2), Math.floor(v.h / 2)]; }
+  const redraw = () => { drawPlan(cv, s, planCursor, planTool); const why = planTool !== 'remove' && planTool !== 'fallback' ? toolBlocked(planTool, planCursor[0], planCursor[1]) : null; el.querySelector('[data-msg]').textContent = why || ''; };
+  const act = () => { if (applyTool(planTool, planCursor[0], planCursor[1])) { closeModal(); openPlanner(); } else redraw(); };
+  redraw();
+  grid.addEventListener('click', (e) => {
+    const r = cv.getBoundingClientRect();
+    if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom) return;
+    planCursor = [Math.floor((e.clientX - r.left) / r.width * v.w), Math.floor((e.clientY - r.top) / r.height * v.h)];
+    act();
+  });
+  grid.addEventListener('gridnav', (e) => { planCursor = [Math.max(0, Math.min(v.w - 1, planCursor[0] + e.detail.dx)), Math.max(0, Math.min(v.h - 1, planCursor[1] + e.detail.dy))]; redraw(); });
+  grid.addEventListener('keydown', (e) => {
+    const d = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1], KeyA: [-1, 0], KeyD: [1, 0], KeyW: [0, -1], KeyS: [0, 1] }[e.code];
+    if (d) { e.preventDefault(); grid.dispatchEvent(new CustomEvent('gridnav', { detail: { dx: d[0], dy: d[1] } })); }
+    else if (e.code === 'Enter' || e.code === 'Space') { e.preventDefault(); act(); }
+  });
+  grid.addEventListener('gridact', () => act());
+  el.addEventListener('click', (e) => { const b = e.target.closest('[data-tool]'); if (b && !b.disabled) { planTool = b.dataset.tool; for (const x of el.querySelectorAll('[data-tool]')) x.classList.toggle('on', x === b); redraw(); } });
+  setTimeout(() => grid.focus(), 50);
 }
 
 /* ---------------- The Long Night ---------------- */

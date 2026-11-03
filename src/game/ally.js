@@ -10,7 +10,7 @@ import { spawnBullet, spawnParticles, addFloater } from './combat.js';
 import { derived } from './progression.js';
 import { sfx } from '../audio.js';
 import { banner, toast } from '../ui/hud.js';
-import { ruthOrder, backPost, resetOrders } from './orders.js';
+import { ruthOrder, backPost, resetOrders, fallbackPoint } from './orders.js';
 import { isNight } from './state.js';
 
 export const ALLY_MAX_HP = 140;
@@ -83,6 +83,7 @@ function allyPost() {
   const o = ruthOrder();
   if (o === 'follow' && G.player) return { x: G.player.x - Math.cos(G.player.angle) * 30, y: G.player.y - Math.sin(G.player.angle) * 30 };
   if (o === 'back') return backPost(m);
+  if (o === 'fallback' && fallbackPoint()) return fallbackPoint();
   return hi && hi.allyPost ? hi.allyPost : null;
 }
 

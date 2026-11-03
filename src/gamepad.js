@@ -116,7 +116,7 @@ function releaseGame() {
 }
 
 /* ---------------- menus, title, dialogue ---------------- */
-const FOCUSABLE = 'button, select, input, [data-tab], a[href]';
+const FOCUSABLE = 'button, select, input, [data-tab], a[href], [data-grid]';
 
 function visible(el) {
   if (el.disabled || el.closest('.hidden') || el.closest('#touch')) return false;
@@ -235,6 +235,8 @@ function navigateUi(ui, { now, down, L, R, dt }) {
   else if (now[BTN.RIGHT] || L.x > 0.6) dir = 'right';
   let fire = false;
   if (dir !== nav.dir) { nav.dir = dir; nav.t = 0.38; fire = !!dir; } else if (dir) { nav.t -= dt; if (nav.t <= 0) { nav.t = 0.11; fire = true; } }
+  // The Defense Plan's map: the D-pad moves its cursor, A uses the tool.
+  if (fire && focused && focused.hasAttribute('data-grid')) { focused.dispatchEvent(new CustomEvent('gridnav', { detail: { dx: dir === 'left' ? -1 : dir === 'right' ? 1 : 0, dy: dir === 'up' ? -1 : dir === 'down' ? 1 : 0 } })); fire = false; }
   if (fire && focused) {
     const horiz = dir === 'left' || dir === 'right';
     const isRange = focused.tagName === 'INPUT' && focused.type === 'range';
@@ -256,7 +258,8 @@ function navigateUi(ui, { now, down, L, R, dt }) {
       sfx('ui');
     }
   }
-  if (down(BTN.A) && focused) {
+  if (down(BTN.A) && focused && focused.hasAttribute('data-grid')) { focused.dispatchEvent(new CustomEvent('gridact')); }
+  else if (down(BTN.A) && focused) {
     if (focused.tagName === 'SELECT') adjust(focused, 1);
     else if (focused.tagName === 'INPUT' && focused.type === 'range') { /* left/right adjusts */ }
     else focused.click();
