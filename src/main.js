@@ -2,8 +2,8 @@
 import { G, newSave, isNight } from './game/state.js';
 import { TILE } from './config.js';
 import { clamp, dist, fmtClock, escapeHtml } from './util.js';
-import { buildCabinMap, buildTownMap, buildMillbrookMap, buildFarmMap, buildEstateMap, buildShortHillsMap, buildMansionMap, buildNewarkMap, buildBroadMap } from './world/mapgen.js';
-import { startPrequel, updatePrequel, prequelObjective } from './game/prequel.js';
+import { buildCabinMap, buildTownMap, buildMillbrookMap, buildFarmMap, buildEstateMap, buildShortHillsMap, buildMansionMap, buildNewarkMap, buildBroadMap, buildAtlanticMap } from './world/mapgen.js';
+import { startPrequel, startAC, updatePrequel, prequelObjective } from './game/prequel.js';
 import { startAssault, updateAssault, endAssault } from './game/assault.js';
 import { callAllies } from './game/story.js';
 import { chapter, homeMapId, workMapId, atHome, LAST_CHAPTER, CHAPTERS, mapChapter, loadedMapIds, visiting } from './game/chapters.js';
@@ -112,6 +112,7 @@ const MAP_BUILDERS = {
   shorthills: (h) => buildShortHillsMap(h),
   mansion: () => buildMansionMap(),
   newark: () => buildNewarkMap(),
+  atlantic: () => buildAtlanticMap(),
   broad: () => buildBroadMap(),
 };
 
@@ -476,7 +477,15 @@ function initEvents() {
     applyProjects(m);
     m.groundCanvas = buildGroundCanvas(m);
   });
-  G.events.on('prequelDone', () => {
+  G.events.on('prequelDone', (ep) => {
+    if (ep === 'ac') {
+      const el2 = openModal('prequelEnd', `<div class="chapter-card"><div class="ch-num">PREQUEL</div><h2>ATLANTIC CITY, 1994</h2><div class="ch-done">— COMPLETE —</div>
+        <p>Five years later, Leo sends Frankie and Joey Marchetti to the Delgado warehouse.</p>
+        <p class="hl">Twenty-five years later, the name Ventura is on a torn envelope by a dirt road in Pine Hollow.</p>
+        <button class="btn big primary" data-go>Back to the title</button></div>`, { closable: false, cls: 'small chapter' });
+      el2.querySelector('[data-go]').addEventListener('click', () => { closeModal(); quitToTitle(); });
+      return;
+    }
     const el = openModal('prequelEnd', `<div class="chapter-card"><div class="ch-num">PREQUEL</div><h2>NEWARK, 1999</h2><div class="ch-done">— COMPLETE —</div>
       <p>Joey Marchetti was twenty-four. His sister Angie still keeps his photograph behind the register at Marchetti's.</p>
       <p class="hl">Twenty years later, a man calling himself Frank Lowe buys a cabin at the end of a dirt road in Pine Hollow.</p>
@@ -703,6 +712,7 @@ function showTitle() {
   document.getElementById('t-ngplus').classList.toggle('hidden', !(ok && canNewGamePlus(raw)));
   if (ok) cont.innerHTML = `Continue <span class="sub">Day ${raw.time.day} · Level ${raw.stats.level} · Chapter ${raw.chapter || 1}</span>`;
   document.getElementById('t-prequel').classList.toggle('hidden', !isUnlocked('ch5'));
+  document.getElementById('t-prequel2').classList.toggle('hidden', !isUnlocked('ch5') && !isUnlocked('newark') && !isUnlocked('atlantic'));
   document.getElementById('t-trophies').textContent = `Trophies (${unlockedCount()}/${ACHIEVEMENTS.length})`;
   checkCloudOnTitle();
 }
@@ -747,6 +757,7 @@ function initTitle() {
   document.getElementById('t-longnight').addEventListener('click', go(() => openLongNight()));
   document.getElementById('t-ngplus').addEventListener('click', go(() => confirmBox('Start New Game+? Your finished story save becomes the new run: level, skills, money, weapons and gear carry over; the story starts again in Pine Hollow with a tougher family.', 'Start New Game+', () => newGamePlus(), 'Not yet')));
   document.getElementById('t-prequel').addEventListener('click', go(() => confirmBox('Newark, 1999: the night Frankie Corsetti left the family. A prequel episode of about 15 minutes. Your story save isn\'t touched.', 'Play', () => startPrequel(startGame), 'Not now')));
+  document.getElementById('t-prequel2').addEventListener('click', go(() => confirmBox('Atlantic City, 1994: five years before Newark, the night Frankie first did something the family wouldn\'t. A prequel episode of about 10 minutes. Your story save isn\'t touched.', 'Play', () => startAC(startGame), 'Not now')));
   document.getElementById('t-cloud').addEventListener('click', go(() => openCloud()));
   document.getElementById('t-trophies').addEventListener('click', go(() => openTrophies()));
   document.getElementById('t-import').addEventListener('click', go(() => pickImport(() => showTitle())));

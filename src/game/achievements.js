@@ -25,6 +25,7 @@ export const ACHIEVEMENTS = [
   { id: 'untouchable', icon: '🛡', name: 'Untouchable', desc: 'Finish the story without ever blacking out.' },
   { id: 'hard_story', icon: '💀', name: 'Made of Iron', desc: 'Finish the story on Hard.' },
   { id: 'newark', icon: '🌃', name: 'Newark, 1999', desc: 'Play Frankie\'s last night in the family.' },
+  { id: 'atlantic', icon: '🎡', name: 'Atlantic City, 1994', desc: 'Play the night Frankie first did something the family wouldn\'t.' },
   { id: 'ngplus', icon: '🔁', name: 'Once More, With Feeling', desc: 'Start a New Game+.' },
   { id: 'ngplus_done', icon: '♾', name: 'Old Habits', desc: 'Finish the story in New Game+.' },
   // People

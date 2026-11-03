@@ -2482,6 +2482,46 @@ if (want('lang')) {
   await ctx.close();
 }
 
+/* ================================================================== */
+/* v0.18: Atlantic City, 1994 — the second prequel episode             */
+/* ================================================================== */
+if (want('atlantic')) {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const page = await ctx.newPage();
+  watch(page, 'atlantic');
+  await page.goto(URL); await page.waitForSelector('#t-new');
+  const C = (fn, a) => ev(page, fn, a);
+  const mod = (path, fn, a) => page.evaluate(([p, f, a]) => import(p).then((m) => (new Function('m', 'a', 'return (' + f + ')(m, a)'))(m, a)), [path, fn.toString(), a]);
+  const saveBefore = await C(() => localStorage.getItem('cabinUnderSiege.save'));
+  await mod('./src/game/prequel.js', (m) => m.startAC(window.__cus.startGameForTest)); await sleep(800);
+  await skipDialogues(page);
+  const st0 = await C(() => ({ map: window.__cus.G.map.id, step: window.__cus.G.prequel.step, obj: document.getElementById('objective').textContent, npcs: window.__cus.G.npcs.filter((n) => n.present !== false).map((n) => n.id) }));
+  check('AC: Atlantic City, 1994 opens on the boardwalk with Big Carmine', st0.map === 'atlantic' && st0.step === 'ac_meet' && /Big Carmine/.test(st0.obj), JSON.stringify(st0));
+  await page.screenshot({ path: OUT + 'atlantic.png' });
+  const talk = async (id, pick = 0) => { await mod('./src/game/prequel.js', (m, id) => m.prequelTalk(id), id); await sleep(200); await skipDialogues(page, pick); await sleep(200); };
+  await talk('carmine94');
+  await talk('lou94');
+  await talk('rita94', 0);
+  const st1 = await C(() => ({ step: window.__cus.G.prequel.step, rita: window.__cus.G.prequel.choice.rita }));
+  check('AC: the casino, the pit boss, the motel — and how you talk to Eddie\'s wife is remembered', st1.step === 'ac_pier' && st1.rita === 'kind', JSON.stringify(st1));
+  await C(() => { const c = window.__cus, p = c.G.player, q = c.G.map.points.pier_mid; p.x = q.x; p.y = q.y + 20; p.invuln = 99999; });
+  await sleep(1200);
+  check('AC: walking out on the Steel Pier starts the fight', await C(() => window.__cus.G.prequel.step === 'ac_fight'));
+  for (let i = 0; i < 60 && (await C(() => window.__cus.G.prequel.step === 'ac_fight')); i++) { await sleep(300); await C(() => { const c = window.__cus; if (c.G.cutscene) c.dbg.skipCutscene(); for (const e of c.G.enemies) if (!e.dead && !e.gone) c.dbg.damageEnemy(e, 9999, 0, 'bullet'); }); }
+  check('AC: clear both waves and Eddie is waiting at the end of the pier', await C(() => window.__cus.G.prequel.step === 'ac_eddie'));
+  await talk('eddie94', 0);
+  check('AC: the choice about Eddie (let him go)', await C(() => window.__cus.G.prequel.choice.eddie === 'mercy' && window.__cus.G.prequel.step === 'ac_car'));
+  await mod('./src/game/prequel.js', (m) => m.prequelTalk('carmine94')); await sleep(300);
+  for (let i = 0; i < 30 && !(await C(() => window.__cus.G.modal === 'prequelEnd')); i++) { await skipDialogues(page); await C(() => { if (window.__cus.G.cutscene) window.__cus.dbg.skipCutscene(); }); await sleep(300); }
+  const end = await C(() => ({ m: window.__cus.G.modal, t: (document.querySelector('.modal-body') || {}).innerText || '', trophy: JSON.parse(localStorage.getItem('cabin-under-siege-trophies') || localStorage.getItem('cabinUnderSiege.trophies') || '{}') }));
+  check('AC: the next morning, Carmine Ventura buys the motel — and the episode ends with its own card', end.m === 'prequelEnd' && /ATLANTIC CITY, 1994/.test(end.t), end.t.slice(0, 100));
+  check('AC: the Atlantic City trophy unlocks', await C(() => import('./src/game/achievements.js').then((a) => a.isUnlocked('atlantic'))));
+  check('AC: the story save is never touched', (await C(() => localStorage.getItem('cabinUnderSiege.save'))) === saveBefore);
+  await page.click('[data-go]'); await sleep(500);
+  check('AC: the title screen has the Atlantic City button once you\'ve played a prequel', await page.isVisible('#t-prequel2'));
+  await ctx.close();
+}
+
 
 await browser.close();
 server.kill();

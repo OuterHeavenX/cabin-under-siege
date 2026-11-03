@@ -1342,3 +1342,63 @@ export function buildBroadMap() {
   m.lights.push({ x: 44 * TILE, y: 15.5 * TILE, r: 90 }); // the club's neon
   return m;
 }
+
+/* ------------------------------------------------------------------ */
+/* Prequel 2: Atlantic City, 1994 — the boardwalk, a casino, a motel     */
+/* ------------------------------------------------------------------ */
+export function buildAtlanticMap() {
+  const W = 66, H = 44;
+  const m = new GameMap('atlantic', W, H, 'Atlantic City, 1994');
+  m.stone = new Set();
+  m.fillGround(0, 0, W, H, GR.SIDEWALK);
+  // Pacific Avenue across the top, the boardwalk across the middle, the beach and the ocean below.
+  m.fillGround(0, 2, W, 3, GR.ROAD);
+  m.fillGround(0, 20, W, 4, GR.PORCH); // the boardwalk
+  m.fillGround(0, 24, W, 8, GR.DIRT); // sand
+  for (let cy = 32; cy < H; cy++) for (let cx = 0; cx < W; cx++) { m.setGround(cx, cy, GR.WATER); m.setSolid(cx, cy, SO.WATER); }
+  // The Steel Pier runs out over the water.
+  m.fillGround(44, 24, 4, 19, GR.PORCH);
+  for (let cy = 32; cy < 43; cy++) for (let cx = 44; cx < 48; cx++) m.setSolid(cx, cy, SO.NONE);
+  m.fillSolid(44, 42, 4, 1, SO.FENCE);
+
+  // The Golden Gull casino.
+  building(m, { id: 'gull', name: 'The Golden Gull', x: 6, y: 6, w: 22, h: 12, roof: '#6a4a1a', floor: GR.TILEFLOOR });
+  addDoor(m, 'gull_l', 16, 17, { ...npcDoorRec(), open: true }, 'Casino Doors');
+  addDoor(m, 'gull_r', 17, 17, { ...npcDoorRec(), open: true }, 'Casino Doors');
+  for (let cx = 7; cx < 27; cx++) if (cx !== 21) m.setSolid(cx, 11, SO.WALL); // the count room at the back
+  for (const [cx, cy] of [[9, 13], [12, 13], [9, 15], [12, 15], [22, 14], [25, 14]]) { m.fillSolid(cx, cy, 2, 1, SO.FURN); m.decor.push({ kind: 'table', x: cx, y: cy, w: 2, h: 1 }); }
+  m.fillSolid(8, 8, 6, 1, SO.COUNTER); m.decor.push({ kind: 'counter', x: 8, y: 8, w: 6, h: 1 });
+  // The Seaview Motel.
+  building(m, { id: 'seaview', name: 'Seaview Motel', x: 32, y: 7, w: 18, h: 10, roof: '#3a6a7a' });
+  for (let cy = 8; cy < 16; cy++) { m.setSolid(38, cy, SO.WALL); m.setSolid(44, cy, SO.WALL); }
+  addDoor(m, 'motel_1', 35, 16, { ...npcDoorRec(), open: true }, 'Room 4');
+  addDoor(m, 'motel_2', 41, 16, { ...npcDoorRec(), open: true }, 'Room 5');
+  addDoor(m, 'motel_3', 47, 16, { ...npcDoorRec(), open: true }, 'Office');
+  m.fillSolid(33, 8, 2, 2, SO.FURN); m.decor.push({ kind: 'bed', x: 33, y: 8, w: 2, h: 2 });
+  m.fillSolid(39, 8, 2, 2, SO.FURN); m.decor.push({ kind: 'bed', x: 39, y: 8, w: 2, h: 2 });
+  m.fillSolid(45, 8, 4, 1, SO.COUNTER); m.decor.push({ kind: 'counter', x: 45, y: 8, w: 4, h: 1 });
+  // An arcade and a salt-water taffy stand along the boardwalk.
+  building(m, { id: 'arcade', name: 'Funland Arcade', x: 53, y: 8, w: 11, h: 9, roof: '#7a2a5a' });
+  m.fillSolid(29, 19, 2, 1, SO.FURN); m.decor.push({ kind: 'stall', x: 29, y: 19, w: 2, h: 1 });
+  m.fillSolid(10, 19, 2, 1, SO.FURN); m.decor.push({ kind: 'stall', x: 10, y: 19, w: 2, h: 1 });
+  // Carmine's Lincoln on Pacific Avenue.
+  m.fillSolid(3, 1, 3, 2, SO.CAR);
+  addProp(m, { id: 'car', kind: 'car', x: 4.5 * TILE, y: 3.6 * TILE, label: 'Carmine\'s Lincoln', r: 64 });
+
+  m.spawns = {
+    walk_w: { ...P(0.5, 21.5), label: 'the boardwalk' }, walk_e: { ...P(65.5, 21.5), label: 'the boardwalk' },
+    beach: { ...P(30, 30), label: 'the beach' }, pier: { ...P(46, 41), label: 'the end of the pier' }, street: { ...P(30, 3.5), label: 'Pacific Avenue' },
+  };
+  m.points = {
+    start: P(6.5, 22), arrive: P(6.5, 22), recovery: P(6.5, 22), car: P(4.5, 4.6),
+    carmine94: P(8, 21.2), lou94: P(18, 9.6), rita94: P(36, 11), eddie_pier: P(46, 39.4), eddie_end: P(46, 40.2),
+    pier_mid: P(46, 33), motel_front: P(41, 18.5), gull_front: P(16.5, 19),
+  };
+  m.discover = [];
+  m.lights = [];
+  for (let cx = 3; cx < W; cx += 6) m.lights.push({ x: cx * TILE, y: 20.2 * TILE, r: 120, street: true });
+  for (let cy = 25; cy < 42; cy += 5) m.lights.push({ x: 44.2 * TILE, y: cy * TILE, r: 100, street: true });
+  for (const b of m.buildings) m.lights.push({ x: (b.x + b.w / 2) * TILE, y: (b.y + b.h / 2) * TILE, r: Math.max(b.w, b.h) * 15, building: b.id });
+  m.lights.push({ x: 17 * TILE, y: 18.5 * TILE, r: 140 }); // the casino marquee
+  return m;
+}

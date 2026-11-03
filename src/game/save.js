@@ -29,7 +29,7 @@ export function readSaveRaw() {
 export function canSaveNow() {
   if (!G.s || !G.player) return 'No game in progress.';
   if (G.endless) return 'Endless Siege runs aren\'t saved — your story save is untouched.';
-  if (G.prequel) return 'Newark, 1999 isn\'t saved — your story save is untouched.';
+  if (G.prequel) return `${G.prequel.ep === 'ac' ? 'Atlantic City, 1994' : 'Newark, 1999'} isn't saved — your story save is untouched.`;
   if (G.siegeActive) return 'You can\'t save during an attack.';
   if (G.assault) return 'You can\'t save inside the Vescari house.';
   if (G.enemies.some((e) => !e.dead && !e.gone)) return 'You can\'t save with attackers nearby.';

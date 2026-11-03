@@ -28,7 +28,7 @@ export function weather() {
     const siegeTonight = !!(w.siege && night);
     const r = Math.random();
     let kind = 'clear';
-    if (G.prequel) kind = 'rain';
+    if (G.prequel) kind = G.prequel.ep === 'ac' ? 'clear' : 'rain'; // a clear August night on the shore; rain on Ferry Street
     else if (G.endless && (G.endless.mod === 'fog' || (G.endless.run && G.endless.run.omens.includes('fog')))) kind = 'fog';
     else if (G.endless) kind = r < 0.35 ? 'rain' : r < 0.5 ? 'fog' : 'clear';
     else if (siegeTonight) kind = r < 0.45 ? 'rain' : r < 0.6 ? 'fog' : 'clear';

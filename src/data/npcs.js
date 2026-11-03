@@ -412,6 +412,15 @@ Object.assign(NPCS, {
   dante99: p99('Dante Ruggiero', 'Leo\'s new right hand', 'Thirty-one and climbing. Never raises his voice. Never needs to.', { body: '#1a1a1e', hair: '#151515', skin: '#cf9a74' }, 'dante99'),
 });
 
+// Atlantic City, 1994 (the second prequel).
+const p94 = (name, title, bio, look, pt) => ({ name, title, bio, ...look, map: 'atlantic', home: ['atlantic', pt], schedule: [[0, 24 * 60, 'atlantic', pt]], homeLine: '', idle: ['...'], friendly: ['...'], prequel: true });
+Object.assign(NPCS, {
+  carmine94: p94('Big Carmine', 'Frankie\'s partner tonight', 'Twenty-nine, already the size of a door. Loyal to Leo the way a dog is loyal: completely, and without asking why.', { body: '#1b1b20', hair: '#151515', skin: '#cf9a74' }, 'carmine94'),
+  lou94: p94('Lou Pagano', 'Pit boss at the Golden Gull', 'Thirty years on the casino floor. Has seen every kind of trouble walk in, and most of it walk back out.', { body: '#3a2a4a', hair: '#9a9a9a', skin: '#e0b896' }, 'lou94'),
+  rita94: p94('Rita Russo', 'Eddie\'s wife', 'A nurse at AtlantiCare. A sleeping six-year-old on the motel bed and a suitcase she packed in ten minutes.', { body: '#6a8aa8', hair: '#5a3a1a', skin: '#e8b898' }, 'rita94'),
+  eddie94: p94('Eddie Russo', 'Count room, the Golden Gull', 'Skimmed sixty thousand dollars over two years to pay for his daughter\'s surgery. Not a gangster. That\'s the problem.', { body: '#5a5a3a', hair: '#2a1a12', skin: '#d8a27e' }, 'eddie_end'),
+});
+
 // Unnamed townsfolk who walk around during the day, per map.
 export const TOWNSFOLK = {
   shorthills: [

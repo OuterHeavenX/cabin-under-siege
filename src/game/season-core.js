@@ -27,7 +27,7 @@ export function seasonIdOf(day) {
 export function seasonId() {
   if (pinned()) return pinned();
   if (!G.s) return 'autumn';
-  if (G.prequel) return 'autumn'; // Newark, October 1999
+  if (G.prequel) return G.prequel.ep === 'ac' ? 'summer' : 'autumn'; // Atlantic City in August; Newark in October
   if (G.endless) return G.endless.season || 'autumn';
   return seasonIdOf(G.s.time.day);
 }

@@ -12,7 +12,7 @@ const ES = {
   '“You left the family. The family didn’t leave you.”': '«Dejaste a la familia. La familia no te dejó a ti.»',
   'Continue': 'Continuar', 'New Game': 'Nueva partida', 'Endless Siege': 'Asedio sin fin', 'The Long Night': 'La Noche Larga',
   'Ten waves to dawn · pick a boon after each': 'Diez oleadas hasta el amanecer · una mejora tras cada una',
-  'Newark, 1999': 'Newark, 1999', '☁ Cloud Save': '☁ Guardado en la nube', 'Trophies': 'Trofeos', 'Import Save': 'Importar partida', 'Controls': 'Controles',
+  'Newark, 1999': 'Newark, 1999', 'Atlantic City, 1994': 'Atlantic City, 1994', '☁ Cloud Save': '☁ Guardado en la nube', 'Trophies': 'Trofeos', 'Import Save': 'Importar partida', 'Controls': 'Controles',
   'Quit to Desktop': 'Salir al escritorio',
   'Keep your level, skills and gear · tougher family': 'Conserva tu nivel, habilidades y equipo · una familia más dura',
   'Best in landscape on phones. Sound starts when you tap a button.': 'En el móvil, mejor en horizontal. El sonido empieza al tocar un botón.',

@@ -34,6 +34,11 @@ export const CHAPTERS = {
     id: 6, name: 'Newark, 1999', place: 'Newark', homeMap: 'newark', workMap: 'newark', maps: ['newark'],
     neighbor: 'joey', shopkeeper: 'sal99', jobContact: 'carmine99', jobPlace: '', storeName: '', hardwareName: '', firstStep: 'prequel', prequel: true,
   },
+  // The second prequel episode (Atlantic City, 1994).
+  7: {
+    id: 7, name: 'Atlantic City, 1994', place: 'Atlantic City', homeMap: 'atlantic', workMap: 'atlantic', maps: ['atlantic'],
+    neighbor: 'carmine94', shopkeeper: 'lou94', jobContact: 'carmine94', jobPlace: '', storeName: '', hardwareName: '', firstStep: 'prequel', prequel: true,
+  },
 };
 
 export const LAST_CHAPTER = 5;

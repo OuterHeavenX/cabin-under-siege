@@ -15,6 +15,8 @@ import { playCutscene } from '../ui/cutscene.js';
 import { banner, toast, centerMessage } from '../ui/hud.js';
 import { sfx, setMusic } from '../audio.js';
 import { unlock } from './achievements.js';
+import { acObjective, acTalk, acProp, updateAC, acDefeat } from './prequel_ac.js';
+export { startAC } from './prequel_ac.js';
 
 const ME = 'You';
 const L = 'Leo Vescari', J = 'Joey Marchetti', D = 'Dante Ruggiero';
@@ -32,7 +34,7 @@ const OBJ = {
   pq_end: '',
 };
 
-export const prequelObjective = () => (G.prequel ? OBJ[G.prequel.step] || '' : '');
+export const prequelObjective = () => (!G.prequel ? '' : G.prequel.ep === 'ac' ? acObjective() : OBJ[G.prequel.step] || '');
 
 /** `begin` is main.js's startGame. */
 export function startPrequel(begin) {
@@ -73,6 +75,7 @@ function setStep(step) {
 export function prequelTalk(id) {
   const P = G.prequel;
   if (!P) return false;
+  if (P.ep === 'ac') return acTalk(id);
   const st = P.step;
   if (id === 'leo99') {
     if (st !== 'pq_club') { playDialogue([{ who: L, text: 'Why are you still here, Frankie? Go. And Frankie — take care of Joey.' }]); return true; }
@@ -123,6 +126,7 @@ export function prequelTalk(id) {
 
 /** Interactions with the episode's props and the car. */
 export function prequelProp(pr) {
+  if (G.prequel && G.prequel.ep === 'ac') return acProp(pr);
   const st = G.prequel && G.prequel.step;
   if (pr.kind === 'car') {
     if (st === 'pq_drive') return { label: 'Drive to the Delgado warehouse', short: 'DRIVE', prio: 3, action: () => driveToWarehouse() };
@@ -200,6 +204,7 @@ const alive = () => G.enemies.filter((e) => !e.dead && !e.gone).length;
 export function updatePrequel(dt) {
   const P = G.prequel;
   if (!P) return;
+  if (P.ep === 'ac') { updateAC(dt); return; }
   G.s.time.minute = 23 * 60 + 40; // the night never ends
   if (P.step === 'pq_fight' && !G.transition && !G.cutscene) {
     if (P.waveT > 0) { P.waveT -= dt; if (P.waveT <= 0) { spawnGroup(P.waves[P.wave], 1.05); banner(`They\'re coming from ${P.waves[P.wave].map(([d]) => G.map.spawns[d].label).join(' and ')}!`, 'danger', 3); } }
@@ -288,6 +293,7 @@ function snapshot() {
 /** Falling in Newark restarts the current fight. */
 export function prequelDefeat() {
   const P = G.prequel;
+  if (P.ep === 'ac') { acDefeat(); return; }
   for (const e of G.enemies) e.gone = true;
   G.enemies = [];
   G.bullets = [];
