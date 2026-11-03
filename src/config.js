@@ -1,6 +1,6 @@
 // Global tuning constants.
 
-export const GAME_VERSION = '0.18.1';
+export const GAME_VERSION = '0.19.0';
 export const TILE = 32;
 export const SAVE_VERSION = 3;
 export const SAVE_KEY = 'cabinUnderSiege.save';

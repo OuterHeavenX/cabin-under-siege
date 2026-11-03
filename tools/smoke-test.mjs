@@ -2553,6 +2553,40 @@ if (want('gate')) {
   await ctx.close();
 }
 
+/* ================================================================== */
+/* v0.19: a living world — wind, birds, critters, clouds, traffic      */
+/* ================================================================== */
+if (want('ambient')) {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const page = await ctx.newPage();
+  watch(page, 'ambient');
+  await page.goto(URL); await page.waitForSelector('#t-new');
+  const C = (fn, a) => ev(page, fn, a);
+  const mod = (path, fn, a) => page.evaluate(([p, f, a]) => import(p).then((m) => (new Function('m', 'a', 'return (' + f + ')(m, a)'))(m, a)), [path, fn.toString(), a]);
+  await C(() => window.__cus.newGame('normal')); await sleep(500); await skipDialogues(page);
+  await C(() => { const c = window.__cus; c.dbg.closeAll(); c.G.s.time.minute = 11 * 60; c.dbg.setWeather('clear'); c.loadMap('cabin', c.G.maps.cabin.points.porch); });
+  await sleep(9000);
+  const st = await mod('./src/world/ambient.js', (m) => m.ambientState());
+  check('Ambient: by day, animals turn up around you', st.critters.length >= 2, JSON.stringify(st.critters));
+  const flew = await C(() => import('./src/world/ambient.js').then((m) => new Promise((res) => { const c = window.__cus; const s0 = m.ambientState(); const calm = s0.critters.filter((c) => c.kind === 'bird' || c.kind === 'rabbit' || c.kind === 'squirrel').length; c.G.player.invuln = 99999; c.dbg.startSiege({ plan: { kind: 'raid', hpMult: 1, waves: [{ dir: Object.keys(c.G.map.spawns)[0], types: ['scout'], delay: 999 }] } }); setTimeout(() => { const s1 = m.ambientState(); c.G.siegeActive = false; c.G.siege = null; c.G.enemies = []; res({ before: calm, flying: s1.critters.filter((c) => c.kind === 'bird' && c.state === 'fly').length, fleeing: s1.critters.filter((c) => c.state === 'flee').length }); }, 300); })));
+  check('Ambient: trouble scatters them — birds take off, rabbits bolt', flew.before === 0 || flew.flying + flew.fleeing > 0, JSON.stringify(flew));
+  await page.screenshot({ path: OUT + 'ambient-cabin.png' });
+  // Traffic in town, stopping for you.
+  await C(() => { const c = window.__cus; c.loadMap('town', c.G.maps.town.points.store_door); });
+  await sleep(500);
+  const lanes = await mod('./src/world/ambient.js', (m) => m.ambientState().lanes);
+  check('Ambient: the town has a road with traffic lanes', lanes >= 1, String(lanes));
+  for (let i = 0; i < 40 && (await mod('./src/world/ambient.js', (m) => m.ambientState().cars)) === 0; i++) await sleep(500);
+  check('Ambient: cars drive through town', (await mod('./src/world/ambient.js', (m) => m.ambientState().cars)) >= 1);
+  await page.screenshot({ path: OUT + 'ambient-town.png' });
+  await C(() => { const c = window.__cus; c.G.player.invuln = 99999; c.dbg.startSiege({ plan: { kind: 'raid', hpMult: 1, waves: [{ dir: Object.keys(c.G.maps.cabin.spawns)[0], types: ['scout'], delay: 999 }] } }); });
+  await sleep(300);
+  check('Ambient: during an attack the traffic and the animals clear out', await mod('./src/world/ambient.js', (m) => m.ambientState().cars === 0));
+  await C(() => { const c = window.__cus; c.G.siegeActive = false; c.G.siege = null; c.G.enemies = []; });
+  check('Ambient: the living world runs without errors', await C(() => window.__cus.G.running));
+  await ctx.close();
+}
+
 
 await browser.close();
 server.kill();

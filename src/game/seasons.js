@@ -114,7 +114,7 @@ export function paintSeason(g, m) {
         g.fillStyle = 'rgba(236,240,245,0.35)'; g.fillRect(x, y, TILE, TILE);
       } else {
         const trod = gt === GR.DIRT || gt === GR.GRAVEL; // paths stay readable: thinner, trodden snow
-        g.fillStyle = `rgba(238,242,247,${trod ? 0.52 + n * 0.05 : 0.86 + n * 0.04})`; g.fillRect(x, y, TILE, TILE);
+        g.fillStyle = `rgba(238,242,247,${trod ? 0.54 : 0.88})`; g.fillRect(x, y, TILE, TILE);
         g.fillStyle = 'rgba(190,205,222,0.35)';
         for (let k = 0; k < 3; k++) { const hx = x + noise(cx * 3 + k, cy) * 30, hy = y + noise(cx, cy * 3 + k) * 30; g.beginPath(); g.ellipse(hx, hy, 5 + n * 4, 2.5, 0.3, 0, Math.PI * 2); g.fill(); }
       }
@@ -134,7 +134,7 @@ export function paintSeason(g, m) {
         if (n > 0.82) for (let k = 0; k < 4; k++) { g.fillStyle = ['#f2f0f8', '#f4d84a', '#c88ad8'][k % 3]; g.fillRect(x + noise(cx * 9 + k, cy) * 28 + 2, y + noise(cx, cy * 9 + k) * 28 + 2, 2, 2); }
       } else if (gt === GR.DIRT) { g.fillStyle = 'rgba(60,40,20,0.22)'; g.fillRect(x, y, TILE, TILE); }
     } else if (id === 'summer') {
-      if (gt === GR.GRASS) { g.fillStyle = `rgba(190,170,80,${0.1 + n * 0.08})`; g.fillRect(x, y, TILE, TILE); }
+      if (gt === GR.GRASS) { g.fillStyle = 'rgba(190,170,80,0.12)'; g.fillRect(x, y, TILE, TILE); }
     }
   }
   return id;

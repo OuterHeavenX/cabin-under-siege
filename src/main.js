@@ -69,6 +69,7 @@ import { buySkill } from './game/progression.js';
 import { canOrder, orderOptions } from './game/orders.js';
 import { updateScrapbook, initScrapbookEvents } from './game/scrapbook.js';
 import { applyLanguage } from './i18n.js';
+import { updateAmbient } from './world/ambient.js';
 import { damagePlayer } from './game/player.js';
 
 /* ---------------- tiny event bus ---------------- */
@@ -258,6 +259,7 @@ function update(dt) {
   updateRat(dt);
   if (!G.endless && !G.prequel) { updateLife(dt); updateLetters(dt); }
   updateSeasons(dt);
+  updateAmbient(dt);
   updateKeystone(dt);
   updateJobs(dt);
   if (!G.endless && !G.prequel) { updateStory(dt); checkDiscovery(); }

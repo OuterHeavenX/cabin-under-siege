@@ -22,6 +22,7 @@ import { ITEMS } from '../data/items.js';
 import { REGROW_DAYS } from '../game/activities.js';
 import { NATURAL, paintNaturalBase, paintNaturalDetails, paintWater } from './terrain.js';
 import { paintSeason, canopyStyle, drawTracks, frozen, seasonId } from '../game/seasons.js';
+import { drawGrass, drawCritters, drawAir, drawCloudShadows, drawTraffic } from './ambient.js';
 
 let lightCanvas = null, lctx = null;
 
@@ -57,7 +58,8 @@ export function buildGroundCanvas(m) {
       const h = hash2(cx, cy);
       const x = cx * TILE, y = cy * TILE;
       if (gt !== GR.WATER) {
-        g.fillStyle = gt === GR.TILEFLOOR ? cols[(cx + cy) & 1] : cols[Math.floor(h * cols.length)];
+        // Roads and gravel are one surface (grain and cracks give them life); a per-tile shade reads as a checkerboard.
+        g.fillStyle = gt === GR.TILEFLOOR ? cols[(cx + cy) & 1] : gt === GR.ROAD || gt === GR.GRAVEL ? cols[0] : cols[Math.floor(h * cols.length)];
         g.fillRect(x, y, TILE, TILE);
       }
       detailTile(g, m, gt, cx, cy, x, y, h);
@@ -1214,6 +1216,10 @@ export function render(ctx) {
     }
   }
 
+  // Grass moving in the wind, and the small animals in it.
+  drawGrass(ctx, m, cx0, cy0, cx1, cy1, t);
+  drawCritters(ctx, inView, t);
+
   // Water shimmer (not on winter ice)
   const iceNow = frozen();
   ctx.strokeStyle = 'rgba(200,235,255,0.22)';
@@ -1281,7 +1287,8 @@ export function render(ctx) {
     canopies.push(tr);
   }
 
-  // Cars & props with bodies
+  // Cars & props with bodies (and traffic on town roads)
+  drawTraffic(ctx, inView, drawCar);
   for (const pr of m.props) {
     if (pr.kind === 'car' && inView(pr.x, pr.y)) drawCar(ctx, pr.x - 0, pr.y, '#8c2f2f', true);
     if (pr.kind === 'strange_car' && inView(pr.x, pr.y)) drawCar(ctx, pr.x, pr.y, '#16181c', false, true);
@@ -1487,6 +1494,9 @@ export function render(ctx) {
   }
 
   if (!lowQuality()) drawSmoke(ctx, m, t);
+  // Cloud shadows slide over everything, roofs included; birds and butterflies are above it all.
+  drawCloudShadows(ctx, m, t);
+  drawAir(ctx, inView, t, vx0, vy0, vx1, vy1);
 
   // Doors and windows (on walls, above roofs so they're always readable)
   for (const b of m.blockers.values()) {
@@ -1598,6 +1608,14 @@ function gradeScreen(ctx, hr, dk, w, h, dpr) {
     ctx.fillStyle = `rgba(${(r / a) | 0},${(gg / a) | 0},${(bb / a) | 0},${Math.min(0.35, lq ? a * 0.35 : a)})`;
     ctx.fillRect(0, 0, w * dpr, h * dpr);
     ctx.restore();
+  }
+  // A soft vignette, like looking through a lens; a touch of warm sunlight at midday.
+  if (!lq) {
+    const vg = ctx.createRadialGradient(w * dpr / 2, h * dpr / 2, Math.min(w, h) * dpr * 0.45, w * dpr / 2, h * dpr / 2, Math.max(w, h) * dpr * 0.75);
+    vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, `rgba(10,8,4,${0.22 * (1 - dk * 0.5)})`);
+    ctx.fillStyle = vg; ctx.fillRect(0, 0, w * dpr, h * dpr);
+    const noon = ramp(9, 11, 14, 16) * (1 - dk);
+    if (noon > 0.01) { ctx.save(); ctx.globalCompositeOperation = 'soft-light'; ctx.fillStyle = `rgba(255,236,190,${0.14 * noon})`; ctx.fillRect(0, 0, w * dpr, h * dpr); ctx.restore(); }
   }
   const warm = ramp(17.5, 18.6, 19.3, 20.8) * (1 - dk * 0.6);
   if (warm > 0.01) { ctx.fillStyle = `rgba(255,120,50,${(lq ? 0.04 : 0.08) * warm})`; ctx.fillRect(0, 0, w * dpr, h * dpr); }
