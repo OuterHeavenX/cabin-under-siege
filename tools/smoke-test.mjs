@@ -2522,6 +2522,37 @@ if (want('atlantic')) {
   await ctx.close();
 }
 
+/* ================================================================== */
+/* Regression: the farm gate step says what's left and points at it    */
+/* ================================================================== */
+if (want('gate')) {
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+  const page = await ctx.newPage();
+  watch(page, 'gate');
+  await page.goto(URL); await page.waitForSelector('#t-new');
+  const C = (fn, a) => ev(page, fn, a);
+  await C(() => window.__cus.newGame('normal')); await sleep(500); await skipDialogues(page);
+  await C(() => { const c = window.__cus; c.G.s.story.done = { 1: true, 2: true }; c.G.s.story.chapterComplete = true; c.G.s.world.siege = null; c.dbg.moveToChapter(3); });
+  await sleep(500); await page.click('[data-go]').catch(() => {}); await sleep(300); await skipDialogues(page);
+  await C(() => { const c = window.__cus; if (c.G.cutscene) c.dbg.skipCutscene(); c.dbg.closeAll(); });
+  await skipDialogues(page);
+  await C(() => { const c = window.__cus, s = c.G.s, o = s.home.openings; s.story.step = 'ch3_fortify'; s.story.flags.fortified = 0; o.gate_l.hp = o.gate_l.baseHp; o.gate_r.hp = 70; s.time.minute = 12 * 60; c.loadMap('farm', c.G.maps.farm.points.gate); });
+  await sleep(500);
+  const obj = await C(() => document.getElementById('objective').textContent);
+  check('Gate: the objective says which half is fixed and how many defenses are left', /left ✓/.test(obj) && /right \d+%/.test(obj) && /defenses 0\/2/.test(obj), obj);
+  const wp = await C(() => import('./src/game/story.js').then((m) => m.storyWaypoint()));
+  check('Gate: the arrow points at the half that still needs work', wp && wp.label === 'Gate (right)', JSON.stringify(wp));
+  const lbl = await C(() => { const c = window.__cus, m = c.G.map, b = [...m.blockers.values()].find((x) => x.id === 'gate_l'); c.G.player.x = b.cx * 32 + 16; c.G.player.y = b.cy * 32 + 40; return new Promise((r) => setTimeout(() => r(c.G.interactTarget && c.G.interactTarget.label), 300)); });
+  check('Gate: the fixed half says it\'s repaired', /repaired ✓/.test(lbl || ''), lbl);
+  await C(() => { const c = window.__cus, o = c.G.s.home.openings; o.gate_r.hp = o.gate_r.baseHp; c.G.events.emit('repaired', {}); });
+  const wp2 = await C(() => import('./src/game/story.js').then((m) => m.storyWaypoint()));
+  check('Gate: with the gate done, the arrow moves to the house for the defenses', wp2 && wp2.label === 'Defenses', JSON.stringify(wp2));
+  await C(() => { const c = window.__cus; c.G.events.emit('defenseInstalled', 'trap'); c.G.events.emit('defenseInstalled', 'cover'); });
+  await sleep(400); await skipDialogues(page);
+  check('Gate: both halves and two defenses start the attack night', await C(() => window.__cus.G.s.story.step === 'ch3_siege'));
+  await ctx.close();
+}
+
 
 await browser.close();
 server.kill();

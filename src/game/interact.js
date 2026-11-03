@@ -214,8 +214,10 @@ function blockerAction(b) {
   const combat = inCombat();
   const opts = [];
   if (b.kind === 'door') {
-    if (!b.broken) opts.push({ label: b.rec.open ? `Close ${b.label}` : `Open ${b.label}`, action: () => toggleDoor(b) });
     const need = repairNeed(b);
+    // A gate half that's already fixed says so (players look for the other half).
+    const done = b.rec.gate && !need ? ' — repaired ✓' : '';
+    if (!b.broken) opts.push({ label: b.rec.open ? `Close ${b.label}${done}` : `Open ${b.label}${done}`, action: () => toggleDoor(b) });
     if (need && !combat) opts.push({ label: `${need.label} — ${need.cost} wood`, action: () => startRepair(b, 'door'), disabled: count('wood') < need.cost });
     if (!b.rec.reinforced && count('door_brace') > 0 && !combat) opts.push({ label: 'Reinforce with Door Brace Kit', action: () => installBrace(b) });
   } else {

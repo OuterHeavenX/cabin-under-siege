@@ -25,6 +25,7 @@ import { addEvidence } from './evidence.js';
 import { answerCall } from './letters.js';
 import { visiting, here } from './chapters.js';
 import { keystoneObjective, keystoneStage, keystoneWaypoint } from './keystone.js';
+import { TILE } from '../config.js';
 import { LIFE_STEPS } from '../data/life.js';
 
 const ME = 'Frank';
@@ -81,7 +82,7 @@ export const STEPS = {
   ch3_job: { obj: 'Take and complete a job from the co-op board.' },
   endless: { obj: () => (G.endless && G.endless.run ? `The Long Night: hold until dawn — wave ${Math.min(10, G.endless.wave + (G.endless.state === 'fight' ? 0 : 1))} of 10.${G.endless.run.omens.length ? ` Omens: ${G.endless.run.omens.length}.` : ''}` : 'Endless Siege: survive as many waves as you can.') },
   ch3_deputy: { obj: 'A sheriff\'s deputy is waiting at your farmhouse (daytime).' },
-  ch3_fortify: { obj: 'Repair the farm gate (both halves) and install two defenses.' },
+  ch3_fortify: { obj: () => fortifyObjective('farm gate', 2) },
   ch3_siege: { obj: 'Vinnie Vescari is coming. Be home by 10 PM — and hold the farm.' },
   ch3_ledger: { obj: 'Search Vinnie for whatever he was carrying.' },
   ch3_ingrid_truth: { obj: 'Show Ingrid what you found.' },
@@ -92,7 +93,7 @@ export const STEPS = {
   ch4_find_work: { obj: 'Find Walt Bishop at the Point Yacht Club in Port Whitcombe.' },
   ch4_job: { obj: 'Take and complete a job from the yacht club board.' },
   ch4_reyes: { obj: 'A woman in a grey suit is waiting on the estate dock (daytime).' },
-  ch4_fortify: { obj: 'Repair the iron gate (both halves) and install three defenses. The lake side is wide open.' },
+  ch4_fortify: { obj: () => `${fortifyObjective('iron gate', 3)} The lake side is wide open.` },
   ch4_siege: { obj: 'Nico Vescari is coming — by road and by water. Be home by 10 PM and hold the manor.' },
   ch4_ring: { obj: 'Search the lakeshore for whatever Nico dropped.' },
   ch4_eleanor_truth: { obj: 'Tell Mrs. Whitcombe what happened.' },
@@ -243,7 +244,7 @@ export function storyWaypoint() {
       return { map: 'farm', x: jb.x, y: jb.y, label: 'Job board' };
     }
     case 'ch3_deputy': return { map: 'farm', ...G.maps.farm.points.deputy, label: 'Deputy' };
-    case 'ch3_fortify': return { map: 'farm', ...G.maps.farm.points.gate, label: 'Gate' };
+    case 'ch3_fortify': return fortifyWaypoint('farm');
     case 'ch3_siege': return { map: 'farm', ...G.maps.farm.points.cabin_in, label: 'Farmhouse' };
     case 'ch3_ledger': { const pk = G.pickups.find((p) => p.kind === 'ledger'); return pk ? { map: G.map.id, x: pk.x, y: pk.y, label: 'Ledger' } : null; }
     case 'ch3_ingrid_truth': return { ...npcPoint('ingrid'), label: 'Ingrid' };
@@ -276,7 +277,7 @@ export function storyWaypoint() {
       return { map: 'estate', x: jb.x, y: jb.y, label: 'Job board' };
     }
     case 'ch4_reyes': return { map: 'estate', ...G.maps.estate.points.reyes, label: 'Dock' };
-    case 'ch4_fortify': return { map: 'estate', ...G.maps.estate.points.gate, label: 'Iron gate' };
+    case 'ch4_fortify': return fortifyWaypoint('estate');
     case 'ch4_siege': return { map: 'estate', ...G.maps.estate.points.cabin_in, label: 'Manor' };
     case 'ch4_ring': { const pk = G.pickups.find((p) => p.kind === 'signet'); return pk ? { map: G.map.id, x: pk.x, y: pk.y, label: 'Ring' } : null; }
     case 'ch4_eleanor_truth': return { ...npcPoint('eleanor'), label: 'Eleanor' };
@@ -845,6 +846,26 @@ function checkPrepared() {
     { who: ME, text: 'But that grey coat found a cabin at the end of an unmarked road in a town of four hundred people. Nobody finds that by accident.' },
     { who: ME, text: 'Somebody in Pine Hollow told him. And whoever it is will tell him when I\'m asleep, too. I\'ve got a few days before they come back in force.' },
   ], () => { startRatCase(); setStep('ch1_rat'); });
+}
+
+/* ---- Fortify steps (Chapters 3 and 4): say exactly what's left, and point at it. ---- */
+const halfMax = (o) => (o.baseHp || 100) + (o.reinforced ? 150 : 0);
+const halfOk = (o) => !!o && o.hp >= halfMax(o) - 0.5;
+function fortifyObjective(name, need) {
+  const o = G.s.home.openings;
+  const half = (k, side) => (halfOk(o[k]) ? `${side} ✓` : `${side} ${o[k] ? Math.round((o[k].hp / halfMax(o[k])) * 100) : 0}%`);
+  const n = Math.min(need, G.s.story.flags.fortified || 0);
+  const gate = halfOk(o.gate_l) && halfOk(o.gate_r) ? `${name[0].toUpperCase() + name.slice(1)} repaired ✓` : `Repair the ${name} (${half('gate_l', 'left')} · ${half('gate_r', 'right')})`;
+  return `${gate} · defenses ${n}/${need} (board a window, brace a door, set a trap or cover, or install a light or alarm).`;
+}
+function fortifyWaypoint(mapId) {
+  const m = G.maps[mapId], o = G.s.home.openings;
+  for (const k of ['gate_l', 'gate_r']) {
+    if (halfOk(o[k])) continue;
+    const b = [...m.blockers.values()].find((x) => x.id === k);
+    if (b) return { map: mapId, x: b.cx * TILE + 16, y: b.cy * TILE + 16, label: k === 'gate_l' ? 'Gate (left)' : 'Gate (right)' };
+  }
+  return { map: mapId, ...m.points.cabin_in, label: 'Defenses' };
 }
 
 function checkFarmReady() {
