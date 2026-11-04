@@ -41,6 +41,8 @@ function watch(page, label) {
   if (!label.startsWith('life') && !label.startsWith('seasons') && !label.startsWith('keystone')) page.addInitScript(() => { window.__cusNoEvents = true; });
   // Everything written before seasons runs in autumn (the season the game starts in), whatever day it reaches.
   if (!label.startsWith('seasons')) page.addInitScript(() => { window.__cusSeason = 'autumn'; });
+  // Everything written before the 3D view runs in the classic 2D view (fast, and what it was written for).
+  if (!label.startsWith('3d')) page.addInitScript(() => { window.__cus2D = true; });
   page.on('console', (m) => { if (m.type() === 'error') errors.push(`[${label}] console: ${m.text()}`); });
   page.on('pageerror', (e) => errors.push(`[${label}] pageerror: ${e.message}`));
 }
@@ -2048,7 +2050,9 @@ if (want('life')) {
   await mod('./src/game/letters.js', (m) => { m.romancePostgame(); });
   await C(() => { window.__cus.G.s.time.minute = 11 * 60; window.__cus.G.s.life.eventDay = window.__cus.G.s.time.day; window.__cus.loadMap('shorthills', window.__cus.G.maps.shorthills.points.porch); });
   await sleep(3500);
-  const crownTxt = await C(() => document.getElementById('dlg-text').textContent);
+  // The letter types itself out; wait for the line rather than reading it mid-reveal.
+  let crownTxt = '';
+  for (let i = 0; i < 30 && !/what you are now/.test(crownTxt); i++) { crownTxt = await C(() => document.getElementById('dlg-text').textContent); if (!/what you are now/.test(crownTxt)) await sleep(100); }
   await skipDialogues(page);
   check('Life: after the story, the ending matters (as head of the family, Dee writes that she can\'t)', /what you are now/.test(crownTxt) && await C(() => window.__cus.G.s.life.romance.path === 'friend'), crownTxt.slice(0, 60));
   check('Life: life after the story has an objective and no attacks scheduled', /Life after the story/.test(await C(() => document.getElementById('objective').textContent)) && await C(() => !window.__cus.G.s.world.siege));
@@ -2566,7 +2570,9 @@ if (want('ambient')) {
   await C(() => window.__cus.newGame('normal')); await sleep(500); await skipDialogues(page);
   await C(() => { const c = window.__cus; c.dbg.closeAll(); c.G.s.time.minute = 11 * 60; c.dbg.setWeather('clear'); c.loadMap('cabin', c.G.maps.cabin.points.porch); });
   await sleep(9000);
-  const st = await mod('./src/world/ambient.js', (m) => m.ambientState());
+  // Animals spawn at random (one try every few seconds, and a try can find no spot): keep looking for a while.
+  let st = await mod('./src/world/ambient.js', (m) => m.ambientState());
+  for (let i = 0; i < 16 && st.critters.length < 2; i++) { await sleep(1000); st = await mod('./src/world/ambient.js', (m) => m.ambientState()); }
   check('Ambient: by day, animals turn up around you', st.critters.length >= 2, JSON.stringify(st.critters));
   const flew = await C(() => import('./src/world/ambient.js').then((m) => new Promise((res) => { const c = window.__cus; const s0 = m.ambientState(); const calm = s0.critters.filter((c) => c.kind === 'bird' || c.kind === 'rabbit' || c.kind === 'squirrel').length; c.G.player.invuln = 99999; c.dbg.startSiege({ plan: { kind: 'raid', hpMult: 1, waves: [{ dir: Object.keys(c.G.map.spawns)[0], types: ['scout'], delay: 999 }] } }); setTimeout(() => { const s1 = m.ambientState(); c.G.siegeActive = false; c.G.siege = null; c.G.enemies = []; res({ before: calm, flying: s1.critters.filter((c) => c.kind === 'bird' && c.state === 'fly').length, fleeing: s1.critters.filter((c) => c.state === 'flee').length }); }, 300); })));
   check('Ambient: trouble scatters them — birds take off, rabbits bolt', flew.before === 0 || flew.flying + flew.fleeing > 0, JSON.stringify(flew));
@@ -2585,6 +2591,71 @@ if (want('ambient')) {
   await C(() => { const c = window.__cus; c.G.siegeActive = false; c.G.siege = null; c.G.enemies = []; });
   check('Ambient: the living world runs without errors', await C(() => window.__cus.G.running));
   await ctx.close();
+}
+
+/* ================================================================== */
+/* v0.20: the 3D view and the tactical HUD                             */
+/* ================================================================== */
+if (want('3d')) {
+  const b3 = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+  const ctx = await b3.newContext({ viewport: { width: 1280, height: 800 } });
+  const page = await ctx.newPage();
+  watch(page, '3d');
+  await page.goto(URL); await page.waitForSelector('#t-new');
+  const C = (fn, a) => ev(page, fn, a);
+  const mod = (path, fn, a) => page.evaluate(([p, f, a]) => import(p).then((m) => (new Function('m', 'a', 'return (' + f + ')(m, a)'))(m, a)), [path, fn.toString(), a]);
+  await C(() => window.__cus.newGame('normal')); await sleep(1500); await skipDialogues(page);
+  await C(() => { const c = window.__cus; c.dbg.closeAll(); c.G.s.time.minute = 12 * 60; c.dbg.setWeather('clear'); c.loadMap('cabin', c.G.maps.cabin.points.porch); });
+  await sleep(2500);
+  const st = await mod('./src/world/render3d.js', (m) => m.view3dState());
+  check('3D: the 3D view is on by default, over the world (WebGL canvas, overlays on top)', st.canvas && st.map === 'cabin' && await C(() => !!window.__cus.G.view3d), JSON.stringify(st));
+  const snap = await mod('./src/world/render3d.js', (m) => m.snapshot3d());
+  check('3D: it really draws a scene (lots of colours, not a blank canvas)', snap && snap.colors > 60, JSON.stringify(snap));
+  const rt = await mod('./src/world/render3d.js', (m) => { const p = window.__cus.G.player; const [sx, sy] = m.toScreen(p.x + 150, p.y - 40, 30); const w = m.toWorld(sx, sy, 30); return { d: Math.hypot(w[0] - p.x - 150, w[1] - p.y + 40), onScreen: sx > 0 && sx < 1280 && sy > 0 && sy < 800 }; });
+  check('3D: screen and world positions line up both ways', rt.onScreen && rt.d < 1, JSON.stringify(rt));
+  const target = await mod('./src/world/render3d.js', (m) => { const p = window.__cus.G.player; return m.toScreen(p.x + 220, p.y, 30); });
+  await C(() => { if (window.__cus.dbg.input) window.__cus.dbg.input.mouse.inside = true; });
+  await page.mouse.move(target[0], target[1]); await sleep(1500);
+  const ang = await C(() => window.__cus.G.player.angle);
+  check('3D: the mouse aims where it points in the 3D view', Math.abs(Math.atan2(Math.sin(ang), Math.cos(ang))) < 0.15, String(ang));
+  const people = await mod('./src/world/render3d.js', (m) => m.view3dState());
+  check('3D: Frank and his car are in the scene', people.people >= 1 && people.cars >= 1, JSON.stringify(people));
+  await C(() => { const c = window.__cus; c.G.player.x = c.G.maps.cabin.points.cabin_in.x; c.G.player.y = c.G.maps.cabin.points.cabin_in.y; });
+  await sleep(2000);
+  check('3D: step inside and the cabin opens up (roof off, walls low)', (await mod('./src/world/render3d.js', (m) => m.view3dState())).roofsCut.includes('cabin'));
+  await page.screenshot({ path: OUT + '3d-inside.png' });
+  await skipDialogues(page); await C(() => window.__cus.dbg.closeAll());
+  await C(() => { const c = window.__cus; c.G.player.x = c.G.maps.cabin.points.porch.x; c.G.player.y = c.G.maps.cabin.points.porch.y + 60; c.G.player.invuln = 99999; c.dbg.startSiege({ plan: { kind: 'raid', hpMult: 1, waves: [{ dir: Object.keys(c.G.map.spawns)[0], types: ['gunman', 'scout'], delay: 0 }] } }); });
+  await sleep(4000);
+  const fight = await mod('./src/world/render3d.js', (m) => m.view3dState());
+  check('3D: attackers appear as figures in the scene', fight.people >= 3, JSON.stringify(fight));
+  await page.screenshot({ path: OUT + '3d-fight.png' });
+  await C(() => { const c = window.__cus; c.G.siegeActive = false; c.G.siege = null; c.G.enemies = []; });
+  // The tactical HUD.
+  const hud = await C(() => ({ card: document.querySelector('#party .pcard .pname') && document.querySelector('#party .pcard .pname').textContent, hp: document.querySelector('#party .php') && document.querySelector('#party .php').textContent, bar: getComputedStyle(document.getElementById('actbar')).display, place: document.getElementById('mission-place').textContent, objIn: !!document.querySelector('#mission #objective') }));
+  check('HUD: mission card, Frank\'s portrait card with health, and the action bar', hud.card === 'FRANK' && /\d+ \/ \d+/.test(hud.hp) && hud.bar === 'flex' && hud.place === 'THE CABIN' && hud.objIn, JSON.stringify(hud));
+  await skipDialogues(page); await C(() => window.__cus.dbg.closeAll()); await sleep(500);
+  await C(() => { const p = window.__cus.G.player; p.mag = 3; });
+  await page.click('#actbar [data-press="reload"]'); await sleep(600);
+  check('HUD: the action bar buttons work (Reload)', await C(() => window.__cus.G.player.reloadT > 0 || window.__cus.G.player.mag === 8));
+  // Classic view.
+  await C(() => { window.__cus.G.settings.view = 'classic'; }); await sleep(800);
+  check('3D: Settings → View → Classic 2D switches back to the top-down view', !(await mod('./src/world/render3d.js', (m) => m.view3dState())).canvas && await C(() => !window.__cus.G.view3d));
+  await C(() => { window.__cus.G.settings.view = '3d'; }); await sleep(600);
+  await ctx.close();
+  // On a phone the touch sticks stay clear: no portrait cards or action bar.
+  const tctx = await b3.newContext({ ...devices['iPhone 13'], viewport: { width: 844, height: 390 }, isMobile: true, hasTouch: true });
+  const tp = await tctx.newPage();
+  watch(tp, '3d-touch');
+  await tp.goto(URL); await tp.waitForSelector('#t-new');
+  await tp.evaluate(() => window.__cus.newGame('normal')); await sleep(1500);
+  await tp.evaluate(() => { const c = window.__cus; c.dbg.closeAll(); for (let i = 0; i < 30; i++) document.getElementById('dlg-skip').click(); });
+  await sleep(1500);
+  const tl = await tp.evaluate(() => ({ party: getComputedStyle(document.getElementById('party')).display, bar: getComputedStyle(document.getElementById('actbar')).display, fire: getComputedStyle(document.getElementById('btn-fire')).display, hp: getComputedStyle(document.querySelector('.bar.hp')).display }));
+  check('HUD (phone): touch buttons and the health bar, no portrait cards or action bar over the sticks', tl.party === 'none' && tl.bar === 'none' && tl.fire !== 'none' && tl.hp !== 'none', JSON.stringify(tl));
+  await tp.screenshot({ path: OUT + '3d-phone.png' });
+  await tctx.close();
+  await b3.close();
 }
 
 

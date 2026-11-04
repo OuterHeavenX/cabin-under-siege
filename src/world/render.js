@@ -720,7 +720,7 @@ const FACADES = {
   marina: ['siding', '#e8e2d4'], yacht: ['siding', '#f2efe6'],
 };
 
-function facadeOf(b) {
+export function facadeOf(b) {
   const f = FACADES[b.id];
   if (f) return { style: f[0], color: f[1] };
   const pal = ['#b8a58a', '#a8b4a0', '#c9b89a', '#9aa4ac', '#b89a8a'];
@@ -877,7 +877,7 @@ export function buildRoofCanvas(b) {
 /* Characters: 3/4-view figures with walking legs, swinging arms,      */
 /* clothes per person and the weapon held toward the aim.              */
 /* ------------------------------------------------------------------ */
-const LOOKS = {
+export const LOOKS = {
   frank: { style: 'jacket', pants: '#2c3446', shoes: '#2a1a12', stubble: true },
   ruth: { style: 'cardigan', pants: '#5a4a3a', female: true, glasses: true, bun: true },
   dee: { style: 'apron', pants: '#3a3550', female: true, curls: true },
@@ -1139,7 +1139,7 @@ function shade(hex, f) {
   return `rgb(${c((n >> 16) & 255)},${c((n >> 8) & 255)},${c(n & 255)})`;
 }
 
-const ENEMY_LOOK = {
+export const ENEMY_LOOK = {
   arsonist: { hair: '#3a2a1a', skin: '#d8a888', hat: '#7a4a1a' },
   lieutenant: { hair: '#111', skin: '#d0a07e', hat: '#0e0e12' },
   scout: { hair: '#2a2a2a', skin: '#d8a888', hat: '#3d3d46' },
@@ -2070,12 +2070,13 @@ function litByStatic(x, y) {
   return false;
 }
 
-function drawScreenFx(ctx, ox, oy, z) {
+/** Screen-space feedback. `project` (the 3D view passes one) turns a world point into screen pixels. */
+export function drawScreenFx(ctx, ox, oy, z, project = null) {
   const { w, h } = G.view;
   const p = G.player;
   const t = G.time;
   const d = derived();
-  const toScreen = (x, y) => [x * z + ox, y * z + oy];
+  const toScreen = project || ((x, y) => [x * z + ox, y * z + oy]);
   const edgeArrow = (wx, wy, color, label) => {
     const [sx, sy] = toScreen(wx, wy);
     const m = 34;

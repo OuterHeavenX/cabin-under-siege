@@ -5,6 +5,8 @@ import { shortWeekday, eventsToday } from '../game/calendar.js';
 import { season } from '../game/season-core.js';
 import { setCaptionHook } from '../audio.js';
 import { fmtClock, escapeHtml } from '../util.js';
+import { portraitFor } from './portraits.js';
+import { press as pressAction } from '../input.js';
 
 const $ = (id) => document.getElementById(id);
 let els = {};
@@ -179,3 +181,36 @@ export function soundCaption(name, opts = {}) {
   setTimeout(() => { div.classList.add('out'); setTimeout(() => div.remove(), 400); }, 2200);
 }
 setCaptionHook(soundCaption);
+
+/* ---------------- tactical panels: mission card, party cards, action bar ---------------- */
+let tacT = 0, tacInit = false, partyKey = '';
+const pipRow = (frac, n, cls) => { const on = Math.ceil(Math.max(0, Math.min(1, frac)) * n - 0.001); let h = ''; for (let i = 0; i < n; i++) h += `<i class="${i < on ? 'on' : ''} ${cls || ''}"></i>`; return `<span class="pips">${h}</span>`; };
+export function updateTactical(dt, info) {
+  if (!tacInit) {
+    tacInit = true;
+    const slot = document.getElementById('mission-slot'), obj = document.getElementById('objective');
+    if (slot && obj) slot.appendChild(obj); // the objective lives in the mission card
+    for (const b of document.querySelectorAll('#actbar [data-press]')) b.addEventListener('click', (e) => { e.preventDefault(); pressAction(b.dataset.press); });
+  }
+  tacT -= dt;
+  if (tacT > 0) return;
+  tacT = 0.2;
+  const p = G.player, s = G.s;
+  if (!p || !s) return;
+  const place = document.getElementById('mission-place');
+  if (place) place.textContent = (info.place || '').toUpperCase();
+  // Party cards: Frank, Ruth (when she fights with you), Duke.
+  const party = [{ id: 'frank', name: 'FRANK', hp: Math.ceil(p.hp), max: info.maxHp, pic: portraitFor('Frank'), col: 'cyan' }];
+  const ruth = G.npcs.find((n) => n.id === 'ruth');
+  if (info.ruthWithYou) party.push({ id: 'ruth', name: 'RUTH', hp: ruth && ruth.ally ? Math.ceil(ruth.hp) : 140, max: 140, pic: portraitFor('Ruth Calloway'), col: 'green', down: ruth && ruth.downed });
+  if (s.companion && s.companion.dog && s.companion.dog.owned) party.push({ id: 'duke', name: (s.companion.dog.name || 'Duke').toUpperCase(), hp: G.dog ? Math.ceil(G.dog.hp) : 90, max: 90, pic: null, col: 'green', down: G.dog && G.dog.hurt });
+  const key = party.map((q) => `${q.id}${q.hp}/${q.max}${q.down ? 'd' : ''}`).join('|');
+  if (key !== partyKey) {
+    partyKey = key;
+    const el = document.getElementById('party');
+    if (el) el.innerHTML = party.map((q) => `<div class="pcard ${q.col} ${q.down ? 'down' : ''}">${q.pic ? `<img src="${q.pic}" alt="">` : '<div class="pic-dog">🐕</div>'}<div class="pname">${escapeHtml(q.name)}</div><div class="php">${q.down ? 'DOWN' : `${q.hp} / ${q.max}`}</div>${pipRow(q.hp / q.max, 10, q.col)}</div>`).join('');
+  }
+  const bar = document.getElementById('actbar'); if (bar) bar.style.visibility = G.modal || G.cutscene ? 'hidden' : '';
+  const ob = document.getElementById('act-orders'); if (ob) ob.classList.toggle('hidden', !info.canOrder);
+  const ub = document.getElementById('act-use'); if (ub) ub.textContent = (info.quickName || 'USE').toUpperCase().slice(0, 10);
+}

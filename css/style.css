@@ -30,6 +30,7 @@ html, body {
 }
 #app { position: fixed; inset: 0; overflow: hidden; }
 #game { position: absolute; left: 0; top: 0; display: block; touch-action: none; }
+#game3d { position: absolute; left: 0; top: 0; display: block; pointer-events: none; }
 .hidden { display: none !important; }
 button { font-family: inherit; color: inherit; touch-action: manipulation; }
 kbd { background: #2a1515; border: 1px solid #5e2424; border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; font-size: 0.85em; font-family: inherit; }
@@ -586,3 +587,67 @@ body.touch .trophy-card .tr-name { font-size: 13px; }
 .photo figcaption { display: flex; flex-direction: column; gap: 2px; margin: 6px 0 4px; font-size: 13px; }
 .photo figcaption .muted { color: #6a5e4c; }
 .photo .btn { background: #e2d6bd; color: #3a2a1a; border-color: #b8a888; }
+
+/* ================================================================== */
+/* Tactical HUD (v0.20): dark glass panels, cyan edges, cut corners    */
+/* ================================================================== */
+:root { --tac-bg: rgba(9, 15, 22, 0.82); --tac-bg2: rgba(14, 24, 34, 0.9); --tac-line: rgba(91, 214, 255, 0.55); --tac-hi: #5bd6ff; --tac-text: #d9f3ff; --tac-cut: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px); }
+.mission { display: flex; gap: 10px; align-items: flex-start; background: var(--tac-bg); border: 1.5px solid var(--tac-line); clip-path: var(--tac-cut); padding: 8px 12px 8px 10px; margin-bottom: 6px; box-shadow: inset 0 0 18px rgba(91, 214, 255, 0.08); }
+.m-icon { font-size: 22px; line-height: 26px; color: var(--tac-hi); text-shadow: 0 0 8px rgba(91, 214, 255, 0.6); }
+.m-place { font-weight: 900; font-size: 17px; letter-spacing: 1.2px; color: #fff; }
+.mission .objective { margin: 2px 0 0; padding: 0; text-align: left; background: none; border: 0; border-radius: 0; color: #e9f6ff; font-size: 12.5px; font-weight: 600; }
+.mission .objective::before { content: ""; }
+.hud-tl { width: min(36vw, 340px); }
+.clock { font-size: 15px; font-weight: 900; letter-spacing: 1.5px; text-transform: uppercase; color: #9ff0ff; background: var(--tac-bg); border: 1.5px solid var(--tac-line); border-radius: 0; clip-path: var(--tac-cut); padding: 6px 22px; text-shadow: 0 0 10px rgba(91, 214, 255, 0.45); }
+.bar { border-radius: 0; border-color: var(--tac-line); background: rgba(9, 15, 22, 0.75); }
+.bar.hp .fill { background: linear-gradient(#5bd6ff, #2a8ab8); }
+.bar.hp .fill.low { background: linear-gradient(#ff6a50, #b8321f); }
+.money { border-radius: 0; background: var(--tac-bg); border: 1px solid var(--tac-line); color: #b8f5c8; }
+.menu-btn { border-radius: 2px; border: 1.5px solid var(--tac-line); background: var(--tac-bg); color: var(--tac-text); } /* no clip-path here: it would clip the larger invisible hit area too */
+.ammo-box { border-radius: 0; background: var(--tac-bg); border: 1.5px solid var(--tac-line); clip-path: var(--tac-cut); }
+.ammo-sub { color: #9fd8ee; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; }
+.banner { border-radius: 0; background: var(--tac-bg2); border: 1.5px solid var(--tac-line); clip-path: var(--tac-cut); }
+.banner.b-danger { border-color: #ff6a50; background: rgba(48, 10, 8, 0.92); }
+.prompt { border-radius: 0; background: var(--tac-bg2); border: 1.5px solid var(--tac-line); clip-path: var(--tac-cut); color: #fff; font-weight: 700; }
+.tbtn { border-color: rgba(91, 214, 255, 0.7); background: rgba(9, 15, 22, 0.6); }
+.tbtn.act { border-color: #8fe6ff; }
+.party, .actbar { display: none; }
+
+/* Keyboard & mouse, and controller: the full tactical layout. */
+body:not(.touch) .bar.hp, body:not(.touch) .bar.st { display: none; } /* health lives on Frank's card */
+body:not(.touch) .hud-tr .money, body:not(.touch) .hud-tl .money { position: fixed; top: calc(12px + var(--sat)); right: calc(80px + var(--sar)); padding: 6px 12px; font-size: 15px; }
+body.pad:not(.touch) .hud-tl .money, body.desktop-app:not(.touch) .hud-tl .money { right: calc(14px + var(--sar)); }
+body:not(.touch) .ammo-box { position: fixed; right: calc(16px + var(--sar)); bottom: calc(78px + var(--sab)); width: 280px; text-align: left; padding: 10px 16px 12px; }
+body:not(.touch) .ammo-box .ammo { font-size: 34px; text-align: right; line-height: 1; margin-top: -2px; }
+body:not(.touch) .ammo-box .ammo-sub { font-size: 12px; position: absolute; left: 16px; top: 10px; }
+body:not(.touch) .prompt { left: auto; transform: none; right: calc(16px + var(--sar)); bottom: calc(16px + var(--sab)); width: 280px; text-align: center; padding: 12px 14px; font-size: 15px; letter-spacing: 0.6px; text-transform: uppercase; background: linear-gradient(#e9f4fa, #c9dce8); color: #0b1a26; border-color: #e9f4fa; }
+body:not(.touch) .prompt::before { content: ">> "; font-weight: 900; color: #2a7aa8; }
+body:not(.touch) .prompt kbd { background: #0b1a26; color: #e9f4fa; }
+body:not(.touch) .party { display: flex; gap: 8px; position: absolute; left: calc(14px + var(--sal)); bottom: calc(14px + var(--sab)); }
+.pcard { position: relative; width: 104px; height: 128px; background: var(--tac-bg); border: 2px solid var(--tac-line); clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%); overflow: hidden; }
+.pcard img, .pcard .pic-dog { position: absolute; inset: 0 0 34px 0; width: 100%; height: calc(100% - 34px); object-fit: cover; object-position: center 20%; }
+.pcard .pic-dog { display: flex; align-items: center; justify-content: center; font-size: 46px; background: radial-gradient(#2a3a4a, #0e161e); }
+.pcard::after { content: ""; position: absolute; inset: 0 0 34px 0; background: linear-gradient(transparent 55%, rgba(9, 15, 22, 0.85)); }
+.pname { position: absolute; left: 8px; bottom: 40px; z-index: 1; font-weight: 900; font-size: 13px; letter-spacing: 0.8px; color: #fff; text-shadow: 0 1px 3px #000; }
+.php { position: absolute; left: 8px; bottom: 15px; font-weight: 800; font-size: 14px; color: #fff; }
+.pcard .pips { position: absolute; left: 8px; right: 8px; bottom: 6px; display: flex; gap: 2px; }
+.pips i { flex: 1; height: 5px; background: rgba(255, 255, 255, 0.14); }
+.pips i.on { background: var(--tac-hi); box-shadow: 0 0 4px rgba(91, 214, 255, 0.7); }
+.pcard.green { border-color: rgba(111, 220, 122, 0.6); }
+.pips i.on.green { background: #6fdc7a; box-shadow: 0 0 4px rgba(111, 220, 122, 0.7); }
+.pcard.down { filter: grayscale(0.8); opacity: 0.75; }
+body:not(.touch) .actbar { display: flex; gap: 6px; position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(14px + var(--sab)); }
+.actbar .act { width: 82px; height: 92px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; background: var(--tac-bg); border: 1.5px solid rgba(160, 200, 220, 0.45); clip-path: var(--tac-cut); color: #e9f6ff; cursor: pointer; padding: 0; }
+.actbar .act:hover { border-color: var(--tac-hi); background: var(--tac-bg2); }
+.actbar .act .ai { font-size: 22px; line-height: 1; color: #eaf8ff; }
+.actbar .act b { font-size: 11.5px; letter-spacing: 0.8px; }
+.actbar .act i { font-style: normal; font-size: 10px; color: #9fd8ee; font-weight: 700; }
+.actbar .act.hidden { display: none; }
+@media (max-width: 1250px) { .actbar .act { width: 66px; height: 78px; } .actbar .act .ai { font-size: 18px; } .actbar .act b { font-size: 10px; } .pcard { width: 86px; height: 110px; } body:not(.touch) .ammo-box, body:not(.touch) .prompt { width: 230px; } }
+@media (max-width: 1000px) { body:not(.touch) .actbar { display: none; } }
+body:not(.touch) .toasts { top: calc(140px + var(--sat)); }
+/* Phones: a smaller mission card so it doesn't crowd the play area. */
+body.touch .mission { padding: 5px 9px 5px 7px; gap: 7px; margin-bottom: 4px; }
+body.touch .m-icon { font-size: 16px; line-height: 20px; }
+body.touch .m-place { font-size: 13px; letter-spacing: 0.8px; }
+body.touch .mission .objective { font-size: 11px; }

@@ -621,6 +621,7 @@ function settingsTab() {
     <label>Text size ${sel('textSize', [['normal', 'Normal'], ['large', 'Large']])}</label>
     <label>Frame rate ${sel('fpsCap', [['auto', 'Smooth (60 fps)'], ['30', desktopApp ? 'Battery saver (30 fps)' : 'Battery saver (30 fps)']])}</label>
     <label>${chk('rumble')} Controller rumble</label>
+    <label>View ${sel('view', [['3d', '3D (angled camera, real light)'], ['classic', 'Classic 2D (top-down)']])}</label>
     <label>Graphics ${sel('quality', [['auto', `Automatic${G.autoLow ? ' (low)' : ''}`], ['high', 'High'], ['low', desktopApp ? 'Low (saves battery)' : 'Low (older phones)']])}</label>
     <h3 class="set-head">Accessibility</h3>
     <label>${chk('captions')} Sound captions (what you hear, and from which way)</label>

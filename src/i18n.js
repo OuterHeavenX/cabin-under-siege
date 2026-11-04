@@ -36,7 +36,7 @@ const ES = {
   'Touch controls': 'Controles táctiles', 'Automatic': 'Automático', 'Always on': 'Siempre activos', 'Touch button opacity': 'Opacidad de los botones',
   'Touch button size': 'Tamaño de los botones', 'Smaller': 'Más pequeños', 'Normal': 'Normal', 'Larger': 'Más grandes', 'Text size': 'Tamaño del texto', 'Large': 'Grande',
   'Frame rate': 'Fotogramas', 'Smooth (60 fps)': 'Fluido (60 fps)', 'Battery saver (30 fps)': 'Ahorro de batería (30 fps)', 'Controller rumble': 'Vibración del mando',
-  'Graphics': 'Gráficos', 'High': 'Altos', 'Low (saves battery)': 'Bajos (ahorra batería)', 'Low (older phones)': 'Bajos (móviles antiguos)', 'Difficulty': 'Dificultad',
+  'Graphics': 'Gráficos', 'View': 'Vista', '3D (angled camera, real light)': '3D (cámara en ángulo, luz real)', 'Classic 2D (top-down)': '2D clásico (vista cenital)', 'High': 'Altos', 'Low (saves battery)': 'Bajos (ahorra batería)', 'Low (older phones)': 'Bajos (móviles antiguos)', 'Difficulty': 'Dificultad',
   'Accessibility': 'Accesibilidad', 'Sound captions (what you hear, and from which way)': 'Subtítulos de sonido (qué oyes y desde dónde)',
   'Reduce flashes (softer muzzle and hit flashes, no red pulse in attacks)': 'Reducir destellos (fogonazos e impactos más suaves, sin pulso rojo en los ataques)',
   'High-contrast attackers (bright outline)': 'Atacantes de alto contraste (contorno brillante)', 'Game speed': 'Velocidad del juego',

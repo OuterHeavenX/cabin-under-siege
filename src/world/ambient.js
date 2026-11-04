@@ -279,3 +279,7 @@ export function drawTraffic(ctx, inView, drawCar) {
 export function updateAmbient(dt) { updateCritters(dt); updateTraffic(dt); }
 /** For the automated test. */
 export const ambientState = () => ({ critters: critters.map((c) => ({ kind: c.kind, state: c.state })), cars: cars.length, lanes: lanes ? lanes.list.length : 0, flock: !!flock });
+
+/** For the 3D view. */
+export const critterList = () => critters;
+export const trafficList = () => cars;

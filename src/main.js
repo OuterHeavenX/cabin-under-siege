@@ -6,7 +6,7 @@ import { buildCabinMap, buildTownMap, buildMillbrookMap, buildFarmMap, buildEsta
 import { startPrequel, startAC, updatePrequel, prequelObjective } from './game/prequel.js';
 import { startAssault, updateAssault, endAssault } from './game/assault.js';
 import { callAllies } from './game/story.js';
-import { chapter, homeMapId, workMapId, atHome, LAST_CHAPTER, CHAPTERS, mapChapter, loadedMapIds, visiting } from './game/chapters.js';
+import { chapter, homeMapId, workMapId, atHome, LAST_CHAPTER, CHAPTERS, mapChapter, loadedMapIds, visiting, here } from './game/chapters.js';
 import { setVisitHooks, pastHomeRecord } from './game/visits.js';
 import { QUESTS, questWaypoint } from './game/quests.js';
 import { newHome } from './game/state.js';
@@ -18,7 +18,7 @@ import { initInput, consume, endFrame, resetInput, setTouchMode, input, suppress
 import { updateGamepad, rumble } from './gamepad.js';
 import { initFxEvents, updateFx } from './world/fx.js';
 import { initAudio, setVolumes, updateAudio, setMusic, setAmbient, suspendAudio, resumeAudio, sfx, setListener, setFireLevel, audioDebug, renderOffline, musicBar, birdCall } from './audio.js';
-import { initHud, updateHud, toast, banner } from './ui/hud.js';
+import { initHud, updateHud, updateTactical, toast, banner } from './ui/hud.js';
 import { initDialogue, updateDialogue, playDialogue } from './ui/dialogue.js';
 import { initReliableTaps, openMenu, closeModal, topModal, setMenuHooks, openHelp, confirmBox, pickImport, modalOpen, closeAllModals, openModal, openActions, openPlanner } from './ui/menus.js';
 import { createPlayer, updatePlayer, inCombat } from './game/player.js';
@@ -70,6 +70,14 @@ import { canOrder, orderOptions } from './game/orders.js';
 import { updateScrapbook, initScrapbookEvents } from './game/scrapbook.js';
 import { applyLanguage } from './i18n.js';
 import { updateAmbient } from './world/ambient.js';
+import { render3d, webglAvailable, setRender3dHooks, hide3d, show3d, toWorld } from './world/render3d.js';
+import { drawOverlays3d } from './world/overlay3d.js';
+import { jobProps } from './game/jobs.js';
+import { questProps } from './game/quests.js';
+import { errandProps } from './game/errands.js';
+import { ratProps } from './game/rat.js';
+import { watchProps } from './game/watch.js';
+import { keystoneProps } from './game/keystone.js';
 import { damagePlayer } from './game/player.js';
 
 /* ---------------- tiny event bus ---------------- */
@@ -81,7 +89,7 @@ class Emitter {
 G.events = new Emitter();
 
 const canvas = document.getElementById('game');
-const ctx = canvas.getContext('2d', { alpha: false });
+const ctx = canvas.getContext('2d'); // transparent where the 3D view shows through
 let last = performance.now();
 let hudInfoT = 0;
 let hudInfo = { maxHp: 100, maxStamina: 100, objective: '', reloadTime: 1.4, quickLabel: 'USE' };
@@ -221,6 +229,13 @@ function updateMood(force) {
   else setAmbient(G.map && G.map.id === workMapId() ? 'town' : 'day');
 }
 
+/* ---------------- 3D or classic view ---------------- */
+const view3dApi = { toWorld };
+/** Settings → Graphics view: the 3D view unless Classic is chosen, WebGL is missing, or the shooting gallery is up. */
+const use3D = () => (G.settings.view || '3d') !== 'classic' && !G.gallery && !(typeof window !== 'undefined' && window.__cus2D) && webglAvailable();
+const taskProps = () => { const id = G.map.id; return [...jobProps(id), ...questProps(id), ...errandProps(id), ...ratProps(id), ...watchProps(id), ...keystoneProps(id)]; };
+setRender3dHooks({ see: () => derived().seeRadius, props: taskProps });
+
 /* ---------------- game update ---------------- */
 /** Settings → Accessibility → Game speed: everything runs a little slower. */
 const gameSpeed = () => ({ slow: 0.8, slower: 0.65 }[G.settings.gameSpeed] || 1);
@@ -352,7 +367,8 @@ function computeHudInfo(dt) {
   G.waypoint = wp && !G.siegeActive ? wp : null;
   hudInfo = {
     maxHp: d.maxHp, maxStamina: d.maxStamina, reloadTime: reloadTime(G.player.weapon), magSize: magSize(G.player.weapon), weapon: WEAPONS[G.player.weapon], weaponCount: WEAPON_ORDER.filter(ownsWeapon).length, objective: G.prequel ? prequelObjective() : objectiveText(), jobLine, danger,
-    quickLabel: q ? `${ITEMS[q].icon}×${count(q)}` : 'USE', night: isNight(), combat: inCombat(), target: null,
+    quickLabel: q ? `${ITEMS[q].icon}×${count(q)}` : 'USE', quickName: q ? `${ITEMS[q].name.split(' ')[0]} ×${count(q)}` : 'Use', night: isNight(), combat: inCombat(), target: null,
+    place: G.prequel || G.endless ? G.map.name : visiting() ? here().place : G.map.name, ruthWithYou: !G.endless && !G.prequel && G.npcs.some((n) => n.id === 'ruth' && (n.ally || (G.s.companion.ruth && G.s.companion.ruth.joined))),
     ability: G.prequel ? null : abilityLabel(), prepared: d.prepared, canOrder: canOrder(),
   };
 }
@@ -400,6 +416,7 @@ function frame(ts) {
         computeHudInfo(dt);
         hudInfo.target = G.modal ? null : G.interactTarget;
         updateHud(dt, hudInfo);
+        updateTactical(dt, hudInfo);
         updateMood(false);
         const p = G.player;
         setListener(p.x, p.y, !!G.map.buildingAt(p.x, p.y));
@@ -407,8 +424,10 @@ function frame(ts) {
         for (const f of G.fires) { const d = dist(f.x, f.y, p.x, p.y); const l = Math.max(0, 1 - d / 420) * Math.min(1, f.life / 1.5); if (l > fl) { fl = l; fp = Math.max(-1, Math.min(1, (f.x - p.x) / 300)); } }
         setFireLevel(G.paused || G.modal ? 0 : fl, fp);
       }
-      render(ctx);
-    }
+      // The 3D view (with overlays on this canvas), or the classic 2D view.
+      if (use3D() && render3d()) { show3d(); G.view3d = view3dApi; drawOverlays3d(ctx, taskProps()); }
+      else { hide3d(); G.view3d = null; render(ctx); }
+    } else hide3d();
     updateAudio(G.paused || (G.modal && G.modal !== 'dialogue') ? 0 : dt);
   } catch (e) {
     console.error(e);

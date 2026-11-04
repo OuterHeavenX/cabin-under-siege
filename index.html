@@ -21,6 +21,7 @@
     <!-- HUD -->
     <div id="hud" class="hidden">
       <div class="hud-tl">
+        <div id="mission" class="mission"><div class="m-icon" aria-hidden="true">◬</div><div class="m-body"><div id="mission-place" class="m-place">PINE HOLLOW</div><div id="mission-slot"></div></div></div>
         <div class="bar hp" aria-label="Health"><div id="hp-fill" class="fill"></div><span class="bar-lbl">HP <span id="hp-txt">100 / 100</span></span></div>
         <div class="bar st" aria-label="Stamina"><div id="st-fill" class="fill"></div><span class="bar-lbl">STAMINA</span></div>
         <div class="money" id="money">$0</div>
@@ -34,6 +35,17 @@
         <div class="ammo-box"><div id="ammo" class="ammo">8 / 32</div><div id="ammo-sub" class="ammo-sub">9mm handgun</div><div class="reload-track"><div id="reload-bar"></div></div></div>
         <button id="menu-btn" class="menu-btn" aria-label="Pause menu">☰</button>
         <div id="ability-tag" class="ability-tag hidden"></div>
+      </div>
+      <!-- Tactical panels (keyboard/mouse and controller; phones keep the touch sticks clear) -->
+      <div id="party" class="party" aria-label="Your people"></div>
+      <div id="actbar" class="actbar" aria-label="Actions">
+        <button class="act" data-press="fireClick"><span class="ai">⌖</span><b>FIRE</b><i class="kb-only">[CLICK]</i><i class="pad-only">[RT]</i></button>
+        <button class="act" data-press="reload"><span class="ai">↻</span><b>RELOAD</b><i class="kb-only">[R]</i><i class="pad-only">[X]</i></button>
+        <button class="act" data-press="melee"><span class="ai">✊</span><b>MELEE</b><i class="kb-only">[F]</i><i class="pad-only">[RB]</i></button>
+        <button class="act" data-press="dodge"><span class="ai">➶</span><b>DODGE</b><i class="kb-only">[SPACE]</i><i class="pad-only">[B]</i></button>
+        <button class="act" data-press="use"><span class="ai">✚</span><b id="act-use">HEAL</b><i class="kb-only">[Q]</i><i class="pad-only">[LB]</i></button>
+        <button class="act hidden" data-press="orders" id="act-orders"><span class="ai">⚑</span><b>ORDERS</b><i class="kb-only">[O]</i><i class="pad-only">[A]</i></button>
+        <button class="act" data-press="interact"><span class="ai">⬡</span><b>INTERACT</b><i class="kb-only">[E]</i><i class="pad-only">[A]</i></button>
       </div>
       <div id="danger" class="danger hidden" role="alert"></div>
       <div id="banner" class="banner hidden" role="status"></div>

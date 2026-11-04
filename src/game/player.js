@@ -118,8 +118,10 @@ export function updatePlayer(dt) {
     }
   } else if (!input.touchMode && !input.padMode && input.mouse.inside) {
     const c = G.camera;
-    const wx = (input.mouse.x - G.view.w / 2) / c.zoom + c.x;
-    const wy = (input.mouse.y - G.view.h / 2) / c.zoom + c.y;
+    // In the 3D view the mouse points at a spot at chest height; in 2D it's a straight scale.
+    const w3 = G.view3d ? G.view3d.toWorld(input.mouse.x, input.mouse.y, 30) : null;
+    const wx = w3 ? w3[0] : (input.mouse.x - G.view.w / 2) / c.zoom + c.x;
+    const wy = w3 ? w3[1] : (input.mouse.y - G.view.h / 2) / c.zoom + c.y;
     p.angle = angleTo(p.x, p.y, wx, wy);
   } else if (moving && !input.held.fire) {
     p.angle = Math.atan2(mv.y, mv.x);
