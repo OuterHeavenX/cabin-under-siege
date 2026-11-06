@@ -7,7 +7,7 @@ You are Frank Lowe — formerly Frankie Corsetti of the Vescari crime family —
 to build an honest life in a cabin outside the small town of Pine Hollow. By day you
 work, meet people and fix up the place. Some nights, the family comes for you.
 
-This build (v0.20.1) contains **the complete story — five playable chapters with four endings, and an epilogue chapter after them**, each chapter now a stretch of Frank's life rather than a stop between sieges — plus a prequel episode, New Game+ and an arcade mode. It runs in the browser and as an installable Steam Deck / PC game:
+This build (v0.20.2) contains **the complete story — five playable chapters with four endings, and an epilogue chapter after them**, each chapter now a stretch of Frank's life rather than a stop between sieges — plus a prequel episode, New Game+ and an arcade mode. It runs in the browser and as an installable Steam Deck / PC game:
 
 1. **The Cabin** — Pine Hollow, a remote cabin and a small town.
 2. **Larch Street** — Millbrook, Ohio: a house on a quiet street, a neighbor with secrets, and Sal Benedetto.
@@ -40,17 +40,21 @@ than using simple beeps:
 loop per mood). See [`audio/README.md`](audio/README.md) for the sound names and
 recommended free sources.
 
-### Illustrated portraits (v0.20.1)
+### Illustrated portraits (v0.20.1–v0.20.2)
 
 The cast now has anime-style illustrated portraits in place of the painted-in-code faces: Frank, Ruth, Dee,
 Gus, Marcus and every other named character, the villains, the Man in a Grey Coat, Duke on his party card, and
-younger faces of Frank, Leo, Dante and Father Dom for the prequels (made from their older portraits so they're
-recognisably the same people). They show in conversations and on the party cards, with the same dark-red noir
-lighting as the title screen.
+younger faces of Frank, Leo, Dante, Sal, Father Dom and Big Carmine for the prequels (made from their older
+portraits so they're recognisably the same people), and the townsfolk and side characters too: Old Man Tibbs,
+Pastor Abe, Mr. Henderson, Jenny Miller, Mrs. Ferraro, Old Vito, Paulie the paperboy, Commodore Ames, June
+Tremblay, Pastor Lund, Hank, Mrs. Ortiz, Danny Hendricks, Old Mr. Pruitt, Earl Pruitt, Richie Bruno, Benny
+Lucchese, Tommy Miller, Tommy Ruggiero, Dale Purcell, Dr. Halvorsen, Gloria Pinto, Carmine Ventura, the
+"meter reader", and Lou, Rita and Eddie from Atlantic City. They show in conversations and on the party cards,
+with the same dark-red noir lighting as the title screen.
 
-They're 32 small JPEGs in `art/portraits/` (about 700 KB together, cached for offline play). The old painted
+They're 61 small JPEGs in `art/portraits/` (about 1.3 MB together, cached for offline play). The old painted
 portraits are still in the code as the fallback: if an image can't load, the game draws the painted one instead,
-and people without an illustration (most townsfolk) keep showing no portrait as before. The images were
+and the few voices without an illustration (a phone operator, a note, one-line strangers) show no portrait as before. The images were
 generated for this game with Higgsfield's image tools (GPT Image 2.6).
 
 ### 3D view and tactical HUD (v0.20)
@@ -878,8 +882,8 @@ tools/                        Dev server, smoke test, icon generator
 ## Known limitations
 
 - Not yet tested on a physical iPhone/iPad (see checklist above).
-- **Portraits (v0.20.1):** only the named cast has illustrated portraits; townsfolk such as Old Man Tibbs or
-  Pastor Abe still talk without one. To add or replace one, drop a 320×320 JPEG named after the portrait id
+- **Portraits (v0.20.1):** every named character who talks has an illustrated portrait except a handful of
+  one-line voices (Aunt Connie, Big Lou at the card table, the Kask brothers and the like). To add or replace one, drop a 320×320 JPEG named after the portrait id
   into `art/portraits/`, add the id to `ART` in `src/ui/portraits.js` and list the file in `sw.js`.
 - **The 3D view (v0.20)** has only been tested in a headless browser with software WebGL, never on a real
   phone, tablet or Steam Deck, so its speed there is unknown. If it stutters, set Graphics to Low (no

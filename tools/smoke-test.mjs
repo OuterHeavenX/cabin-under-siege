@@ -2643,9 +2643,11 @@ if (want('3d')) {
     const every = [...m.ART].every((id) => m.portraitById(id) === `art/portraits/${id}.jpg`);
     const bad = document.createElement('img'); bad.setAttribute('src', 'art/portraits/nobody.jpg'); m.portraitFallback(bad);
     const ruthImg = document.createElement('img'); ruthImg.setAttribute('src', m.portraitFor('Ruth Calloway')); m.portraitFallback(ruthImg);
-    return { card: card && card.getAttribute('src'), w: card && card.naturalWidth, ruth: ruthBefore, duke: m.portraitById('duke'), sign: m.portraitFor('Note'), every, ruthFallback: (ruthImg.getAttribute('src') || '').slice(0, 22), ruthAfter: (m.portraitFor('Ruth Calloway') || '').slice(0, 22) };
+    return { card: card && card.getAttribute('src'), w: card && card.naturalWidth, ruth: ruthBefore, duke: m.portraitById('duke'), sign: m.portraitFor('Note'), every, tibbs: m.portraitFor('Old Man Tibbs'), lou: m.portraitFor('Lou Pagano'),
+      young: (() => { const G = window.__cus.G, was = G.prequel; G.prequel = { ep: 'test' }; const r = ['Big Carmine', 'Sal Benedetto', 'Frank', 'Old Man Tibbs'].map((w) => m.portraitFor(w)).join(','); G.prequel = was; return r; })(), ruthFallback: (ruthImg.getAttribute('src') || '').slice(0, 22), ruthAfter: (m.portraitFor('Ruth Calloway') || '').slice(0, 22) };
   }));
   check('Portraits: Frank\'s card shows his illustrated portrait (loaded), Duke has one, notes have none', pics.card === 'art/portraits/frank.jpg' && pics.w === 320 && pics.duke === 'art/portraits/duke.jpg' && pics.sign === null && pics.every, JSON.stringify(pics));
+  check('Portraits: townsfolk have portraits too, and the prequels show the younger faces', pics.tibbs === 'art/portraits/tibbs.jpg' && pics.lou === 'art/portraits/lou.jpg' && pics.young === 'art/portraits/carmine99.jpg,art/portraits/sal99.jpg,art/portraits/frank99.jpg,art/portraits/tibbs.jpg', JSON.stringify({ tibbs: pics.tibbs, lou: pics.lou, young: pics.young }));
   check('Portraits: a portrait that can\'t load falls back to the painted one', pics.ruth === 'art/portraits/ruth.jpg' && pics.ruthFallback === 'data:image/png;base64,' && pics.ruthAfter === 'data:image/png;base64,', JSON.stringify(pics));
   await C(() => { window.__cus.dbg.closeAll(); });
   await C(() => import('./src/ui/dialogue.js').then((d) => d.playDialogue([{ who: 'Dee Marsh', text: 'Morning, Frank.' }])));

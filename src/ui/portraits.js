@@ -54,6 +54,12 @@ const ALIASES = {
   'Vinnie Vescari': 'vinnie', 'Nico Vescari': 'nico', 'Eleanor Whitcombe': 'eleanor', 'Theo Park': 'theo', 'Walt Bishop': 'walt',
   'Agent Dana Reyes': 'reyes', 'Father Dominic Russo': 'dom', 'Father Dom': 'dom', 'Angela "Angie" Marchetti': 'angie', 'Angie Marchetti': 'angie', 'Angie': 'angie',
   'Mickey Doyle': 'mickey', 'Joey Marchetti': 'joey', 'Joey': 'joey', 'Dante Ruggiero': 'dante', 'Carlo Bruno': 'carlo', 'Special Agent Dana Reyes': 'reyes', 'Voice': 'stranger',
+  // Townsfolk and side characters (illustrated only, v0.20.1)
+  'Old Man Tibbs': 'tibbs', 'Pastor Abe': 'abe', 'Mr. Henderson': 'henderson', 'Jenny Miller': 'jenny', 'Mrs. Ferraro': 'ferraro', 'Old Vito': 'vito',
+  'Paulie the paperboy': 'paulie', 'Commodore Ames': 'ames', 'June Tremblay': 'june', 'Pastor Lund': 'lund', 'Hank the trucker': 'hank', 'Mrs. Ortiz': 'ortiz',
+  'Danny Hendricks': 'danny', 'Old Mr. Pruitt': 'oldpruitt', 'Richie Bruno': 'richie', 'Earl Pruitt': 'earl', 'Gloria Pinto': 'gloria', 'Dr. Halvorsen': 'halvorsen',
+  'Benny Lucchese': 'benny', 'Tommy Miller': 'tommy', 'Dale Purcell': 'dale', 'Tommy Ruggiero': 'ruggiero', 'Carmine Ventura': 'ventura', 'Meter Reader': 'meter',
+  'Lou Pagano': 'lou', 'Rita Russo': 'rita', 'Eddie Russo': 'eddie',
 };
 
 export function portraitId(who) {
@@ -65,14 +71,17 @@ export function portraitId(who) {
 /** A data URL for this speaker's portrait, or null for notes/signs/unknown voices. */
 export function portraitFor(who) {
   let id = portraitId(who);
-  if (G.prequel && id && PEOPLE[id + '99']) id += '99'; // the prequels: the younger faces
+  if (G.prequel && id && (PEOPLE[id + '99'] || ART.has(id + '99'))) id += '99'; // the prequels: the younger faces
   return portraitById(id);
 }
 
 /** Illustrated portraits shipped as images (art/portraits/<id>.jpg). */
 export const ART = new Set(['frank', 'ruth', 'dee', 'gus', 'marcus', 'rosa', 'pete', 'ingrid', 'bo', 'tess', 'eleanor', 'theo', 'walt', 'reyes',
   'stranger', 'deputy', 'carmine', 'sal', 'vinnie', 'leo', 'dom', 'angie', 'mickey', 'dante', 'joey', 'frank99', 'leo99', 'dante99', 'dom99',
-  'carlo', 'nico', 'duke']);
+  'carlo', 'nico', 'duke',
+  // townsfolk and side characters
+  'tibbs', 'abe', 'henderson', 'jenny', 'ferraro', 'vito', 'paulie', 'ames', 'june', 'lund', 'hank', 'ortiz', 'danny', 'oldpruitt', 'richie', 'earl',
+  'gloria', 'halvorsen', 'benny', 'tommy', 'dale', 'ruggiero', 'ventura', 'meter', 'lou', 'rita', 'eddie', 'carmine99', 'sal99']);
 const broken = new Set();
 const artUrl = (id) => `art/portraits/${id}.jpg`;
 
