@@ -3,7 +3,7 @@ import { G } from '../game/state.js';
 import { escapeHtml } from '../util.js';
 import { sfx } from '../audio.js';
 import { consume } from '../input.js';
-import { portraitFor } from './portraits.js';
+import { portraitFor, portraitFallback } from './portraits.js';
 
 const queue = [];
 let cur = null; // {lines, idx, onEnd}
@@ -52,6 +52,7 @@ function show() {
   whoEl.textContent = line.who || '';
   whoEl.classList.toggle('hidden', !line.who);
   const pic = portraitFor(line.who);
+  if (!portraitEl.dataset.fb) { portraitEl.dataset.fb = '1'; portraitEl.addEventListener('error', () => portraitFallback(portraitEl)); }
   portraitEl.classList.toggle('hidden', !pic);
   if (pic && portraitEl.getAttribute('src') !== pic) portraitEl.src = pic;
   fullText = line.text;

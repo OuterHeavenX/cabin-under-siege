@@ -4,7 +4,7 @@ import { cpSync, rmSync, mkdirSync, existsSync } from 'node:fs';
 
 const root = new URL('..', import.meta.url).pathname;
 const out = root + 'dist/';
-const SHIP = ['index.html', 'manifest.webmanifest', 'sw.js', '_headers', 'css', 'src', 'icons', 'audio'];
+const SHIP = ['index.html', 'manifest.webmanifest', 'sw.js', '_headers', 'css', 'src', 'art', 'icons', 'audio'];
 
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });

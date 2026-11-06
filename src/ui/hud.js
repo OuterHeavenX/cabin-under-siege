@@ -5,7 +5,7 @@ import { shortWeekday, eventsToday } from '../game/calendar.js';
 import { season } from '../game/season-core.js';
 import { setCaptionHook } from '../audio.js';
 import { fmtClock, escapeHtml } from '../util.js';
-import { portraitFor } from './portraits.js';
+import { portraitFor, portraitById, portraitFallback } from './portraits.js';
 import { press as pressAction } from '../input.js';
 
 const $ = (id) => document.getElementById(id);
@@ -203,12 +203,13 @@ export function updateTactical(dt, info) {
   const party = [{ id: 'frank', name: 'FRANK', hp: Math.ceil(p.hp), max: info.maxHp, pic: portraitFor('Frank'), col: 'cyan' }];
   const ruth = G.npcs.find((n) => n.id === 'ruth');
   if (info.ruthWithYou) party.push({ id: 'ruth', name: 'RUTH', hp: ruth && ruth.ally ? Math.ceil(ruth.hp) : 140, max: 140, pic: portraitFor('Ruth Calloway'), col: 'green', down: ruth && ruth.downed });
-  if (s.companion && s.companion.dog && s.companion.dog.owned) party.push({ id: 'duke', name: (s.companion.dog.name || 'Duke').toUpperCase(), hp: G.dog ? Math.ceil(G.dog.hp) : 90, max: 90, pic: null, col: 'green', down: G.dog && G.dog.hurt });
+  if (s.companion && s.companion.dog && s.companion.dog.owned) party.push({ id: 'duke', name: (s.companion.dog.name || 'Duke').toUpperCase(), hp: G.dog ? Math.ceil(G.dog.hp) : 90, max: 90, pic: portraitById('duke'), dog: true, col: 'green', down: G.dog && G.dog.hurt });
   const key = party.map((q) => `${q.id}${q.hp}/${q.max}${q.down ? 'd' : ''}`).join('|');
   if (key !== partyKey) {
     partyKey = key;
     const el = document.getElementById('party');
-    if (el) el.innerHTML = party.map((q) => `<div class="pcard ${q.col} ${q.down ? 'down' : ''}">${q.pic ? `<img src="${q.pic}" alt="">` : '<div class="pic-dog">🐕</div>'}<div class="pname">${escapeHtml(q.name)}</div><div class="php">${q.down ? 'DOWN' : `${q.hp} / ${q.max}`}</div>${pipRow(q.hp / q.max, 10, q.col)}</div>`).join('');
+    if (el) el.innerHTML = party.map((q) => `<div class="pcard ${q.col} ${q.down ? 'down' : ''}${q.dog ? ' dog' : ''}">${q.pic ? `<img src="${q.pic}" alt="">` : '<div class="pic-dog">🐕</div>'}<div class="pname">${escapeHtml(q.name)}</div><div class="php">${q.down ? 'DOWN' : `${q.hp} / ${q.max}`}</div>${pipRow(q.hp / q.max, 10, q.col)}</div>`).join('');
+    if (el) for (const img of el.querySelectorAll('img')) img.addEventListener('error', () => { portraitFallback(img); if (!img.getAttribute('src')) img.replaceWith(Object.assign(document.createElement('div'), { className: 'pic-dog', textContent: '🐕' })); }, { once: true });
   }
   const bar = document.getElementById('actbar'); if (bar) bar.style.visibility = G.modal || G.cutscene ? 'hidden' : '';
   const ob = document.getElementById('act-orders'); if (ob) ob.classList.toggle('hidden', !info.canOrder);

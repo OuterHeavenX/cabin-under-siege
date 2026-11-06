@@ -1,6 +1,9 @@
-// Painted-style character portraits for conversations, drawn procedurally on a
-// canvas (no image files): soft key light from the upper left, a red rim light
-// from the right, film grain and a dark vignette — noir, like the title screen.
+// Character portraits for conversations and the party cards. Since v0.20.1 the
+// cast has illustrated portraits in art/portraits/ (see ART below). The painted
+// ones drawn on a canvas here stay as the fallback: for anyone without an image,
+// and if an image can't load (offline before it was cached). They use a soft key
+// light from the upper left, a red rim light from the right, film grain and a
+// dark vignette — noir, like the title screen.
 
 const SIZE = 192;
 const cache = new Map();
@@ -62,10 +65,35 @@ export function portraitId(who) {
 /** A data URL for this speaker's portrait, or null for notes/signs/unknown voices. */
 export function portraitFor(who) {
   let id = portraitId(who);
-  if (G.prequel && id && PEOPLE[id + '99']) id += '99'; // Newark, 1999: the younger faces
-  if (!id || !PEOPLE[id]) return null;
+  if (G.prequel && id && PEOPLE[id + '99']) id += '99'; // the prequels: the younger faces
+  return portraitById(id);
+}
+
+/** Illustrated portraits shipped as images (art/portraits/<id>.jpg). */
+export const ART = new Set(['frank', 'ruth', 'dee', 'gus', 'marcus', 'rosa', 'pete', 'ingrid', 'bo', 'tess', 'eleanor', 'theo', 'walt', 'reyes',
+  'stranger', 'deputy', 'carmine', 'sal', 'vinnie', 'leo', 'dom', 'angie', 'mickey', 'dante', 'joey', 'frank99', 'leo99', 'dante99', 'dom99',
+  'carlo', 'nico', 'duke']);
+const broken = new Set();
+const artUrl = (id) => `art/portraits/${id}.jpg`;
+
+/** The portrait for a portrait id: the illustration when there is one, else the painted one (or null). */
+export function portraitById(id) {
+  if (!id) return null;
+  if (ART.has(id) && !broken.has(id) && !(typeof window !== 'undefined' && window.__cusPainted)) return artUrl(id);
+  return painted(id);
+}
+function painted(id) {
+  if (!PEOPLE[id]) return null;
   if (!cache.has(id)) cache.set(id, paint(PEOPLE[id], id).toDataURL('image/png'));
   return cache.get(id);
+}
+/** An <img> showing an illustrated portrait failed to load: fall back to the painted one from now on. */
+export function portraitFallback(img) {
+  const m = /art\/portraits\/([a-z0-9]+)\.jpg$/.exec(img.getAttribute('src') || '');
+  if (!m) return;
+  broken.add(m[1]);
+  const alt = painted(m[1]);
+  if (alt) img.src = alt; else img.removeAttribute('src');
 }
 
 export const PORTRAIT_IDS = Object.keys(PEOPLE);

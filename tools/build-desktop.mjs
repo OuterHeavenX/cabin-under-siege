@@ -13,7 +13,7 @@ import { createRequire } from 'node:module';
 const root = new URL('..', import.meta.url).pathname;
 const desk = root + 'desktop/';
 const game = desk + 'game/';
-const SHIP = ['index.html', 'css', 'src', 'icons', 'audio'];
+const SHIP = ['index.html', 'css', 'src', 'art', 'icons', 'audio'];
 const version = readFileSync(root + 'src/config.js', 'utf8').match(/GAME_VERSION = '([^']+)'/)[1];
 const args = process.argv.slice(2);
 

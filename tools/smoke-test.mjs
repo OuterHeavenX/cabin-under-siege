@@ -29,7 +29,7 @@ await sleep(600);
   const sw = readFileSync(new globalThis.URL('../sw.js', import.meta.url), 'utf8');
   const walk = (d) => readdirSync(d).flatMap((f) => (statSync(`${d}/${f}`).isDirectory() ? walk(`${d}/${f}`) : [`${d}/${f}`]));
   const root = new globalThis.URL('..', import.meta.url).pathname;
-  const missing = walk(root + 'src').map((f) => f.slice(root.length)).filter((f) => !sw.includes(`"./${f}"`));
+  const missing = [...walk(root + 'src'), ...walk(root + 'art')].map((f) => f.slice(root.length)).filter((f) => !sw.includes(`"./${f}"`));
   check('Service worker caches every source file (offline play)', missing.length === 0, missing.join(', '));
 }
 
@@ -1103,8 +1103,9 @@ if (want('v4')) {
   const portrait = await C(() => !document.getElementById('dlg-portrait').classList.contains('hidden') || document.getElementById('dlg-who').textContent === '');
   await skipDialogues(page);
   await C(() => import('./src/ui/dialogue.js').then((m) => m.playDialogue([{ who: 'Ruth Calloway', text: 'Test.' }]))); await sleep(300);
+  await page.waitForFunction(() => { const i = document.getElementById('dlg-portrait'); return i.complete && i.naturalWidth > 0; }, null, { timeout: 5000 }).catch(() => {});
   const pic = await C(() => { const i = document.getElementById('dlg-portrait'); return !i.classList.contains('hidden') && i.naturalWidth > 0; });
-  check('v4 Conversations show a painted portrait of the speaker', pic && portrait);
+  check('v4 Conversations show a portrait of the speaker', pic && portrait);
   await skipDialogues(page);
   // Weather + grading
   await C(() => { const c = window.__cus; c.G.s.time.day = 3; c.G.s.time.minute = 22 * 60; c.dbg.setWeather('rain'); c.G.s.story.step = 'free'; c.G.s.story.flags.firstSiegeDone = true; });
@@ -2634,10 +2635,31 @@ if (want('3d')) {
   // The tactical HUD.
   const hud = await C(() => ({ card: document.querySelector('#party .pcard .pname') && document.querySelector('#party .pcard .pname').textContent, hp: document.querySelector('#party .php') && document.querySelector('#party .php').textContent, bar: getComputedStyle(document.getElementById('actbar')).display, place: document.getElementById('mission-place').textContent, objIn: !!document.querySelector('#mission #objective') }));
   check('HUD: mission card, Frank\'s portrait card with health, and the action bar', hud.card === 'FRANK' && /\d+ \/ \d+/.test(hud.hp) && hud.bar === 'flex' && hud.place === 'THE CABIN' && hud.objIn, JSON.stringify(hud));
+  // v0.20.1: illustrated portraits, with the painted ones as the fallback.
+  await page.waitForFunction(() => { const i = document.querySelector('#party .pcard img'); return i && i.complete; }, null, { timeout: 15000 }).catch(() => {});
+  const pics = await C(() => import('./src/ui/portraits.js').then((m) => {
+    const card = document.querySelector('#party .pcard img');
+    const ruthBefore = m.portraitFor('Ruth Calloway');
+    const every = [...m.ART].every((id) => m.portraitById(id) === `art/portraits/${id}.jpg`);
+    const bad = document.createElement('img'); bad.setAttribute('src', 'art/portraits/nobody.jpg'); m.portraitFallback(bad);
+    const ruthImg = document.createElement('img'); ruthImg.setAttribute('src', m.portraitFor('Ruth Calloway')); m.portraitFallback(ruthImg);
+    return { card: card && card.getAttribute('src'), w: card && card.naturalWidth, ruth: ruthBefore, duke: m.portraitById('duke'), sign: m.portraitFor('Note'), every, ruthFallback: (ruthImg.getAttribute('src') || '').slice(0, 22), ruthAfter: (m.portraitFor('Ruth Calloway') || '').slice(0, 22) };
+  }));
+  check('Portraits: Frank\'s card shows his illustrated portrait (loaded), Duke has one, notes have none', pics.card === 'art/portraits/frank.jpg' && pics.w === 320 && pics.duke === 'art/portraits/duke.jpg' && pics.sign === null && pics.every, JSON.stringify(pics));
+  check('Portraits: a portrait that can\'t load falls back to the painted one', pics.ruth === 'art/portraits/ruth.jpg' && pics.ruthFallback === 'data:image/png;base64,' && pics.ruthAfter === 'data:image/png;base64,', JSON.stringify(pics));
+  await C(() => { window.__cus.dbg.closeAll(); });
+  await C(() => import('./src/ui/dialogue.js').then((d) => d.playDialogue([{ who: 'Dee Marsh', text: 'Morning, Frank.' }])));
+  await sleep(300);
+  const dlgPic = await C(() => { const i = document.getElementById('dlg-portrait'); return { src: i.getAttribute('src'), hidden: i.classList.contains('hidden') }; });
+  await skipDialogues(page);
+  check('Portraits: conversations show the speaker\'s illustrated portrait', dlgPic.src === 'art/portraits/dee.jpg' && !dlgPic.hidden, JSON.stringify(dlgPic));
   await skipDialogues(page); await C(() => window.__cus.dbg.closeAll()); await sleep(500);
   await C(() => { const p = window.__cus.G.player; p.mag = 3; });
-  await page.click('#actbar [data-press="reload"]'); await sleep(600);
-  check('HUD: the action bar buttons work (Reload)', await C(() => window.__cus.G.player.reloadT > 0 || window.__cus.G.player.mag === 8));
+  await page.click('#actbar [data-press="reload"]');
+  // The press is read on the next game frame, which can take a while with software WebGL.
+  let reloaded = false;
+  for (let i = 0; i < 30 && !reloaded; i++) { await sleep(100); reloaded = await C(() => window.__cus.G.player.reloadT > 0 || window.__cus.G.player.mag === 8); }
+  check('HUD: the action bar buttons work (Reload)', reloaded);
   // Classic view.
   await C(() => { window.__cus.G.settings.view = 'classic'; }); await sleep(800);
   check('3D: Settings → View → Classic 2D switches back to the top-down view', !(await mod('./src/world/render3d.js', (m) => m.view3dState())).canvas && await C(() => !window.__cus.G.view3d));

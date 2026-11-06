@@ -12,7 +12,7 @@ on:
   push:
     branches: [main, claude/cabin-chapter-1]
     tags: ['v*']
-    paths: ['src/**', 'css/**', 'index.html', 'icons/**', 'audio/**', 'desktop/**', 'tools/build-desktop.mjs', '.github/workflows/desktop.yml']
+    paths: ['src/**', 'css/**', 'art/**', 'index.html', 'icons/**', 'audio/**', 'desktop/**', 'tools/build-desktop.mjs', '.github/workflows/desktop.yml']
   workflow_dispatch:
 
 jobs:

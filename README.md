@@ -7,7 +7,7 @@ You are Frank Lowe — formerly Frankie Corsetti of the Vescari crime family —
 to build an honest life in a cabin outside the small town of Pine Hollow. By day you
 work, meet people and fix up the place. Some nights, the family comes for you.
 
-This build (v0.20) contains **the complete story — five playable chapters with four endings, and an epilogue chapter after them**, each chapter now a stretch of Frank's life rather than a stop between sieges — plus a prequel episode, New Game+ and an arcade mode. It runs in the browser and as an installable Steam Deck / PC game:
+This build (v0.20.1) contains **the complete story — five playable chapters with four endings, and an epilogue chapter after them**, each chapter now a stretch of Frank's life rather than a stop between sieges — plus a prequel episode, New Game+ and an arcade mode. It runs in the browser and as an installable Steam Deck / PC game:
 
 1. **The Cabin** — Pine Hollow, a remote cabin and a small town.
 2. **Larch Street** — Millbrook, Ohio: a house on a quiet street, a neighbor with secrets, and Sal Benedetto.
@@ -39,6 +39,19 @@ than using simple beeps:
 `audio/manifest.json` — each listed sound replaces the generated one (music files
 loop per mood). See [`audio/README.md`](audio/README.md) for the sound names and
 recommended free sources.
+
+### Illustrated portraits (v0.20.1)
+
+The cast now has anime-style illustrated portraits in place of the painted-in-code faces: Frank, Ruth, Dee,
+Gus, Marcus and every other named character, the villains, the Man in a Grey Coat, Duke on his party card, and
+younger faces of Frank, Leo, Dante and Father Dom for the prequels (made from their older portraits so they're
+recognisably the same people). They show in conversations and on the party cards, with the same dark-red noir
+lighting as the title screen.
+
+They're 32 small JPEGs in `art/portraits/` (about 700 KB together, cached for offline play). The old painted
+portraits are still in the code as the fallback: if an image can't load, the game draws the painted one instead,
+and people without an illustration (most townsfolk) keep showing no portrait as before. The images were
+generated for this game with Higgsfield's image tools (GPT Image 2.6).
 
 ### 3D view and tactical HUD (v0.20)
 
@@ -561,9 +574,10 @@ directly from disk (`file://`) won't work because browsers block ES modules ther
   stay in plain Canvas 2D. A custom ~5k-line engine gives exact
   control over multi-touch, lighting and performance on iPhone, keeps the download tiny,
   and means there is nothing to build — the repo *is* the deployable site.
-- **All art is procedural** (drawn in code). **Audio is physically modelled** with Web
+- **Art is procedural** (drawn in code), apart from the character portraits in `art/portraits/` (AI-generated
+  illustrations, v0.20.1; the procedural portraits remain as the fallback). **Audio is physically modelled** with Web
   Audio (see *Audio* below), and any sound can be replaced by a real recording by
-  dropping a file into `audio/`. No third-party or unlicensed assets ship with the game.
+  dropping a file into `audio/`. Apart from three.js (MIT, see `src/vendor/three.LICENSE.txt`) and the generated portraits, no third-party assets ship with the game.
 - **Offline**: a service worker caches the game after the first visit (HTTPS only).
   The game also works as a home-screen web app (manifest included).
 
@@ -800,6 +814,7 @@ picked up promptly. When you ship a new version, bump `CACHE` in `sw.js` (and
 
 ```
 index.html, css/style.css     Page, HUD, touch controls, menus
+art/portraits/                Illustrated character portraits (JPEG, 320×320)
 sw.js, manifest.webmanifest   Offline cache + installable web app
 src/main.js                   Boot, main loop, travel, pause, title screen
 src/input.js                  Keyboard/mouse + multi-touch controls
@@ -863,6 +878,9 @@ tools/                        Dev server, smoke test, icon generator
 ## Known limitations
 
 - Not yet tested on a physical iPhone/iPad (see checklist above).
+- **Portraits (v0.20.1):** only the named cast has illustrated portraits; townsfolk such as Old Man Tibbs or
+  Pastor Abe still talk without one. To add or replace one, drop a 320×320 JPEG named after the portrait id
+  into `art/portraits/`, add the id to `ART` in `src/ui/portraits.js` and list the file in `sw.js`.
 - **The 3D view (v0.20)** has only been tested in a headless browser with software WebGL, never on a real
   phone, tablet or Steam Deck, so its speed there is unknown. If it stutters, set Graphics to Low (no
   shadows) or View to Classic 2D. People are simple figures (no animated character models), and the
