@@ -19,6 +19,7 @@ import { lowQuality } from '../game/difficulty.js';
 import { vehicleSprite } from './vehicles.js';
 import { critterList, trafficList } from './ambient.js';
 import { homeMapId } from '../game/chapters.js';
+import { frankRig, poseFrank, frankFx, frankTracer, frankDebug, frankPipY, prewarmFrank } from './frank3d.js';
 
 export const WH = 88; // wall height
 const DOOR_H = 66, SILL = 28, HEAD = 64;
@@ -73,6 +74,7 @@ function init() {
   scene.add(flash); scene.add(flash.target);
   for (let i = 0; i < 8; i++) { const l = new THREE.PointLight(0xffc27a, 0, 300, 1.4); l.position.set(0, -999, 0); scene.add(l); pool.push(l); }
   scene.fog = new THREE.FogExp2(0x9fb3c4, 0.00018);
+  prewarmFrank(R, scene, camera, !!lowQuality());
   return true;
 }
 
@@ -525,16 +527,19 @@ function litByLights(x, y) {
   return false;
 }
 
+const FCTX = { dk: 0, camera: null, sun: null, toWorld: null };
 function syncActors(dk, seeR) {
   for (const r of rigs.values()) r.seen = false;
   const m = G.map, p = G.player, t = G.time;
   const inside = m.buildingAt(p.x, p.y);
-  // Frank
-  if (p && !p.dead) {
-    const look = LOOKS.frank;
-    const r = rigFor(p, () => personRig({ body: '#6e4a30', skin: '#e0b18e', hair: '#2a2220', pants: look.pants, armed: true, ring: '#ffffff', r: 11 }));
-    const blink = p.invuln > 0 && p.dodgeT <= 0 && Math.floor(t * 20) % 2 === 0;
-    posePerson(r, p.x, p.y, p.angle, p.walkPhase, { aim: true, ring: true, visible: !blink });
+  // Frank: the articulated rig (frank3d.js). Kept alive while dead (death animation).
+  if (p) {
+    const q = !!lowQuality(), young = !!G.prequel; // lowQuality() can be undefined ('auto' before autoLow is ever set)
+    let r = rigs.get(p), carry = null;
+    if (r && (r.q !== q || r.young !== young)) { carry = r.st; scene.remove(r.g); r.dispose(); rigs.delete(p); }
+    r = rigFor(p, () => frankRig({ q, young, carry }));
+    FCTX.dk = dk; FCTX.camera = camera; FCTX.sun = sun; FCTX.toWorld = toWorld;
+    poseFrank(r, p, FCTX);
   }
   for (const n of G.npcs) {
     if (!n.present && !n.scripted) continue;
@@ -593,7 +598,7 @@ function syncActors(dk, seeR) {
     r.g.position.y += c.kind === 'rabbit' || c.kind === 'squirrel' ? Math.abs(Math.sin(c.hop || 0)) * 3 : 0;
   }
   // Remove what's gone.
-  for (const [e, r] of rigs) if (!r.seen) { scene.remove(r.g); r.g.traverse((o) => { if (o.material && o.material.userData && o.material.userData.own) { if (o.material.map && o.material.userData.ownMap) o.material.map.dispose(); o.material.dispose(); } }); rigs.delete(e); }
+  for (const [e, r] of rigs) if (!r.seen) { scene.remove(r.g); if (r.dispose) r.dispose(); r.g.traverse((o) => { if (o.material && o.material.userData && o.material.userData.own) { if (o.material.map && o.material.userData.ownMap) o.material.map.dispose(); o.material.dispose(); } }); rigs.delete(e); }
 }
 function critterRig(kind, s) {
   const g = new THREE.Group();
@@ -645,6 +650,8 @@ function marker(hex) {
   g.userData.ring = ring;
   return g;
 }
+const TR_OB = new THREE.Object3D(), TR_H = new THREE.Vector3(), TR_T = new THREE.Vector3(), TR_D = new THREE.Vector3();
+const X_AXIS = new THREE.Vector3(1, 0, 0), Y_AXIS3 = new THREE.Vector3(0, 1, 0), TR_ENEMY = new THREE.Color(1, 0.45, 0.3), TR_PLAYER = new THREE.Color(1, 0.95, 0.7);
 function syncDynamic(props, dk) {
   ensureDyn();
   for (const o of dyn.things.values()) o.userData.seen = false;
@@ -672,14 +679,23 @@ function syncDynamic(props, dk) {
   }
   for (const [k, o] of dyn.things) if (!o.userData.seen) { scene.remove(o); dyn.things.delete(k); }
 
-  // Bullets as glowing tracers.
-  const tr = dyn.tracer, ob = new THREE.Object3D();
+  // Bullets as glowing tracers. Frank's leave his barrel and merge into the true sim path (frank3d.js).
+  const tr = dyn.tracer, ob = TR_OB, fr = G.player && rigs.get(G.player), frk = fr && fr.frank ? fr : null;
   let n = 0;
   for (const b of G.bullets) {
     if (n >= 96) break;
-    const dx = b.x - b.px, dy = b.y - b.py, len = Math.max(6, Math.hypot(dx, dy) * 2.2);
-    ob.position.set(b.x - dx * 0.6, 30, b.y - dy * 0.6); ob.rotation.set(0, -Math.atan2(dy, dx), 0); ob.scale.set(len, b.owner === 'player' ? 1 : 1.3, b.owner === 'player' ? 1 : 1.3); ob.updateMatrix();
-    tr.setMatrixAt(n, ob.matrix); tr.setColorAt(n, b.owner === 'enemy' ? new THREE.Color(1, 0.45, 0.3) : new THREE.Color(1, 0.95, 0.7)); n++;
+    if (b.owner === 'player' && frk) {
+      if (!frankTracer(frk, b, TR_H, TR_T)) continue;
+      TR_D.subVectors(TR_H, TR_T); const L = TR_D.length();
+      ob.position.lerpVectors(TR_T, TR_H, 0.5);
+      if (L > 1e-6) ob.quaternion.setFromUnitVectors(X_AXIS, TR_D.multiplyScalar(1 / L)); else ob.quaternion.identity();
+      ob.scale.set(Math.max(4, L), 1, 1);
+    } else {
+      const dx = b.x - b.px, dy = b.y - b.py, len = Math.max(6, Math.hypot(dx, dy) * 2.2);
+      ob.position.set(b.x - dx * 0.6, 30, b.y - dy * 0.6); ob.quaternion.setFromAxisAngle(Y_AXIS3, -Math.atan2(dy, dx)); ob.scale.set(len, b.owner === 'player' ? 1 : 1.3, b.owner === 'player' ? 1 : 1.3);
+    }
+    ob.updateMatrix();
+    tr.setMatrixAt(n, ob.matrix); tr.setColorAt(n, b.owner === 'enemy' ? TR_ENEMY : TR_PLAYER); n++;
   }
   tr.count = n; tr.instanceMatrix.needsUpdate = true; if (tr.instanceColor) tr.instanceColor.needsUpdate = true;
   // Particles (blood, sparks, splinters).
@@ -706,10 +722,27 @@ function syncDynamic(props, dk) {
     }
   }
   for (; fi < dyn.flames.length; fi++) dyn.flames[fi].visible = false;
-  // Muzzle flash.
-  const p = G.player;
+  // Muzzle flash: on Frank's barrel when the rig has the gun up, else the classic spot.
+  const p = G.player, fx = frk ? frankFx(frk) : null;
   dyn.muzzle.visible = p.muzzle > 0;
-  if (p.muzzle > 0) dyn.muzzle.position.set(p.x + Math.cos(p.angle) * 26, 36, p.y + Math.sin(p.angle) * 26);
+  if (p.muzzle > 0) {
+    if (fx && fx.valid) { dyn.muzzle.position.copy(fx.flashPos); dyn.muzzle.scale.set(fx.flashSize, fx.flashSize, 1); }
+    else { dyn.muzzle.position.set(p.x + Math.cos(p.angle) * 26, 36, p.y + Math.sin(p.angle) * 26); dyn.muzzle.scale.set(26, 26, 1); }
+  }
+}
+/** Frank's flashlight and muzzle light, placed from the rig's anchors (after syncActors; updateLights runs before it). */
+function placeFrankFx(dk) {
+  const p = G.player, r = p && rigs.get(p); if (!r || !r.frank) return;
+  const fx = frankFx(r);
+  // (only with the gun up: a relaxed gun hangs at his side, and a beam from it toward the aim crossed his own coat while
+  // his body turned after the mouse; then the light keeps updateLights' spot, out in front along the aim)
+  if (dk > 0.25 && !p.dead && fx.valid && fx.aimed) flash.position.copy(fx.lightOrigin); // intensity and target unchanged from updateLights
+  if (p.muzzle > 0 && dk > 0.15 && fx.valid) { // borrow the farthest pool light for the flash; updateLights restores it next frame
+    // (8 u out along the bore, so the coat is lit at a grazing angle instead of point-blank; softer and wider: at 2500 the
+    // three flash frames blew the charcoal coat out to khaki and the ground to yellow)
+    const l = pool[7], M0 = p.weapon === 'shotgun' ? 0.09 : 0.06;
+    l.position.copy(fx.muzzle).addScaledVector(fx.bore, 8); l.color.setHex(0xffb469); l.distance = 240; l.intensity = 1000 * Math.min(1, p.muzzle / M0);
+  }
 }
 
 /* ---------------- lights, camera, frame ---------------- */
@@ -791,6 +824,7 @@ export function render3d() {
   camera.aspect = w / h; camera.updateProjectionMatrix();
   camera.position.set(tx, Math.sin(PITCH) * d, tz + Math.cos(PITCH) * d);
   camera.lookAt(tx, 0, tz);
+  camera.updateMatrixWorld();
   updateLights(tx, tz, dk);
   // Roofs: hidden over the building you're in; see-through when something's inside or behind it.
   const inside = m.buildingAt(p.x, p.y);
@@ -826,6 +860,7 @@ export function render3d() {
   }
   if (dirty) for (const k of Object.keys(world.canopy)) for (const im of world.canopy[k]) im.instanceMatrix.needsUpdate = true;
   syncActors(dk, derivedSee());
+  placeFrankFx(dk);
   syncDynamic(propsNow(), dk);
   R.render(scene, camera);
   return true;
@@ -844,8 +879,13 @@ export const active3dCanvas = () => canvas3d;
 
 /** For the automated test: what the 3D view is showing. */
 export function view3dState() {
-  return { map: world && world.map.id, roofsCut: world ? world.roofs.filter((r) => !r.mesh.visible).map((r) => r.b.id) : [], rigs: rigs.size, people: [...rigs.values()].filter((r) => r.kind === 'person').length, cars: [...rigs.values()].filter((r) => r.kind === 'car').length, canvas: !!canvas3d && canvas3d.style.display !== 'none' };
+  return { map: world && world.map.id, roofsCut: world ? world.roofs.filter((r) => !r.mesh.visible).map((r) => r.b.id) : [], rigs: rigs.size, people: [...rigs.values()].filter((r) => r.kind === 'person').length, cars: [...rigs.values()].filter((r) => r.kind === 'car').length, canvas: !!canvas3d && canvas3d.style.display !== 'none',
+    frank: (() => { const r = G.player && rigs.get(G.player); if (!r || !r.frank) return null;
+      const d = frankDebug(r); d.flashPos = dyn && dyn.muzzle.visible ? dyn.muzzle.position.toArray() : null; return d; })(),
+    mem: R ? { geometries: R.info.memory.geometries, textures: R.info.memory.textures } : null };
 }
+/** Where Frank's health pips go (head top + 7, low-passed), for overlay3d. */
+export function frankPipHeight() { const r = G.player && rigs.get(G.player); return r && r.frank ? frankPipY(r) : 70; }
 /** Render one frame and copy it out (WebGL clears its buffer after compositing). */
 export function snapshot3d() {
   if (!render3d()) return null;

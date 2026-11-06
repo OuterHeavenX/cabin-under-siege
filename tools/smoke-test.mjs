@@ -2621,6 +2621,164 @@ if (want('3d')) {
   check('3D: the mouse aims where it points in the 3D view', Math.abs(Math.atan2(Math.sin(ang), Math.cos(ang))) < 0.15, String(ang));
   const people = await mod('./src/world/render3d.js', (m) => m.view3dState());
   check('3D: Frank and his car are in the scene', people.people >= 1 && people.cars >= 1, JSON.stringify(people));
+  // v0.20.3: Frank is a real articulated character (frank3d.js); the quality may flip to Low mid-run, so every check branches on F.q.
+  {
+    const FR = async () => (await mod('./src/world/render3d.js', (m) => m.view3dState())).frank;
+    await C(() => { window.__cus.dbg.input.mouse.inside = false; });
+    await sleep(600);
+    // (M2: the mouse check just turned him 90°, and he turns in place by stepping round: let the steps finish, on frames)
+    let F = await FR();
+    for (let i = 0; i < 80 && F && (F.locoAt !== 'idle' || !F.planted.every(Boolean)); i++) { await sleep(250); F = await FR(); }
+    check('3D Frank: the player is the articulated rig (one skinned mesh, few draws)',
+      F && F.kind === 'person' && F.skinned && F.bones === (F.q ? 39 : 50) && F.draws <= 4 && F.patched &&
+      F.tris > (F.q ? 900 : 3000) && F.tris <= (F.q ? 1850 : 5900), JSON.stringify(F));
+    check('3D Frank: stands on the ground at his height, feet planted',
+      F && F.locoAt === 'idle' && F.headTop >= 70 && F.headTop <= 76 && F.feet.every((f) => f[1] < 1.2) && F.planted.every(Boolean), JSON.stringify(F));
+    // his measured height (the hair top on the head bone), not a constant, projected at the default zoom
+    const px = await mod('./src/world/render3d.js', (m, h) => { const p = window.__cus.G.player; const a = m.toScreen(p.x, p.y, h), b = m.toScreen(p.x, p.y, 0); return b[1] - a[1]; }, F.headTop);
+    check('3D Frank: reads at the default zoom (55–95 px tall)', px >= 55 && px <= 95, JSON.stringify({ px, headTop: F.headTop }));
+    // 'Automatic' quality before the frame-rate check has ever decided (lowQuality() is undefined then): one rig, kept
+    // (not rebuilt every frame), and his state lives on: the aim comes up. The sim is frozen so autoLow can't flip meanwhile.
+    const q0 = await C(() => { const c = window.__cus, G = c.G, o = { q: G.settings.quality, a: G.autoLow, lc: G.player.lastCombat };
+      G.modal = 'pose'; G.settings.quality = 'auto'; delete G.autoLow; G.player.lastCombat = 0; return o; });
+    // software GL can run at ~1 fps here: wait on frames (G.time), not on wall-clock time
+    let Fa = await FR();
+    for (let i = 0; i < 40 && Fa && Fa.q; i++) { await sleep(250); Fa = await FR(); } // a legit High rebuild if autoLow had been on
+    const t0 = await C(() => window.__cus.G.time);
+    let Fb = Fa;
+    for (let i = 0; i < 60 && Fb && !(Fb.aimW >= 0.99); i++) { await sleep(250); Fb = await FR(); }
+    await sleep(500); Fb = await FR(); const t1 = await C(() => window.__cus.G.time);
+    await C((o) => { const G = window.__cus.G; G.settings.quality = o.q; if (o.a === undefined) delete G.autoLow; else G.autoLow = o.a; G.player.lastCombat = o.lc; G.modal = null; }, q0);
+    check('3D Frank: Automatic quality keeps one rig (no rebuild every frame) and his aim comes up', Fa && Fb && Fa.serial === Fb.serial && !Fb.q && Fb.aimW >= 0.99 && t1 - t0 > 0.15,
+      JSON.stringify({ a: Fa && [Fa.serial, Fa.q, Fa.aimW], b: Fb && [Fb.serial, Fb.q, Fb.aimW], frames: +(t1 - t0).toFixed(2) }));
+    // walking (M2): on open ground, hold D for two full step cycles. The feet plant in world space (the measured drift of
+    // the heel and ball of every planted foot, on the bones after IK, stays under 0.75) and the contacts land on the
+    // footstep beat.
+    const home = await C(() => {
+      const c = window.__cus, G = c.G, m = G.map, T = 32, p = G.player, o = { x: p.x, y: p.y };
+      const free = (x, y) => m.inBounds(x, y) && !m.blocksMove(x, y, 'player') && !m.blockerAt(x, y) && !m.buildingAt(x * T + 16, y * T + 16) && !m.trees.has(m.idx(x, y));
+      let best = null;
+      for (let y = 2; y < m.h - 2; y++) { let run = 0; for (let x = 0; x < m.w; x++) { if (free(x, y) && free(x, y - 1) && free(x, y + 1)) run++; else run = 0; if (run && (!best || run > best.run)) best = { run, x0: x - run + 1, y }; } }
+      if (best && best.run >= 10) { p.x = (best.x0 + 2) * T + 16; p.y = best.y * T + 16; }
+      G.player.lastCombat = 99; c.dbg.input.mouse.inside = false; return o;
+    });
+    await sleep(1500);
+    let W = await FR();
+    const c0 = W.contacts, ph0 = await C(() => window.__cus.G.player.walkPhase);
+    await page.keyboard.down('KeyD');
+    // (software GL can run at 1–2 fps here: wait on the step clock itself, for up to a minute)
+    let dph = 0;
+    for (let i = 0; i < 400 && (dph = (await C(() => window.__cus.G.player.walkPhase)) - ph0) < 4 * Math.PI; i++) await sleep(150);
+    W = await FR(); await page.keyboard.up('KeyD');
+    check('3D Frank: walks with planted feet', W && ['walk', 'jog'].includes(W.locoAt) && W.contacts - c0 >= 3 && W.maxStanceDrift < 0.75 && W.resets === 0,
+      JSON.stringify({ locoAt: W && W.locoAt, contacts: W && W.contacts - c0, walkPhase: +dph.toFixed(2), maxStanceDrift: W && W.maxStanceDrift, ikFails: W && W.ikFails, resets: W && W.resets }));
+    // stopped: give him 1.5 s of game time (software GL can be slow: wait on frames, not the wall clock)
+    const tw0 = await C(() => window.__cus.G.time);
+    for (let i = 0; i < 120 && (await C(() => window.__cus.G.time)) - tw0 < 1.5; i++) await sleep(250);
+    W = await FR();
+    check('3D Frank: stops on both feet (no frozen stride)', W && W.locoAt !== 'jog' && W.planted.every(Boolean) && W.feet.every((f) => f[1] < 1.2), JSON.stringify({ locoAt: W.locoAt, planted: W.planted, feet: W.feet }));
+    // direction changes (M2 review): a reversal at a jog (A for a cycle, then D for a cycle), a 90° cut (S) and a reversal
+    // back (W). A stance foot pivots on its ball or heel and never slides, no leg falls back to FK, no foot pops between
+    // frames, and the hips never squat.
+    const setDbg = (o) => mod('./src/world/frank3d.js', (m, a) => m.setFrankDebug(a), o);
+    const holdKey = async (key, cycles) => {
+      const p0 = await C(() => window.__cus.G.player.walkPhase);
+      await page.keyboard.down(key);
+      for (let i = 0; i < 400 && (await C(() => window.__cus.G.player.walkPhase)) - p0 < cycles * 2 * Math.PI; i++) await sleep(100);
+      await page.keyboard.up(key);
+    };
+    await setDbg({ resetStats: true }); await sleep(300);
+    const R0 = await FR();
+    await holdKey('KeyA', 1); await holdKey('KeyD', 1); await holdKey('KeyS', 0.5); await holdKey('KeyW', 0.5);
+    const tr0 = await C(() => window.__cus.G.time);
+    for (let i = 0; i < 120 && (await C(() => window.__cus.G.time)) - tr0 < 1; i++) await sleep(250);
+    const R1 = await FR();
+    check('3D Frank: reverses and cuts with planted feet (no slide, no FK fallback, no foot pop, no squat)',
+      R1 && R1.maxStanceDrift < 0.75 && R1.ikFails === R0.ikFails && R1.resets === 0 && R1.maxFootStep < 12 && R1.minPelvisY >= 30 && R1.contacts - R0.contacts >= 4,
+      JSON.stringify({ maxStanceDrift: R1 && R1.maxStanceDrift, ikFails: [R0.ikFails, R1 && R1.ikFails], resets: R1 && R1.resets, maxFootStep: R1 && R1.maxFootStep, minPelvisY: R1 && R1.minPelvisY, contacts: R1 && R1.contacts - R0.contacts }));
+    // a shove (a ram pushes the player 26 u in one frame): the feet skid with him and a corrective step catches the rest;
+    // no squat, no FK fallback, no slide
+    await setDbg({ resetStats: true }); await sleep(300);
+    const S0 = await FR();
+    await C(() => { window.__cus.G.player.x += 26; });
+    const ts0 = await C(() => window.__cus.G.time);
+    for (let i = 0; i < 120 && (await C(() => window.__cus.G.time)) - ts0 < 1.2; i++) await sleep(250);
+    const S1 = await FR();
+    check('3D Frank: a 26 u shove skids and steps (no squat, no FK fallback)',
+      S1 && S1.minPelvisY >= 32 && S1.ikFails === S0.ikFails && S1.maxStanceDrift < 0.3 && S1.planted.every(Boolean) && S1.resets === 0,
+      JSON.stringify({ minPelvisY: S1 && S1.minPelvisY, ikFails: [S0.ikFails, S1 && S1.ikFails], maxStanceDrift: S1 && S1.maxStanceDrift, planted: S1 && S1.planted, shoves: S1 && S1.shoves }));
+    // M3, weapons: frozen pose probes (the sim stops, the renderer keeps going; wait on frames, not the wall clock)
+    {
+      const frames = async (t = 0.3) => { const t0 = await C(() => window.__cus.G.time); for (let i = 0; i < 160 && (await C(() => window.__cus.G.time)) - t0 < t; i++) await sleep(100); };
+      const pose = (fn, a) => C(fn, a);
+      await pose(() => { const c = window.__cus; c.dbg.addItem('shotgun', 1, true); c.dbg.addItem('rifle', 1, true); });
+      await pose(() => { const c = window.__cus, p = c.G.player; c.G.modal = 'pose'; p.weapon = 'pistol'; p.mag = 8; p.reloadT = 0; p.swapT = 0; p.angle = 0; p.lastCombat = 0; p.muzzle = 0.06; });
+      await frames(); let F2 = await FR();
+      const dm = F2.muzzleRel, fd = F2.flashPos && F2.flashExpect ? Math.hypot(F2.flashPos[0] - F2.flashExpect[0], F2.flashPos[1] - F2.flashExpect[1], F2.flashPos[2] - F2.flashExpect[2]) : 99;
+      check('3D Frank: the muzzle flash comes out of the barrel',
+        dm[0] > 20 && dm[0] < 34 && dm[1] > 42 && dm[1] < 58 && Math.abs(dm[2]) < 6 && !!F2.flashPos && fd < 0.6 && Math.abs(F2.chestYawErr) < 4,
+        JSON.stringify({ muzzleRel: dm, flashPos: F2.flashPos, flashExpect: F2.flashExpect, chestYawErr: F2.chestYawErr }));
+      check('3D Frank: the gun drives the hands (both on the pistol), the bore converges on the sim line, recoil shows on the flash frame',
+        F2.handErr && F2.handErr[0] < 0.5 && F2.handErr[1] < 1.0 && F2.boreMiss !== null && F2.boreMiss < 1.0 && Math.abs(F2.conv) <= 7 && F2.recoil.pitch >= 0.55 * 14 && F2.gunDriver === 'aim',
+        JSON.stringify({ handErr: F2.handErr, boreMiss: F2.boreMiss, conv: F2.conv, recoil: F2.recoil, gunDriver: F2.gunDriver }));
+      // the long guns: shouldered, cheek on the stock, the bore converged, both hands on the gun
+      const longs = {};
+      for (const w of ['shotgun', 'rifle']) {
+        await pose((w) => { const p = window.__cus.G.player; p.weapon = w; p.mag = 5; p.muzzle = -1; }, w);
+        await frames(0.5); longs[w] = await FR();
+      }
+      const LS = longs.shotgun, LR = longs.rifle;
+      check('3D Frank: the long guns are shouldered with a cheek weld (eye over the bore), converged, both hands on the gun',
+        [LS, LR].every((L) => L.inHand === L.weapon && L.muzzleRel[0] > 34 && L.muzzleRel[0] < 54 && L.muzzleRel[1] > 44 && L.muzzleRel[1] < 62 && Math.abs(L.muzzleRel[2]) < 10 &&
+          L.boreMiss < 1.0 && L.handErr[0] < 0.5 && L.handErr[1] < 1.0 && L.eyeToBore && Math.abs(L.eyeToBore[0]) <= 3.5) &&
+          LS.eyeToBore[1] >= 2 && LS.eyeToBore[1] <= 4 && LR.eyeToBore[1] >= 2 && LR.eyeToBore[1] <= 4 && LS.slung === 'rifle' && LR.slung === 'shotgun',
+        JSON.stringify({ shotgun: [LS.muzzleRel, LS.boreMiss, LS.handErr, LS.eyeToBore, LS.slung], rifle: [LR.muzzleRel, LR.boreMiss, LR.handErr, LR.eyeToBore, LR.slung] }));
+      // the reload (§7.3): a tactical pistol reload halfway, the upper body is in the reload
+      await pose(() => { const p = window.__cus.G.player; p.weapon = 'pistol'; p.muzzle = -1; p.reloadT = 0.7; p.reloadMax = 1.45; p.mag = 2; });
+      await frames(); F2 = await FR();
+      check('3D Frank: reload drives the upper body', F2.upper === 'reload' && F2.handLMoved > 3 && F2.reload && !F2.reload.empty, JSON.stringify({ upper: F2.upper, handLMoved: F2.handLMoved, reload: F2.reload }));
+      // the empty pistol reload, step by step: the slide locked back, the old magazine out (a debris magazine falls), the
+      // spare one in the left hand from the pocket, seated on the knock, the rack closing the slide on 'reloadDone'
+      await pose(() => { const p = window.__cus.G.player; p.reloadT = 0; p.mag = 0; p.muzzle = -1; });
+      await frames(0.2);
+      const at = async (tau, D = 1.45) => { await pose(([tau, D]) => { const p = window.__cus.G.player; p.reloadMax = D; p.reloadT = Math.max(1e-4, D - tau); }, [tau, D]); await frames(0.12); return FR(); };
+      const R0 = await at(0.02), R1 = await at(0.35), R2 = await at(0.9), R3 = await at(1.4495);
+      await pose(() => { const p = window.__cus.G.player; p.reloadT = 0; p.mag = 8; }); await frames(0.3); const R4 = await FR();
+      check('3D Frank: the empty pistol reload: slide locked, mag out and dropped, the spare from the pocket, seated, the rack closes the slide',
+        R0.reload && R0.reload.empty && R0.sub.slide <= -2.1 && R0.sub.mag && R1.lProp === 1 && !R1.sub.mag && R1.debris >= 1 && R2.sub.mag && R2.sub.slide <= -2.1 && R3.sub.slide > -0.5 && R4.upper !== 'reload' && !R4.slideLocked,
+        JSON.stringify({ R0: [R0.reload, R0.sub], R1: [R1.lProp, R1.sub, R1.debris], R2: R2.sub, R3: R3.sub, R4: [R4.upper, R4.slideLocked] }));
+      // the shotgun's shell by shell: a shell in the left hand on the way to the port, none just after the push; the rifle's bolt open mid-reload
+      await pose(() => { const p = window.__cus.G.player; p.weapon = 'shotgun'; p.mag = 2; p.reloadT = 0; }); await frames(0.2);
+      await pose(() => { const p = window.__cus.G.player; p.reloadMax = 0.5; p.reloadT = 0.5 * (1 - 0.75); }); await frames(0.12); const S1 = await FR();
+      await pose(() => { const p = window.__cus.G.player; p.reloadT = 0.5 * (1 - 0.3); }); await frames(0.12); const S2 = await FR();
+      await pose(() => { const p = window.__cus.G.player; p.weapon = 'rifle'; p.mag = 0; p.reloadT = 0; }); await frames(0.2);
+      await pose(() => { const p = window.__cus.G.player; p.reloadMax = 2.3; p.reloadT = 2.3 - 0.3; }); await frames(0.12); const B1 = await FR();
+      await pose(() => { const p = window.__cus.G.player; p.reloadT = 0; p.mag = 5; }); await frames(0.4);
+      check('3D Frank: the shotgun loads shell by shell (a shell in hand, then pushed), the rifle reloads through an open bolt',
+        S1.reload && S1.reload.weapon === 'shotgun' && S1.lProp === 2 && S2.lProp === 0 && B1.reload && B1.reload.weapon === 'rifle' && B1.sub.boltRot > 50 && B1.sub.boltX < -2.5,
+        JSON.stringify({ S1: [S1.reload, S1.lProp], S2: [S2.reload, S2.lProp], B1: [B1.reload, B1.sub] }));
+      // the swap: the pistol goes under the coat while the long gun comes off the back
+      await pose(() => { const p = window.__cus.G.player; p.weapon = 'pistol'; p.mag = 8; p.swapT = 0; }); await frames(0.4);
+      // (a cross swap puts the pistol away by f 0.30, so the hand can cross to the sling: f 0.2 is still on the way to the holster)
+      await pose(() => { const p = window.__cus.G.player; p.weapon = 'shotgun'; p.swapT = 0.35 * (1 - 0.2); }); await frames(0.12); const W1 = await FR();
+      await pose(() => { const p = window.__cus.G.player; p.swapT = 0.35 * (1 - 0.8); }); await frames(0.12); const W2 = await FR();
+      await pose(() => { const p = window.__cus.G.player; p.swapT = 0; p.weapon = 'pistol'; }); await frames(0.4); const W3 = await FR();
+      check('3D Frank: a swap holsters the pistol and draws the long gun from the back, then slings it again',
+        W1.upper === 'swap' && W1.swap && W1.swap.from === 'pistol' && W1.swap.to === 'shotgun' && W1.inHand === 'pistol' && W2.inHand === 'shotgun' && W3.inHand === 'pistol' && W3.slung === 'shotgun' && W3.upper !== 'swap',
+        JSON.stringify({ W1: [W1.upper, W1.swap, W1.inHand], W2: [W2.swap, W2.inHand], W3: [W3.inHand, W3.slung, W3.upper] }));
+      // a casing: it flies from the ejection port and comes to rest exactly where the 2D sim put it
+      const cpos = await pose(() => { const c = window.__cus, p = c.G.player; c.G.casings = c.G.casings || []; const k = { x: p.x + 9, y: p.y + 21, vx: 0, vy: 0, t: 0.36, rot: 1.2, color: '#d9b84a' }; c.G.casings.push(k); return [k.x, k.y]; });
+      await frames(0.6); const K1 = await FR();
+      const kp = K1.debrisPts && K1.debrisPts[0];
+      check('3D Frank: a casing lands where the 2D sim puts it', !!kp && Math.hypot(kp[0] - cpos[0], kp[2] - cpos[1]) < 0.5 && kp[1] < 1, JSON.stringify({ kp, cpos, debris: K1.debris }));
+      await pose(() => { const c = window.__cus, p = c.G.player; c.G.modal = null; p.muzzle = -1; p.reloadT = 0; p.swapT = 0; p.weapon = 'pistol'; p.mag = 8; p.lastCombat = 99; c.G.casings = [];
+        return import('./src/game/inventory.js').then((m) => { m.removeItem('shotgun', 1); m.removeItem('rifle', 1); }); });
+      await frames(0.3);
+      check('3D Frank: the weapon probes never produced a non-finite transform or an IK failure', (await FR()).resets === 0, '');
+    }
+    await C((o) => { const p = window.__cus.G.player; p.x = o.x; p.y = o.y; }, home);
+    await sleep(600);
+  }
   await C(() => { const c = window.__cus; c.G.player.x = c.G.maps.cabin.points.cabin_in.x; c.G.player.y = c.G.maps.cabin.points.cabin_in.y; });
   await sleep(2000);
   check('3D: step inside and the cabin opens up (roof off, walls low)', (await mod('./src/world/render3d.js', (m) => m.view3dState())).roofsCut.includes('cabin'));
@@ -2682,6 +2840,368 @@ if (want('3d')) {
   await b3.close();
 }
 
+/* ================================================================== */
+/* v0.20.3: 3D Frank's maths and geometry (node only, no browser)      */
+/* ================================================================== */
+if (want('frank')) {
+  const anim = await import('../src/world/frank3d-anim.js');
+  const geo = await import('../src/world/frank3d-geo.js');
+  const { Vector3, Quaternion } = await import('../src/vendor/three.module.min.js');
+  // 1. Two-bone IK: reachable targets are reached, full extension and beyond stay finite, the mid joint is a pure hinge.
+  {
+    const rnd = anim.mulberry32(20203), out = anim.makeIKOut(), A = new Vector3(), T = new Vector3(), P = new Vector3();
+    const e = new Vector3(), zU = new Vector3(), zL = new Vector3();
+    let worst = 0, hinge = 1, nan = 0;
+    for (let i = 0; i < 2000; i++) {
+      const L1 = 10 + rnd() * 10, L2 = 10 + rnd() * 10;
+      A.set(rnd() * 40 - 20, rnd() * 40, rnd() * 40 - 20);
+      const dir = new Vector3(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).normalize();
+      const d = Math.abs(L1 - L2) + 0.5 + rnd() * (0.99 * (L1 + L2) - Math.abs(L1 - L2) - 0.5);
+      T.copy(A).addScaledVector(dir, d);
+      P.copy(A).add(new Vector3(rnd() - 0.5, rnd() - 0.5, rnd() - 0.5).multiplyScalar(30));
+      anim.solveTwoBone(A, T, P, L1, L2, i % 2 ? 1 : -1, out);
+      e.copy(A).add(new Vector3(0, -L1, 0).applyQuaternion(out.q1)).add(new Vector3(0, -L2, 0).applyQuaternion(out.q2));
+      worst = Math.max(worst, e.distanceTo(T));
+      zU.set(0, 0, 1).applyQuaternion(out.q1); zL.set(0, 0, 1).applyQuaternion(out.q2);
+      hinge = Math.min(hinge, Math.abs(zU.dot(zL)));
+    }
+    for (const k of [0.999, 1, 1.2, 5]) { anim.solveTwoBone(A.set(0, 37, 4), T.set(0, 37 - 33.9 * k, 4), P.set(30, 27, 4), 18, 15.9, 1, out); if (![out.E.x, out.E.y, out.E.z, out.q1.x, out.q1.w, out.q2.x, out.q2.w].every(Number.isFinite)) nan++; }
+    anim.solveTwoBone(A.set(0, 0, 0), T.set(0, 0, 0), P.set(0, 0, 0), 10, 10, 1, out); if (![out.q1.x, out.q1.w, out.q2.w].every(Number.isFinite)) nan++;
+    check('Frank IK: 2,000 random reachable targets reached within 0.01, no NaN at or past full extension, pure hinges', worst < 0.01 && nan === 0 && hinge > 0.9999, JSON.stringify({ worst, nan, hinge }));
+    void Quaternion;
+  }
+  // 2. Springs: bounded and converging at dt 0.05 up to ω 60 (fixed sub-steps), and a no-op at dt 0.
+  {
+    let ok = true; const info = [];
+    for (const w of [5, 12, 25, 40, 60]) {
+      const s = anim.makeSpring(0); let max = 0;
+      for (let i = 0; i < 200; i++) { anim.springTo(s, 10, w, 0.05); max = Math.max(max, Math.abs(s.x)); if (!Number.isFinite(s.x)) ok = false; }
+      const a = anim.makeSpring(3); for (let i = 0; i < 200; i++) anim.springAngle(a, -3, w, 0.05);
+      info.push([w, +s.x.toFixed(4), +max.toFixed(3), +a.x.toFixed(3)]);
+      if (Math.abs(s.x - 10) > 1e-3 || max > 10.001 || Math.abs(anim.wrap(a.x + 3)) > 1e-3) ok = false;
+    }
+    const z = anim.makeSpring(1); z.v = 2; anim.springTo(z, 5, 30, 0); if (z.x !== 1 || z.v !== 2) ok = false;
+    check('Frank springs: bounded and converge at dt 0.05 for ω ≤ 60, and dt 0 is a no-op', ok, JSON.stringify(info));
+  }
+  // 5. Step planner (world space): 3 s at 125 u/s (walkPhase += 10·dt), then 2 s at 185 (14·dt), at 30 and 144 fps; then an
+  // analog 40 u/s walk, a wall push (no velocity, the step clock still running), a stop, a jog that reverses in one frame
+  // (+125 → −125 u/s: a backpedal), and a jog that cuts 90° (the hips spring round after the velocity). Planted feet never
+  // move (a pivot keeps its ball or heel fixed), contacts land on the step sound (walkPhase ≡ 0 or π), the pelvis reach fix
+  // never needs more than its 4 u cap for a planted or landing foot (the feet step instead), every landing lies within the
+  // leg's reach of the hip, everything stays finite and every foot keeps planting. Then turns in place of 90° and 180°.
+  {
+    const clips = await import('../src/world/frank3d-clips.js');
+    const res = [];
+    let ok = true;
+    for (const fps of [30, 144]) {
+      const P = new anim.StepPlanner(), I = clips.makePlannerInput(), dt = 1 / fps, L = 0.985 * (18 + 15.9);
+      let x = 0, z = 0, ph = 0, hy = 0, badContact = 0, maxDrop = 0, steadyDrop = 0, farLanding = 0, nonFinite = 0, t = 0;
+      const N = () => {
+        const c = Math.cos(hy), s = Math.sin(hy);
+        I.neutral[0][0] = x + 0.8 * c + 4.4 * s; I.neutral[0][1] = z + 0.8 * s - 4.4 * c; I.neutral[0][2] = hy - 7 * anim.DEG; I.neutral[0][3] = -7 * anim.DEG;
+        I.neutral[1][0] = x - 0.4 * c - 4.4 * s; I.neutral[1][1] = z - 0.4 * s + 4.4 * c; I.neutral[1][2] = hy + 7 * anim.DEG; I.neutral[1][3] = 7 * anim.DEG;
+      };
+      N(); P.reset(I.neutral);
+      // [seconds, vx, vz, step rate, gait on, backpedal, hip yaw target]
+      const phases = [[3, 125, 0, 10, true, false, 0], [2, 185, 0, 14, true, false, 0], [2, 40, 0, 10, true, false, 0], [1.5, 0, 0, 10, true, false, 0], [1, 0, 0, 0, false, false, 0],
+        [1, 125, 0, 10, true, false, 0], [1, -125, 0, 10, true, true, 0], [1, 125, 0, 10, true, false, 0], [1.2, 0, 125, 10, true, false, Math.PI / 2], [1, 0, 0, 0, false, false, Math.PI / 2]];
+      const seg = [];
+      for (const [dur, vx, vz, rate, gait, back, hyT] of phases) {
+        const c0 = P.contacts, plantedSeen = [false, false];
+        let tin = 0;
+        for (; tin < dur; tin += dt) {
+          t += dt; x += vx * dt; z += vz * dt; if (gait) ph += rate * dt;
+          hy += anim.wrap(hyT - hy) * (1 - Math.exp(-14 * dt));
+          const v = Math.hypot(vx, vz);
+          I.dt = dt; I.gait = gait; I.phi = ((ph / (2 * Math.PI)) % 1 + 1) % 1; I.rate = rate; I.vx = vx; I.vz = vz; I.rx = x; I.rz = z; I.hipYaw = hy;
+          clips.gaitInputs(I, v, back, gait && v < 15); I.still = gait ? 0 : I.still + dt; N();
+          const sp = gait && v >= 15 ? v : 0, psi = (2 * I.phi) % 1;
+          I.hipY = 37.5 + clips.gaitAt('height', sp) + clips.gaitAt('bob', sp) * Math.cos(2 * Math.PI * (psi - I.sigma));
+          const before = P.contacts;
+          P.update(I);
+          if (gait && P.contacts > before && !((ph % Math.PI) < rate * dt + 1e-6)) badContact++;
+          // the hip joints (±4.6 across the hips) and the drop the reach fix would need for a planted or landing foot
+          const c = Math.cos(hy), s = Math.sin(hy);
+          let drop = 0;
+          for (let i = 0; i < 2; i++) {
+            const f = P.feet[i], jx = x - s * (i ? 4.6 : -4.6), jz = z + c * (i ? 4.6 : -4.6);
+            if (P.planted(i) || (f.mode === 1 && f.uu > 0.95)) drop = Math.max(drop, anim.reachDrop(jx, I.hipY, jz, f.ax, f.ay, f.az, L, 99));
+            if (P.contacts > before && P.planted(i) && P.lastContact === i && Math.hypot(f.ax - jx, f.az - jz) > 16) farLanding++;
+            if (![f.ax, f.ay, f.az, f.yaw, f.pitch].every(Number.isFinite)) nonFinite++;
+            if (P.planted(i)) plantedSeen[i] = true;
+          }
+          maxDrop = Math.max(maxDrop, drop);
+          if (tin > 1 && vx > 0 && vz === 0) steadyDrop = Math.max(steadyDrop, drop);
+        }
+        seg.push([vx, vz, rate, P.contacts - c0, plantedSeen.every(Boolean)]);
+      }
+      const r = { fps, drift: +P.maxStanceDrift.toFixed(4), badContact, maxDrop: +maxDrop.toFixed(2), steadyDrop: +steadyDrop.toFixed(2), farLanding, nonFinite, endPlanted: P.planted(0) && P.planted(1), seg };
+      if (!(r.drift < 0.05 && badContact === 0 && maxDrop <= 4 && steadyDrop < 1.2 && farLanding === 0 && nonFinite === 0 && r.endPlanted && seg.every((g) => g[4]) && seg[0][3] >= 8 && seg[1][3] >= 7 && seg[6][3] >= 2 && seg[8][3] >= 3)) ok = false;
+      res.push(r);
+    }
+    // turns in place of 90° and 180°: the feet step round, one at a time and alternating (never both off the ground), the
+    // planted one pivoting on its ball, while the hips follow (as frank3d.js has them: a spring, held within 50° of a
+    // planted foot). 90° within 0.6 s, 180° within 0.8 s, and no leg ever twisted more than 50° off the hips.
+    for (const deg of [90, 180]) {
+      const P = new anim.StepPlanner(), I = clips.makePlannerInput(), dt = 1 / 60, T = deg * anim.DEG;
+      const put = (yaw) => { const c = Math.cos(yaw), s = Math.sin(yaw); I.neutral[0][0] = 0.8 * c + 4.4 * s; I.neutral[0][1] = 0.8 * s - 4.4 * c; I.neutral[0][2] = yaw - 7 * anim.DEG; I.neutral[0][3] = -7 * anim.DEG; I.neutral[1][0] = -0.4 * c - 4.4 * s; I.neutral[1][1] = -0.4 * s + 4.4 * c; I.neutral[1][2] = yaw + 7 * anim.DEG; I.neutral[1][3] = 7 * anim.DEG; };
+      put(0); P.reset(I.neutral); put(T);
+      let both = 0, t = 0, hip = 0, hv = 0, twist = 0, same = 0, last = -1;
+      for (; t < 1 && (P.needTurn || t === 0 || !P.planted(0) || !P.planted(1)); t += dt) {
+        // the hips: a critically damped spring (ω 20) toward the new stance, held within 50° of each planted foot
+        const e = anim.wrap(T - hip), a = 400 * e - 40 * hv; hv += a * dt; hip += hv * dt;
+        for (let i = 0; i < 2; i++) if (P.planted(i)) { const rel = anim.wrap(P.bodyYaw(i) - hip); if (Math.abs(rel) > 50 * anim.DEG) { hip += rel - Math.sign(rel) * 50 * anim.DEG; hv = 0; } }
+        I.dt = dt; I.gait = false; I.turning = true; I.turnSide = 1; I.still = 1; I.rx = 0; I.rz = 0; I.hipYaw = hip; clips.gaitInputs(I, 0);
+        const c0 = P.contacts;
+        P.update(I);
+        if (P.contacts > c0) { if (P.lastContact === last) same++; last = P.lastContact; }
+        if (!P.planted(0) && !P.planted(1)) both++;
+        for (let i = 0; i < 2; i++) if (P.planted(i)) twist = Math.max(twist, Math.abs(anim.wrap(P.bodyYaw(i) - hip)) / anim.DEG);
+      }
+      const yawOk = Math.abs(anim.wrap(P.feet[0].plantYaw - I.neutral[0][2])) < 0.05 && Math.abs(anim.wrap(P.feet[1].plantYaw - I.neutral[1][2])) < 0.05;
+      res.push({ turn: deg, t: +t.toFixed(2), both, yawOk, contacts: P.contacts, sameFootTwice: same, twist: +twist.toFixed(1), drift: +P.maxStanceDrift.toFixed(4) });
+      if (!(yawOk && both === 0 && same === 0 && t < (deg > 90 ? 0.8 : 0.6) && twist <= 50.5 && P.maxStanceDrift < 0.05)) ok = false;
+    }
+    check('Frank step planner: planted feet never slide, contacts on the step sound, reach kept through a reversal and a cut, analog/wall-push/stop sane, turns in place alternate the feet (30 and 144 fps)', ok, JSON.stringify(res));
+  }
+  // 3. Clip tracks: every keyed track (recoil, actions, swap, fidgets) is sorted in time, from t ≥ 0, finite, with valid
+  // easing ids; the recoil's gun channels already show ≥ 55% of their peak on the flash frame (tShot 0).
+  {
+    const clips = await import('../src/world/frank3d-clips.js');
+    const bad = [];
+    for (const [path, tr] of clips.allTracks()) {
+      for (let i = 0; i < tr.length; i++) {
+        const k = tr[i];
+        if (!(Number.isFinite(k[0]) && Number.isFinite(k[1]) && k[0] >= 0) || (i && k[0] < tr[i - 1][0]) || (k[2] !== undefined && !anim.EASE_IDS.includes(k[2]))) { bad.push(path + '#' + i); break; }
+      }
+    }
+    const flash = [];
+    for (const w of ['pistol', 'shotgun', 'rifle']) for (const c of ['gunPitch', 'gunBack', ...(w === 'pistol' ? [] : ['spine2Pitch'])]) {
+      const tr = clips.RECOIL[w][c], pk = Math.max(...tr.map((k) => Math.abs(k[1]))), v0 = Math.abs(anim.sample(tr, 0));
+      if (v0 < 0.55 * pk - 1e-9) flash.push([w, c, v0, pk]);
+    }
+    check('Frank clip tracks: sorted, finite, valid easing; recoil ≥ 55% of its peak on the flash frame', bad.length === 0 && flash.length === 0 && clips.allTracks().length > 20, JSON.stringify({ bad, flash, n: clips.allTracks().length }));
+  }
+  // 4. Reload timelines (M3): built per reload for every reloadMax the game can produce (and the extremes), tactical and
+  // empty, per weapon: the keys are in time order and inside [0, reloadMax] (the shotgun's per-shell keys inside [0, 1]),
+  // the pistol seats on min(0.5, 0.72·reloadMax) (the +0.50 s knock), the closure lands exactly on the end (ρ = 0, the
+  // 'reloadDone' click), the empty pistol racks after the seat and releases within the last 0.03 s, the rifle's bolt
+  // opens, goes back, forward and down in order.
+  {
+    const clips = await import('../src/world/frank3d-clips.js');
+    const bad = [];
+    for (const w of ['pistol', 'shotgun', 'rifle']) for (const D of [0.15, 0.3, 0.43, 0.5, 0.68, 1.0, 1.45, 2.3]) for (const empty of [false, true]) {
+      const K = clips.reloadKeys(w, D, empty), L = clips.reloadKeyList(K), max = w === 'shotgun' ? 1 : D;
+      const why = [];
+      for (let i = 0; i < L.length; i++) {
+        const v = L[i][1];
+        if (!Number.isFinite(v) || v < -1e-9 || v > max + 1e-9) why.push('range ' + L[i][0]);
+        if (i && v < L[i - 1][1] - 1e-9) why.push('order ' + L[i][0]);
+      }
+      if (Math.abs(L[L.length - 1][1] - max) > 1e-9 || L[L.length - 1][0] !== 'end') why.push('closure');
+      if (w === 'pistol') {
+        if (Math.abs(K.seat - Math.min(0.5, 0.72 * D)) > 1e-9) why.push('seat');
+        if (!(K.pocket <= K.well && K.well <= K.seat && K.magDrop <= K.seat)) why.push('pre-seat');
+        if (empty && !(K.seat <= K.rackOn && K.rackOn <= K.pull && K.pull <= K.release && K.release >= D - 0.03 - 1e-9)) why.push('rack');
+        if (!empty && 'rackOn' in K) why.push('tactical rack');
+      }
+      if (w === 'rifle' && !(K.knob <= K.boltUp && K.boltUp <= K.boltBack && K.boltBack <= K.boltFwd && K.boltFwd <= K.boltDown && K.boltDown <= K.boltLock)) why.push('bolt');
+      // (M3 review: the rifle presses one round per 0.34 s cycle that fits after the bolt opens, up to the rounds it needs,
+      // instead of the spec's fixed 0, 1 or 2 and a 1.2–1.5 s static hold; every press inside the reload, after the bolt is
+      // back and before the bolt goes forward, each cycle in order)
+      if (w === 'rifle') {
+        const n = Math.max(0, Math.min(6, Math.floor((D - 0.5) / 0.34)));
+        if (K.rounds !== n || K.press.length !== 3 * n) why.push('rounds');
+        for (let i = 0; i < n; i++) { const [a, b, c] = K.press.slice(3 * i, 3 * i + 3); if (!(a <= b && b <= c && a >= K.boltBack - 1e-9 && c <= K.boltFwd + 1e-9 && (i === 0 || a >= K.press[3 * i - 1] - 1e-9))) { why.push('press ' + i); break; } }
+        if (clips.reloadKeys('rifle', D, empty, {}, 2).rounds !== Math.min(n, 2)) why.push('rounds needed');
+      }
+      if (w === 'shotgun' && !(K.push > 0 && K.push < K.fetch && K.fetch < 1)) why.push('shell');
+      if (why.length) bad.push([w, D, empty, why.join(',')]);
+    }
+    check('Frank reload timelines: monotonic, inside [0, reloadMax], seat on the knock, closure on the end, rack and bolt in order (3 weapons × 8 times × tactical/empty)', bad.length === 0, JSON.stringify(bad.slice(0, 6)));
+  }
+  // 6. Edge logic (M3): undefined fields give no NaN; a lastHurt reset (a hit) keeps the previous dt; a reload ending is
+  // a natural completion only when its last countdown fit in this frame and nothing else ended it (a swap or a
+  // hold-fire shot interrupts it, even on its last frame); a shotgun's next shell is a cycle, not an end.
+  {
+    const E = (prev, p, dt) => anim.weaponEdges(prev, p, dt, {});
+    const res = {
+      undef: E({}, {}, 0.016), undefMax: E({ reloadT: 0 }, { reloadT: 0.4 }, 0.016),
+      natural: E({ reloadT: 0.01, muzzle: -1 }, { reloadT: -0.006, muzzle: -1.016, reloadMax: 1.45 }, 0.016),
+      swap: E({ reloadT: 0.6, swapT: 0 }, { reloadT: 0, swapT: 0.35 }, 0.016),
+      holdFire: E({ reloadT: 0.3, muzzle: -2 }, { reloadT: 0, muzzle: 0.09, mag: 2 }, 0.016),
+      holdFireLast: E({ reloadT: 0.01, muzzle: -2 }, { reloadT: 0, muzzle: 0.09, mag: 2 }, 0.016),
+      cycle: E({ reloadT: 0.004 }, { reloadT: 0.5, reloadMax: 0.5 }, 0.016),
+      dry: E({ fireCd: -0.1, muzzle: -1 }, { fireCd: 0.3, muzzle: -1.016, mag: 0 }, 0.016),
+      jump: E({ weapon: 'pistol' }, { weapon: 'rifle', swapT: 0 }, 0.016),
+    };
+    const finite = Object.values(res).every((o) => Object.values(o).every((v) => typeof v === 'boolean' || Number.isFinite(v)));
+    const dtHit = anim.simDtFrom(3.2, 1.0, 0.0167, 0, 0, 0.02), dtNorm = anim.simDtFrom(3.2, 1.0, 0.0167, 3.216, 1.016, 0.02), dtNaN = anim.simDtFrom(0, 0, 0.0167, undefined, undefined, 0.02), dtHitStop = anim.simDtFrom(3.2, 1.0, 0.0167, 3.2006, 1.0006, 0.02);
+    const ok = finite && !res.undef.reloadStart && res.undef.f === 0 && res.undefMax.reloadStart && res.undefMax.f === 0 &&
+      res.natural.reloadEndNat && !res.natural.reloadInterr && res.swap.reloadInterr && !res.swap.reloadEndNat && res.swap.swapStart &&
+      res.holdFire.reloadInterr && res.holdFire.shot && !res.holdFire.reloadEndNat && res.holdFireLast.reloadInterr && !res.holdFireLast.reloadEndNat &&
+      res.cycle.reloadCycle && !res.cycle.reloadEndNat && !res.cycle.reloadInterr && res.dry.dryFire && res.jump.weaponJump &&
+      Math.abs(dtHit - 0.0167) < 1e-9 && Math.abs(dtNorm - 0.016) < 1e-6 && Math.abs(dtNaN - 0.02) < 1e-9 && Math.abs(dtHitStop - 0.0006) < 1e-6;
+    check('Frank edges: undefined fields give no NaN, a hit keeps the previous dt (hit-stop scales it), natural reload end vs swap vs hold-fire interrupt vs next shell, dry fire, weapon jump', ok,
+      JSON.stringify({ finite, dtHit, dtNorm, dtNaN, dtHitStop, natural: res.natural, swap: res.swap, holdFireLast: res.holdFireLast, cycle: res.cycle }));
+  }
+  // 7. Geometry: budgets, bones, skin indices and weights, normals, lining twins (DOM-free build: no face canvas).
+  {
+    const res = [];
+    for (const [q, young] of [[false, false], [true, false], [false, true], [true, true]]) {
+      const a = geo.frankAssets(q, young, { noCanvas: true }), g = a.geometry, nb = a.bones.length;
+      const si = g.attributes.skinIndex.array, sw = g.attributes.skinWeight.array, nr = g.attributes.normal.array;
+      let badIdx = 0, badSum = 0, badN = 0, maxInf = 0, twinBad = 0;
+      for (let v = 0; v < si.length / 4; v++) {
+        let s = 0, n = 0;
+        for (let k = 0; k < 4; k++) { if (si[v * 4 + k] >= nb) badIdx++; s += sw[v * 4 + k]; if (sw[v * 4 + k] > 0) n++; }
+        if (Math.abs(s - 1) > 1e-4) badSum++;
+        maxInf = Math.max(maxInf, n);
+        if (!(Math.hypot(nr[v * 3], nr[v * 3 + 1], nr[v * 3 + 2]) > 0.5)) badN++;
+      }
+      const W = (v) => { const o = {}; for (let k = 0; k < 4; k++) if (sw[v * 4 + k] > 0) o[si[v * 4 + k]] = sw[v * 4 + k]; return o; };
+      for (const [l, o] of a.twins) { const A = W(l), B = W(o); for (const k of new Set([...Object.keys(A), ...Object.keys(B)])) if (Math.abs((A[k] || 0) - (B[k] || 0)) > 1e-6) { twinBad++; break; } }
+      // every lining, hem and edge vertex has an outer twin (not just the ones that happened to pair up)
+      const paired = new Set(a.twins.map((t) => t[0])); let unpaired = 0, shellVerts = 0;
+      for (const [lo, hi] of a.twinRanges) for (let v = lo; v < hi; v++) { shellVerts++; if (!paired.has(v)) unpaired++; }
+      // no bone appears twice in one vertex's influences (a wasted slot, or a lost influence after the top-4 cut)
+      let dupInf = 0;
+      for (let v = 0; v < si.length / 4; v++) { const seen = new Set(); for (let k = 0; k < 4; k++) if (sw[v * 4 + k] > 0) { if (seen.has(si[v * 4 + k])) dupInf++; seen.add(si[v * 4 + k]); } }
+      const ok = nb === (q ? 39 : 50) && a.tris <= (q ? 1850 : 5900) && a.bodyTris <= (q ? 1400 : 4600) && badIdx === 0 && badSum === 0 && badN === 0 && maxInf <= 4 &&
+        a.twins.length > (q ? 40 : 100) && twinBad === 0 && shellVerts > 0 && unpaired === 0 && dupInf === 0;
+      res.push({ key: a.key, ok, bones: nb, tris: a.tris, body: a.bodyTris, badIdx, badSum, badN, maxInf, twins: a.twins.length, twinBad, shellVerts, unpaired, dupInf });
+    }
+    check('Frank geometry: budgets, bone counts, skin weights (sum 1, ≤ 4, valid, no duplicates), normals, every lining/hem/edge vertex = its outer twin', res.every((r) => r.ok), JSON.stringify(res));
+  }
+  // 8. The live rig in node (M3 review): frank3d.js runs here on a copy of its module graph with two stubs (input.js and
+  // progression.js touch the DOM), driven by a minimal sim of the player's weapon timers, so the weapon motion is measured
+  // on the bones, not on the clip channels.
+  {
+    const fs = await import('node:fs'), os = await import('node:os'), pth = await import('node:path'), { pathToFileURL, fileURLToPath } = await import('node:url');
+    const SRC = fileURLToPath(new globalThis.URL('../src/', import.meta.url)), TMP = fs.mkdtempSync(pth.join(os.tmpdir(), 'frank3d-node-'));
+    for (const f of ['world/frank3d.js', 'world/frank3d-anim.js', 'world/frank3d-clips.js', 'world/frank3d-geo.js', 'world/map.js', 'game/state.js', 'game/season-core.js', 'config.js', 'util.js', 'data/weapons.js', 'vendor/three.module.min.js']) {
+      fs.mkdirSync(pth.dirname(pth.join(TMP, 'src', f)), { recursive: true }); fs.copyFileSync(pth.join(SRC, f), pth.join(TMP, 'src', f));
+    }
+    fs.writeFileSync(pth.join(TMP, 'src/input.js'), "export const input = { mouse: { x: 0, y: 0, inside: false }, held: { fire: false }, aim: { active: false }, pressed: new Set(), touchMode: false, padMode: false };\n");
+    fs.writeFileSync(pth.join(TMP, 'src/game/progression.js'), 'export function derived() { return { maxHp: 100, maxStamina: 100 }; }\n');
+    const U = (f) => pathToFileURL(pth.join(TMP, 'src', f)).href;
+    const F = await import(U('world/frank3d.js')), { G } = await import(U('game/state.js')), T3 = await import(U('vendor/three.module.min.js')), CL = await import(U('world/frank3d-clips.js'));
+    const dt = 1 / 60, V3 = () => new T3.Vector3();
+    G.s = { inv: { pistol: 1, shotgun: 1, rifle: 1, ammo: 99, shells: 99, rifle_ammo: 99 }, job: null, home: { upgrades: {} } };
+    G.frameDt = dt; G.paused = false; G.modal = null; G.map = { getSolid: () => 0 };
+    const MAG = { pistol: 8, shotgun: 5, rifle: 5 };
+    const rig = (w, mag = MAG[w]) => {
+      G.casings = []; G.enemies = []; G.time = 0;
+      const p = { x: 500, y: 500, radius: 10, hp: 100, stamina: 100, mag, weapon: w, swapT: 0, angle: 0, vx: 0, vy: 0, fireCd: 0, reloadT: 0, reloadMax: 0, meleeCd: 0, meleeAnim: 0,
+        invuln: 0, dodgeT: 0, dodgeDx: 0, dodgeDy: 0, flinch: 0, muzzle: -1, lastHurt: 99, lastCombat: 0, walkPhase: 0, inCover: false, chopAnim: 0, dead: false };
+      G.player = p; return { p, r: F.frankRig({ q: false, young: false, carry: null }) };
+    };
+    const tick = ({ p, r }) => {
+      G.time += dt; G.frameDt = dt; p.lastHurt += dt; p.muzzle -= dt; p.fireCd -= dt; p.swapT -= dt;
+      if (p.reloadT > 0) { p.reloadT -= dt; if (p.reloadT <= 0) p.reloadT = 0; }
+      for (const c of G.casings) { if (c.t < 0.35) { c.x += c.vx * dt; c.y += c.vy * dt; } c.t += dt; }
+      F.poseFrank(r, p, { dk: 0, camera: null });
+    };
+    const run = (s, sec, fn) => { for (let i = 0; i < Math.round(sec / dt); i++) { tick(s); if (fn) fn(i); } };
+    const shoot = ({ p }) => { p.mag--; p.muzzle = p.weapon === 'shotgun' ? 0.09 : 0.06; p.fireCd = 0.4; p.lastCombat = 0; G.casings.push({ x: p.x + 4, y: p.y + 20, vx: 0, vy: 0, t: 0, rot: 1, color: p.weapon === 'shotgun' ? '#c0392b' : '#d9b84a' }); };
+    const M = new T3.Matrix4(), mp = V3(), mq = new T3.Quaternion(), ms = V3();
+    const debY = (r) => { if (!r.debris.count) return null; r.debris.getMatrixAt(0, M); M.decompose(mp, mq, ms); return mp.y; };
+    const bore = (r, w) => V3().set(1, 0, 0).transformDirection(r.bones[w].matrixWorld);
+    const pitchOf = (v) => Math.asin(v.y) * 180 / Math.PI, yawOf = (v) => Math.atan2(v.z, v.x) * 180 / Math.PI;
+    const res = {};
+    // (a) casings: the pistol's brass flies up out of the port; a pending hull nobody racks is forced out by 1.6 s, a swap edge forces it at once
+    {
+      const s = rig('pistol'); run(s, 0.7); const port = s.r.fx.port.y; shoot(s); let top = -1; run(s, 0.15, () => { const y = debY(s.r); if (y !== null) top = Math.max(top, y); });
+      const h = rig('shotgun', 1); run(h, 0.7); shoot(h); let shown = null; run(h, 1.6, (i) => { if (shown === null && h.r.debris.count) shown = +(i * dt).toFixed(2); });
+      const k = rig('shotgun', 1); run(k, 0.7); shoot(k); run(k, 0.3); const hidden = k.r.debris.count === 0; k.p.weapon = 'pistol'; k.p.swapT = 0.35; tick(k);
+      res.casings = { top: +top.toFixed(1), port: +port.toFixed(1), hullShownAt: shown, hiddenBeforeSwap: hidden, swapForced: k.r.debris.count > 0 };
+    }
+    // (b) every reload and swap: the hands' grip points never pass inside the torso (≥ 9 u from the spine1 axis between
+    // y 25 and 60) and the gun's origin stays ≥ 6 u from it; (c) the gun in hand never jumps (≤ 720 u/s = 12 u per 60 fps
+    // frame; a double swap measures ~350, a long gun thrown onto the back ~570); the wrist bends ≤ 70°, the upper arm
+    // twists ≤ 45.5°; never an IK failure or a reset
+    {
+      const GR = CL.SOCKETS.hand.grip, gR = V3().set(GR[0], GR[1], GR[2]), gL = V3().set(GR[0], GR[1], -GR[2]), ax = V3(), hp = V3(), gp = V3(), prev = V3(), hol = V3(), HO = CL.GUN_POSES.holster.at;
+      let minHand = 99, minGun = 99, jump = 0, wrist = 0, twist = 0, ik = 0, resets = 0, worst = null;
+      const watch = (s, tag) => {
+        let pw = null;
+        return () => {
+          const B = s.r.bones, held = s.r.st.inHand; ax.setFromMatrixPosition(B.spine1.matrixWorld);
+          // (the shoulder holster is under the coat by design: a hand or the pistol within 9 u of it is going in through the
+          // coat's front, drawing or holstering)
+          hol.set(HO[0], HO[1], HO[2]).applyMatrix4(B.spine2.matrixWorld);
+          for (const [b, g] of [[B.handR, gR], [B.handL, gL]]) { hp.copy(g).applyMatrix4(b.matrixWorld); if (hp.y > 25 && hp.y < 60 && hp.distanceTo(hol) > 9) { const d = Math.hypot(hp.x - ax.x, hp.z - ax.z); if (d < minHand) { minHand = d; worst = tag; } } }
+          if (held) {
+            gp.setFromMatrixPosition(B[held].matrixWorld);
+            if (gp.y > 25 && gp.y < 60 && !(held === 'pistol' && gp.distanceTo(hol) < 9)) minGun = Math.min(minGun, Math.hypot(gp.x - ax.x, gp.z - ax.z));
+            if (pw === held) jump = Math.max(jump, gp.distanceTo(prev) / dt);
+            prev.copy(gp); pw = held;
+          } else pw = null;
+          const d = F.frankDebug(s.r); for (const wv of d.wrist) { wrist = Math.max(wrist, wv[1]); twist = Math.max(twist, Math.abs(wv[2])); }
+        };
+      };
+      for (const w of ['pistol', 'shotgun', 'rifle']) for (const D of [0.5, 1.45, 2.3]) for (const mag of [0, 2]) {
+        const s = rig(w, mag); run(s, 0.6); s.p.reloadT = s.p.reloadMax = D; const f = watch(s, w + D + '/' + mag); run(s, D + 0.4, f); ik += s.r.st.ikFails; resets += s.r.st.resets;
+      }
+      for (const [a, b] of [['pistol', 'shotgun'], ['pistol', 'rifle'], ['shotgun', 'rifle'], ['rifle', 'shotgun'], ['shotgun', 'pistol'], ['rifle', 'pistol']]) {
+        const s = rig(a); run(s, 0.6); const f = watch(s, a + '>' + b); s.p.weapon = b; s.p.swapT = 0.35; run(s, 0.5, f); ik += s.r.st.ikFails; resets += s.r.st.resets;
+      }
+      for (const at of [0.2, 0.4]) {
+        const s = rig('pistol'); run(s, 0.6); const f = watch(s, 'double ' + at); s.p.weapon = 'shotgun'; s.p.swapT = 0.35; run(s, 0.35 * at, f); s.p.weapon = 'rifle'; s.p.swapT = 0.35; run(s, 0.5, f); ik += s.r.st.ikFails; resets += s.r.st.resets;
+      }
+      res.paths = { minHand: +minHand.toFixed(2), worst, minGun: +minGun.toFixed(2), jump: +jump.toFixed(0), wrist: +wrist.toFixed(1), twist: +twist.toFixed(1), ik, resets };
+    }
+    // (d) recoil on the gun bone: on the flash frame the bore is already up ≥ 55% of that shot's peak flip
+    {
+      res.recoil = {};
+      for (const w of ['pistol', 'shotgun', 'rifle']) {
+        const s = rig(w); run(s, 0.7); const rest = pitchOf(bore(s.r, w)); shoot(s); tick(s); const f0 = pitchOf(bore(s.r, w)) - rest; let pk = f0; run(s, 0.12, () => { pk = Math.max(pk, pitchOf(bore(s.r, w)) - rest); });
+        res.recoil[w] = [+f0.toFixed(2), +pk.toFixed(2)];
+      }
+    }
+    // (f) a shot that cuts a shell reload is drawn from the aim line: the flash frame's muzzle is a clean shot's, the bore's yaw too
+    {
+      const flash = (cut) => { const s = rig('shotgun', 3); run(s, 1.0); if (cut) { s.p.reloadT = s.p.reloadMax = 0.5; run(s, 0.3); s.p.reloadT = 0; } shoot(s); tick(s); return [s.r.fx.muzzle.clone(), yawOf(s.r.fx.bore)]; };
+      const [m0, y0] = flash(false), [m1, y1] = flash(true);
+      res.interrupt = { muzzle: +m0.distanceTo(m1).toFixed(2), yaw: +Math.abs(y0 - y1).toFixed(2) };
+    }
+    // (g) point blank: a gunman 30 u ahead puts every gun at high port within 0.3 s, the muzzle outside his body
+    {
+      res.port = {};
+      for (const w of ['pistol', 'shotgun', 'rifle']) {
+        const s = rig(w); run(s, 0.7); G.enemies = [{ x: s.p.x + 30, y: s.p.y + 2, radius: 10, dead: false }]; run(s, 0.3);
+        const d = F.frankDebug(s.r), mz = s.r.fx.muzzle; res.port[w] = [d.port, +Math.hypot(mz.x - G.enemies[0].x, mz.z - G.enemies[0].y).toFixed(1), d.handErr];
+      }
+    }
+    // (h) a draw-fire (a shot from the relaxed carry): the gun is on the aim line on the flash frame while the body only
+    // starts to come in (no pelvis or chest pop), and it has settled into the aim by 0.25 s
+    {
+      res.draw = {};
+      for (const w of ['pistol', 'shotgun']) {
+        const s = rig(w); s.p.lastCombat = 99; run(s, 2.0, () => { s.p.lastCombat += dt; });
+        const d0 = F.frankDebug(s.r); shoot(s); tick(s); const d1 = F.frankDebug(s.r); run(s, 0.25); const d2 = F.frankDebug(s.r);
+        res.draw[w] = { driver: d1.gunDriver, boreMiss: d1.boreMiss, dPel: +(d0.pelvisY - d1.pelvisY).toFixed(2), dChest: +Math.abs(d1.chestYaw - d0.chestYaw).toFixed(1), settle: +Math.abs(d2.pelvisY - (s.r.st.aimWb > 0.99 ? d2.pelvisY : 99)).toFixed(2), wb: d2.aimWb, crouch: +(d0.pelvisY - d2.pelvisY).toFixed(2) };
+      }
+    }
+    // (j) the cheek weld holds at a near and a far aim point (the eye 2–4 u over the bore, ≤ 3.5 u to the side)
+    {
+      res.cheek = {};
+      for (const w of ['shotgun', 'rifle']) for (const D of [80, 220, 400]) {
+        const s = rig(w); G.enemies = D === 220 ? [] : [{ x: 500 + D, y: 500, radius: 10, dead: false }]; run(s, 0.8); res.cheek[w + D] = F.frankDebug(s.r).eyeToBore;
+      }
+    }
+    fs.rmSync(TMP, { recursive: true, force: true });
+    // (jump: a pop is a gun that moves further in one frame than a hand can swing it; the fastest legitimate move, a long
+    // gun thrown onto the back in a cross swap's 0.11 s out, peaks near 600 u/s, so the bound is 12 u per 60 fps frame)
+    const R = res, ok = R.casings.top > R.casings.port + 4 && R.casings.hullShownAt !== null && R.casings.hullShownAt <= 1.6 && R.casings.hiddenBeforeSwap && R.casings.swapForced &&
+      R.paths.minHand >= 9 && R.paths.minGun >= 6 && R.paths.jump <= 720 && R.paths.wrist <= 70.5 && R.paths.twist <= 46.5 && R.paths.ik === 0 && R.paths.resets === 0 &&
+      Object.values(R.recoil).every(([f0, pk]) => pk > 3 && f0 >= 0.55 * pk) && R.interrupt.muzzle < 0.5 && R.interrupt.yaw < 1 &&
+      Object.values(R.port).every(([pt, gap, he]) => pt >= 0.9 && gap >= 10 && he[0] < 0.5) &&
+      Object.values(R.draw).every((d) => d.driver === 'aim' && d.boreMiss < 1 && d.dPel < 0.3 && d.dChest < 6 && d.wb > 0.99 && d.crouch > 1) &&
+      Object.values(R.cheek).every((e) => e && e[1] >= 2 && e[1] <= 4 && Math.abs(e[0]) <= 3.5);
+    check('Frank live rig (node): casings arc from the port and are never left hidden, hands and guns never pass through the torso (bar the holster under the coat), no gun pops (double swap too), wrist ≤ 70 / twist ≤ 45 (+1.5), recoil on the bone at the flash, an interrupting shot from the aim line, high port at point blank, a draw-fire without a body pop, the cheek weld at 80/220/400', ok, JSON.stringify(R));
+  }
+}
 
 await browser.close();
 server.kill();

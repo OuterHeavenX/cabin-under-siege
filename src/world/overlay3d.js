@@ -8,7 +8,7 @@ import { TILE } from '../config.js';
 import { dist } from '../util.js';
 import { darkness, activeLights, inFloodlight } from './lights.js';
 import { derived } from '../game/progression.js';
-import { toScreen, pxPerUnit } from './render3d.js';
+import { toScreen, pxPerUnit, frankPipHeight } from './render3d.js';
 import { drawScreenFx } from './render.js';
 import { drawScreenAtmosphere } from './atmosphere.js';
 
@@ -120,7 +120,7 @@ export function drawOverlays3d(ctx, props = []) {
   }
   // Frank and the people with him.
   {
-    const [sx, sy] = toScreen(p.x, p.y, HEAD + 6);
+    const [sx, sy] = toScreen(p.x, p.y, frankPipHeight());
     pips(ctx, sx, sy, p.hp / d.maxHp, 10, '#5bd6ff');
     if (p.reloadT > 0 && p.reloadMax > 0) {
       const f = 1 - p.reloadT / p.reloadMax;
