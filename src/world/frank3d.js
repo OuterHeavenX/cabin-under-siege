@@ -10,22 +10,24 @@
 // (C locomotion, U upper body, F full body, A additives, with snapshot crossfades)
 // → FK → pelvis reach fix, leg IK (swivel clamp, joint limits), arm IK → props →
 // secondary motion (coat pendulums, forelocks) → decal, uniforms, effect anchors,
-// debug and safety. M2 (locomotion) and M3 (weapons: the gun as the driver of the hands, convergence, recoil, actions,
-// reloads, swaps, the sling, casings) live here and in frank3d-anim.js / frank3d-clips.js; the later milestones add
-// clips to the same layers (actions M4, life M5).
+// debug and safety. M2 (locomotion), M3 (weapons: the gun as the driver of the hands, convergence, recoil, actions,
+// reloads, swaps, the sling, casings) and M4 (actions: the dash and back-hop, the strike and the takedown, the flinch and
+// the revive, death with the dropped gun and the coat on the ground, repair, chop and pick with the tools in hand) live
+// here and in frank3d-anim.js / frank3d-clips.js; M5 (life) adds its clips to the same layers.
 import * as THREE from '../vendor/three.module.min.js';
 import { G } from '../game/state.js';
 import { derived } from '../game/progression.js';
-import { TUNE, SOCKETS, STANCES, IDLE, AIM, RELAXED, GUN_POSES, HAND_ON, ACTIONS, RECOIL, SWAP, CASING, reloadKeys, breathCurve, gaitAt, makePlannerInput, gaitInputs } from './frank3d-clips.js';
+import { TUNE, SOCKETS, STANCES, IDLE, AIM, RELAXED, GUN_POSES, HAND_ON, ACTIONS, RECOIL, SWAP, CASING, reloadKeys, breathCurve, gaitAt, makePlannerInput, gaitInputs,
+  MELEE, TAKEDOWN, DODGE, FLINCH, REVIVE, DEATH, REPAIR, CHOP, PICK } from './frank3d-clips.js';
 import {
   DEG, clamp, lerp, smoothstep as ss, wrap, angleDiff, makeSpring, resetSpring, springTo, springAngle, springPend, solveTwoBone, makeIKOut,
-  StepPlanner, PK, makePose, poseRest, makeFade, fadeStart, fadeApply, reachDrop, twistAngle, noise1, SPRING_H, FOOT,
-  EASE, sample, qbez, simDtFrom, weaponEdges, jolt,
+  StepPlanner, PK, makePose, poseRest, makeFade, fadeStart, fadeApply, poseBlend, reachDrop, twistAngle, noise1, SPRING_H, FOOT,
+  EASE, sample, sampleV, qbez, simDtFrom, weaponEdges, jolt,
 } from './frank3d-anim.js';
 import { input } from '../input.js';
 import { WEAPONS } from '../data/weapons.js';
 import { SO } from './map.js';
-import { frankAssets, FRANK_U, decalGeometry, decalMaterial, debrisAssets, dustMaterial, coneAssets, DECAL, PROP_NAMES, SKIRT6, SKIRT4, patchState } from './frank3d-geo.js';
+import { frankAssets, FRANK_U, decalGeometry, decalMaterial, debrisAssets, dustMaterial, coneAssets, DECAL, PROP_NAMES, SKIRT6, SKIRT4, patchState, coatSurface } from './frank3d-geo.js';
 
 export const FRANK_TOP = 75;
 const LONG = { shotgun: 1, rifle: 1 }, LONG_LIST = ['shotgun', 'rifle'];
@@ -90,10 +92,26 @@ function freshState() {
     prevReloadT: 0, prevSwapT: 0, prevFireCd: 0, prevWeapon: null, animClock: 0, shotWeapon: null, prevShotWeapon: null,
     aimD: TUNE.aimDist.fallback, muzzleFwd: 30, conv: 0, aimPitch: -7 * DEG, port: makeSpring(0), rcT: 99, rcCarry: {}, rcAmp: 1, rcYaw: 0, act: null, actEj: true, dryT: 9, slideLocked: false,
     rl: { on: false, gunCut: false, need: 0, kind: 'live', weapon: 'pistol', empty: false, cycle: 0, K: {}, f: 0, tau: 0, w: 0, hold: 0, tail: 0, tailT: 0, out: 0, entry: 0, dropped: false, ejected: false, rack: false },
-    sw: { on: false, from: 'pistol', to: 'pistol', snapOk: false, snapP: V(), snapQ: new THREE.Quaternion(), relOk: false, relP: V(), relQ: new THREE.Quaternion() },
+    sw: { on: false, render: false, rT: 0, from: 'pistol', to: 'pistol', snapOk: false, snapP: V(), snapQ: new THREE.Quaternion(), relOk: false, relP: V(), relQ: new THREE.Quaternion() },
     slung: null, slung2: null, backSlot: [null, null], inHand: null, gunLW: null, gunLOk: false, gunLP: V(), gunLQ: new THREE.Quaternion(), lastRw: false, lastRwP: V(), lastRwQ: new THREE.Quaternion(),
     mags: [0, 1, 2].map(() => ({ on: false, t: 0, p: [0, 0, 0], v: [0, 0, 0], q: [0, 0, 0, 1], bounced: false, rest: false, restT: 0, yaw: 0 })),
     debrisN: 0, wristMax: 0, wristSoft: 0, swivels: 0, elbowClamps: 0, shots: 0, wrist: [[0, 0, 0], [0, 0, 0]], reach: [0, 0],
+    // M4 actions: the previous frame's action timers (edges); the clips (ph: 0 off, 1 live, 2 tail, 3 hold), their clocks,
+    // catch-up clocks (cT, real seconds) and latches; the hit and the revive; the death template, its ground lift and the
+    // dropped gun; the dust puff; the tool in hand and the gun's draw back; neutral-spot offsets for forced steps; the
+    // arms' last local rotations (death blends out of the IK'd aim from them)
+    prevMeleeAnim: 0, prevChopAnim: 0, prevDodgeT: 0, prevHp: null,
+    mel: { ph: 0, conn: false, long: false, u: 0, tailT: 0, cT: 9 },
+    td: { ph: 0, yaw: 0, long: false, u: 0, tailT: 0, cT: 9 },
+    dg: { ph: 0, hop: false, dir: 0, rel: 0, lead: 0, u: 0, tailT: 0, placed: false, landed: false, skid: 0, skidT: 9, frozen: false, trailPlaced: false, noPush: false, lift: 0, need: [0, 0] },
+    ch: { ph: 0, pick: false, yaw: 0, dist: 28, u: 0, tailT: 0, holdT: 0, cT: 9, chain: false },
+    rp: { on: false, w: 0, kind: 'door', tx: 0, ty: 0, dist: 20, t: 0 },
+    tool: null, drawStart: false, stowed: false, slingLow: 0,
+    hurt: { t: 9, ang: 0, A: 0, kind: 'bullet', zone: 'front', s: 1 }, rev: 9, revFree: false, sinceRevive: 99, drawT: 0.25,
+    dth: { variant: 'back', F: 0, f0: 0, h0: 0, c0: 0, sign: 1, lift: 0, relOk: false, rel: new THREE.Matrix4(), tool: null,
+      gun: { on: false, w: 'pistol', t: 0, p: [0, 0, 0], v: [0, 0, 0], q: new THREE.Quaternion(), ax: V(), bounced: false, rest: false, restT: 0, q0: new THREE.Quaternion(), qRest: new THREE.Quaternion() } },
+    dust: { t: 9, x: 0, z: 0, dir: 0, K: null, y: 1.2 }, nOff: [[0, 0], [0, 0]], nOffT: 0,
+    armQ: [0, 1, 2, 3, 4, 5].map(() => new THREE.Quaternion()), armQok: false, handRPrev: V(), handRVel: V(), handRok: false,
   };
 }
 export function frankRig({ q, young, carry }) {
@@ -207,7 +225,7 @@ export function poseFrank(r, p, ctx) {
 const WPREV = { muzzle: 0, reloadT: 0, swapT: 0, fireCd: 0, weapon: null }, WE = {};
 const S = {
   now: 0, first: false, realDt: 0, simDt: 0, presentation: false, animDt: 0, liveDt: 0, adt: 0, jump: 0, teleport: false,
-  shot: false, tShot: 99, hit: false, combat: false, weapon: 'pistol', long: false, dPhase: 0, gaitOn: false, wall: false,
+  shot: false, tShot: 99, hit: false, excess: 0, combat: false, weapon: 'pistol', long: false, dPhase: 0, gaitOn: false, wall: false,
   inputYaw: 0, lowHp: false, aimW: 0, aimWb: 0, supW: 1, blade: 0, faceYaw: 0, chestYaw: 0, hipYaw: 0, tau: 0, phi: 0, psi: 0, amp: 0, gs: 0,
   sigma: 0.5, back: false, strafeK: 0, dirSign: 1, crouch: false, breath: 0, bob: 0, counter: 0.6, skid: false,
   shove: false, shoveDrag: 0, stopK: 0, gsVis: 0, hardReset: false, chestRef: 0, chestLag: 0, flickK: 1,
@@ -218,6 +236,7 @@ function update(r, p, ctx) {
   const st = r.st, B = r.bones;
   if (DBG.resetStats) { DBG.resetStats = false; st.maxStanceDrift = 0; st.planner.maxStanceDrift = 0; st.maxFootStep = 0; st.minPelvisY = 99; }
   signals(r, p);
+  actionEdges(r, p);
   aimDistance(r, p, ctx);
   clocks(r, p);
   states(r, p);
@@ -234,8 +253,11 @@ function update(r, p, ctx) {
   r.body.position.set(p.x, 0, p.y);
   writeFK(r);
   r.body.updateMatrixWorld(true);
+  if (st.stateF === 'death') deathFK(r, p); // (the arms out of the aim, the ground clamp)
+  if (st.stateF === 'dodge') dodgePlace(r, p); // (the dash's touchdowns; legs() clamps the FK feet above the ground)
   // 11: pelvis reach fix and leg IK onto the planner's feet; arm IK onto the gun
   legs(r, p); // (legs() updates the chains it changes)
+  if (st.stateF === 'death') { deathClamp(r); deathHands(r); }
   // 11–12: the gun first (aim, relaxed, reload, swap), then the hands onto it, then the props (weapons() updates the
   // chains it moves)
   weapons(r, p);
@@ -247,10 +269,17 @@ function update(r, p, ctx) {
   // 15: decal, uniforms, blink, fx anchors, debug measurements, NaN guard
   measureDrift(r, p);
   updateDecal(r, p, ctx);
+  dustUpdate(r);
   updateUniforms(r, p, ctx, S.realDt);
   if (DBG.gizmos !== !!r.gizmos) gizmos(r, DBG.gizmos);
-  const blink = p.invuln > 0 && p.dodgeT <= 0 && (p.lastHurt < TUNE.blinkHurtWindow) && Math.floor(S.now * TUNE.blinkHz) % 2 === 0;
+  // the hurt blink (the invulnerability cue, gated: after a hit or a revive, never in a dodge, NEVER while he is down).
+  // (Spec owner amendment to Appendix A: never during the first blinkHold s after a hit or reviveHold s after a revive,
+  // so the flinch's peak and the stagger's drop are seen, and hidden one frame-window in three, not every other one)
+  const hurtB = p.lastHurt >= TUNE.blinkHold && p.lastHurt < TUNE.blinkHurtWindow, revB = st.sinceRevive >= TUNE.reviveHold && st.sinceRevive < TUNE.reviveBlink;
+  const blink = !p.dead && p.invuln > 0 && !((p.dodgeT || 0) > 0) && (hurtB || revB) && !(st.sinceRevive < TUNE.reviveHold) && Math.floor(S.now * TUNE.blinkHz) % 3 === 0;
   r.body.visible = !blink;
+  // the arms' local rotations of this frame (a death blends out of the IK'd aim from them)
+  if (!p.dead) { const A = st.armQ, B = r.bones; A[0].copy(B.upperArmL.quaternion); A[1].copy(B.forearmL.quaternion); A[2].copy(B.handL.quaternion); A[3].copy(B.upperArmR.quaternion); A[4].copy(B.forearmR.quaternion); A[5].copy(B.handR.quaternion); st.armQok = true; }
   fxAnchors(r, p, S.weapon);
   debrisUpdate(r, p);
   beam(r, p, ctx);
@@ -274,6 +303,7 @@ function update(r, p, ctx) {
   if (S.simDt > 0) st.lastSimDt = S.simDt;
   st.prevPhase = p.walkPhase || 0; st.deadPrev = !!p.dead; st.prevMuzzle = p.muzzle || 0;
   st.prevReloadT = p.reloadT || 0; st.prevSwapT = p.swapT || 0; st.prevFireCd = p.fireCd || 0; st.prevWeapon = S.weapon;
+  st.prevMeleeAnim = p.meleeAnim || 0; st.prevChopAnim = p.chopAnim || 0; st.prevDodgeT = p.dodgeT || 0; st.prevHp = Number.isFinite(p.hp) ? p.hp : st.prevHp;
 }
 
 /** Teleports, recoveries, a new player, NaN: springs, planner, coat, velocity and hip yaw start over at the sim's pose. */
@@ -292,7 +322,13 @@ function hardReset(r, p) {
   resetSpring(st.port, 0); st.lastRw = false; st.conv = 0;
 }
 /** A new player, a recovery or a NaN reset also drop the upper body's clips (a map change or a jump keeps a reload or a swap running: they are keyed on sim timers). */
-function resetWeaponClips(st) { st.rl.on = false; st.sw.on = false; st.act = null; st.gunLOk = false; }
+function resetWeaponClips(st) {
+  st.rl.on = false; st.sw.on = false; st.act = null; st.gunLOk = false;
+  // (and the M4 actions: a recovery is a hard reset to idle; the dropped gun is picked up)
+  st.mel.ph = st.td.ph = st.dg.ph = st.ch.ph = 0; st.mel.cT = st.td.cT = st.ch.cT = 9; st.rp.w = 0; st.rp.on = false;
+  st.tool = null; st.drawStart = false; st.stowed = false; st.hurt.t = 9; st.rev = 9; st.dth.lift = 0; st.dth.gun.on = false; st.dth.relOk = false; st.dth.tool = null;
+  st.nOffT = 0; st.dust.t = 9;
+}
 
 /* ---------------- 1. signals, edges (§4.1, §4.2) ---------------- */
 function signals(r, p) {
@@ -320,7 +356,11 @@ function signals(r, p) {
   // a shove (a ram's 26 u push, a melee hit, a long gun's kick): the body moved further this frame than its own motion
   // explains. All but 5 u of it is a skid (the feet carried along: never drift, never a squat), and a corrective step
   // takes up the rest (frank3d-anim.js).
-  const vmax = Math.max(st.speed, Math.hypot(p.vx || 0, p.vy || 0)), excess = S.jump - vmax * simDt;
+  // (on a hit frame the sim's clocks can't give the dt (lastHurt reset, lastCombat held at 0 in a firefight): his own
+  // motion over the last frame's dt, so a walk isn't read as a push)
+  const dtE = simDt > 0 ? simDt : Number.isFinite(lh) && lh < st.prevLastHurt - 1e-6 ? st.lastSimDt : 0;
+  const vmax = Math.max(st.speed, Math.hypot(p.vx || 0, p.vy || 0)), excess = S.jump - vmax * dtE;
+  S.excess = S.teleport ? 0 : Math.max(0, excess);
   S.shove = !S.teleport && !p.dead && !((p.dodgeT || 0) > 0) && excess > 4;
   S.shoveDrag = S.shove ? Math.max(0, excess - 5) / S.jump : 0;
   if (S.shove) st.shoves++;
@@ -413,6 +453,10 @@ function clocks(r, p) {
   else if (aimWant) { st.aimW = Math.min(1, st.aimW + adt / 0.18); st.aimHold = 0.4; }
   else if (st.aimHold > 0) st.aimHold -= adt;
   else st.aimW = Math.max(0, st.aimW - adt / 0.6);
+  // (M4) a tool in his hands (the hammer, the axe) has put the gun away: no aim until a shot draws it; a revive's stagger
+  // caps the aim for its first 0.3 s (a shot overrides)
+  if ((st.tool || (st.rp.on && st.rp.w > 0)) && !S.shot) { st.aimW = Math.max(0, st.aimW - adt / 0.15); st.aimHold = 0; }
+  if (st.rev < REVIVE.aimCapT && !S.shot && !st.revFree) st.aimW = Math.min(st.aimW, REVIVE.aimCap);
   if (st.snapT < 9 && !S.shot) st.snapT += adt;
   const snapU = clamp(st.snapT / DS.T, 0, 1);
   st.aimWb = st.snapT < DS.T ? Math.min(st.aimW, lerp(st.snapFrom, 1, EASE.O(snapU))) : st.aimW;
@@ -442,20 +486,217 @@ function clocks(r, p) {
 }
 
 /* ---------------- 3. layer states (§4.4) ---------------- */
-// M2: F has DEATH (a placeholder fall until M4's clip), U has its base (AIM/RELAXED). Later milestones add states here;
-// a change of state crossfades from the layer's previous output (fadeStart with the new state's in-time).
-const F_IN = { death: 0 };
+// F (full body), highest first: DEATH > DODGE(+tail) > TAKEDOWN(+tail) > REPAIR > CHOP/PICK(+tail). Each clip blends itself
+// in and out over its own envelope (its in/out times); a switch from one clip straight to another (or a cancel: a shot
+// ends the dodge's tail or the chop) crossfades from the layer's last output over 0.06 s. Death enters with a jerk (no
+// fade: the arms blend out of the aim on the bones, deathFK) and leaves by a snap (the recovery is a hard reset). U: MELEE
+// over the AIM/RELAXED base.
 function states(r, p) {
-  const st = r.st;
-  const f = p.dead ? 'death' : null;
+  const st = r.st, D = st.dg, C = st.ch;
+  let f = null;
+  if (p.dead) f = 'death';
+  else if (D.ph === 1 || D.ph === 2) f = 'dodge';
+  else if (st.td.ph === 1 || st.td.ph === 2) f = 'takedown';
+  else if (st.rp.w > 0) f = 'repair';
+  else if (C.ph === 1 || C.ph === 2) f = C.pick ? 'pick' : 'chop';
   if (f !== st.stateF) {
-    if (!f || S.teleport) st.fadeF.active = false; // recover: snap (§4.4)
-    else fadeStart(st.fadeF, st.lastF, F_IN[f] || 0);
-    if (f === 'death') st.deathT = 0;
+    st.fadeFreal = false;
+    if (S.teleport || f === 'death' || st.stateF === 'death') st.fadeF.active = false; // death: a jerk in, a snap out
+    else if (st.stateF) fadeStart(st.fadeF, st.lastF, 0.06); // clip → clip, or a cancel
+    else if (f === 'takedown' || f === 'chop') { fadeStart(st.fadeF, st.lastF, 0.4 * TUNE.catchUp); st.fadeFreal = true; } // the catch-up's first leg
+    else st.fadeF.active = false; // from the base: the clip's own envelope
+    if (f === 'death') deathStart(r, p);
     st.stateF = f;
   }
-  st.stateU = 'base';
+  const u = st.mel.ph ? 'melee' : 'base';
+  if (u !== st.stateU) {
+    // a connected strike crossfades from the snapshot on real time (the catch-up's first leg); a whiff starts on its key
+    st.fadeUreal = u === 'melee' && st.mel.conn;
+    if (st.fadeUreal) fadeStart(st.fadeU, st.lastU, 0.4 * TUNE.catchUp); else st.fadeU.active = false;
+    st.stateU = u;
+  }
   if (p.dead) st.deathT += G.paused ? 0 : S.realDt;
+}
+
+/* ======================= M4: action edges and clip clocks (§4.2, §4.12–§4.17) ======================= */
+// The clips are keyed on the sim's own timers (meleeAnim, dodgeT, chopAnim: hit-stop freezes them at the impact), their
+// tails and catch-ups on render/real time. Values of this frame (time only, no bones) go to MC (melee), TC (takedown)
+// and the per-clip structs in st; the poses read them in layerU / layerF, the gun and the hands in weapons().
+const MC = { w: 0, gw: 0, lunge: 0, cu: 1, conn: false, long: false, live: new Array(9).fill(0), wind: new Array(9).fill(0), cur: new Array(9).fill(0), guardW: 0, s2Pitch: 0, snap: 0 };
+const TC = { w: 0, gw: 0, cu: 1, long: false, gun: [0, 0, 0, 0], body: [0, 0, 0, 0], collarW: 0, collar: [0, 0, 0] };
+const _mk = new Array(8).fill(0), _tk = [0, 0, 0, 0], _tb = [0, 0, 0, 0];
+function nearFire(p) { const F = G.fires || []; for (let i = 0; i < F.length; i++) { const f = F[i]; if (f && Math.hypot(f.x - p.x, f.y - p.y) < (f.r || 30) + 20) return true; } return false; }
+/** The catch-up (§4.3, D14): from the snapshot through the raised key (40%) to the live key, on real time; returns [0, 1]. */
+const catchU = (cT) => clamp(cT / TUNE.catchUp, 0, 1);
+/** A forced step of foot i by (dx, dz) along the ground, held there for `hold` s (the settle step brings it back after). */
+function lungeStep(st, i, dx, dz, dur, lift, hold) {
+  const PL = st.planner, f = PL.feet[i];
+  if (!PL.planted(0) || !PL.planted(1) || S.gaitOn) return false;
+  const n = [f.plant[0] + dx, f.plant[1] + dz, f.plantYaw, f.toeOff];
+  if (!PL.forceStep(i, n, dur, lift)) return false;
+  st.nOff[i][0] = dx; st.nOff[i][1] = dz; st.nOff[1 - i][0] = st.nOff[1 - i][1] = 0; st.nOffT = hold;
+  return true;
+}
+function actionEdges(r, p) {
+  const st = r.st, live = !S.first && !p.dead, adt = S.adt, cdt = G.paused ? 0 : S.realDt;
+  const mA = p.meleeAnim || 0, cA = p.chopAnim || 0, dT = p.dodgeT || 0, a = p.angle || 0;
+  // ---- a hit (§4.15): how hard, from where (G.hurtDir is current this frame: we poll after update), what kind; a revive
+  const H = st.hurt;
+  if (S.hit) {
+    const amt = Math.max(0, (Number.isFinite(st.prevHp) ? st.prevHp : p.hp) - (p.hp || 0));
+    H.t = 0; H.step2 = false; H.ang = G.hurtDir && Number.isFinite(G.hurtDir.angle) ? G.hurtDir.angle : a; H.A = clamp(amt / 30, 0.35, 1);
+    // (classified on the push beyond his own motion, S.excess: at 30 fps or less a plain walk moves him 4–6 u a frame, which
+    // the spec's raw-jump bands read as a bite; §4.2 amended)
+    H.kind = S.excess >= 15 ? 'ram' : S.excess >= 3 && S.excess <= 9 ? 'bite' : nearFire(p) ? 'fire' : 'bullet';
+    const rel = angleDiff(st.chest.x, H.ang), ar = Math.abs(rel);
+    H.zone = ar < 60 * DEG ? 'front' : ar <= 120 * DEG ? 'side' : 'back'; H.s = rel >= 0 ? 1 : -1;
+    if (!p.dead && (p.invuln || 0) >= 2) { st.rev = 0; st.revFree = false; st.sinceRevive = 0; st.planner.kick = true; } // (one corrective step)
+  }
+  const tdt = G.paused ? 0 : S.simDt > 0 ? S.simDt : S.realDt;
+  H.t += adt; st.rev += adt; st.sinceRevive += tdt;
+  // ---- melee: a strike (meleeAnim 0.18) or a takedown (0.25)
+  const M = st.mel, T = st.td;
+  if (live && mA > st.prevMeleeAnim + 0.01) {
+    if (mA >= 0.22) {
+      T.ph = 1; T.yaw = a; T.long = S.long; T.cT = cdt; T.u = 0; M.ph = 0;
+      const k = TAKEDOWN.step; lungeStep(st, 0, k * Math.cos(a), k * Math.sin(a), TAKEDOWN.stepT, 2, TAKEDOWN.T + TAKEDOWN.tail + 0.15);
+    } else {
+      M.ph = 1; M.conn = !!(G.fx && G.fx.stop > 0.02); M.long = S.long; M.cT = M.conn ? cdt : 9; M.u = 0;
+      const k = MELEE.step; lungeStep(st, 0, k * Math.cos(a), k * Math.sin(a), MELEE.stepT, MELEE.stepLift, MELEE.T + MELEE.tail + 0.15);
+    }
+  } else { if (M.cT < 9) M.cT += cdt; if (T.cT < 9) T.cT += cdt; }
+  if (M.ph === 1) { M.u = clamp(1 - mA / MELEE.T, 0, 1); if (mA <= 0) { M.ph = 2; M.tailT = 0; } }
+  else if (M.ph === 2) { M.tailT += adt; if (M.tailT >= MELEE.tail) M.ph = 0; }
+  if (T.ph === 1) { T.u = clamp(1 - mA / TAKEDOWN.T, 0, 1); if (mA <= 0) { T.ph = 2; T.tailT = 0; } }
+  else if (T.ph === 2) { T.tailT += adt; if (T.tailT >= TAKEDOWN.tail) T.ph = 0; }
+  if (p.dead) M.ph = T.ph = 0;
+  // ---- dodge: a dash (forward and side) or a back-hop (backward, and the no-input default)
+  const D = st.dg;
+  if (live && dT > st.prevDodgeT + 0.01) {
+    // a dodge mashed inside the last one's tail (the sim has no cooldown) crossfades from the tail's pose: the new clip's
+    // keys start at the rest pose (§4.3)
+    if (D.ph !== 0) { fadeStart(st.fadeF, st.lastF, 0.06); st.fadeFreal = false; }
+    D.ph = 1; D.dir = Math.atan2(p.dodgeDy || 0, p.dodgeDx || 0); D.rel = angleDiff(a, D.dir); D.hop = Math.abs(D.rel) >= DODGE.hopFrom * DEG;
+    D.lead = D.rel > 20 * DEG ? 1 : 0; D.u = 0; D.placed = false; D.landed = false; D.skid = 0; D.skidT = 9; D.tailT = 0; D.frozen = false; D.trailPlaced = false;
+    // the push-off foot is the one on the ground: out of a run, a forward dash leads with the swinging foot; with neither
+    // planted (a sprint's float) both legs go FK at once
+    const PL = st.planner, p0 = PL.planted(0), p1 = PL.planted(1);
+    if (!D.hop && Math.abs(D.rel) < 45 * DEG && p0 !== p1) D.lead = p0 ? 1 : 0;
+    D.noPush = !D.hop && !PL.planted(1 - D.lead);
+  }
+  if (D.ph === 1) { D.u = clamp(1 - dT / DODGE.T, 0, 1); if (dT <= 0) { D.ph = 2; D.tailT = 0; } }
+  else if (D.ph === 2) { D.tailT += adt; if (D.tailT >= DODGE.tail) D.ph = 0; }
+  if (D.ph === 2 && S.shot) D.ph = 0; // a shot cancels the tail at once
+  if (p.dead) D.ph = 0;
+  // ---- chop (axe) / pick: the knock is on the trigger frame
+  const C = st.ch;
+  if (live && cA > st.prevChopAnim + 0.01) {
+    const axe = cA >= 0.225, tg = G.interactTarget;
+    let tx = p.x + 20 * Math.cos(a), ty = p.y + 20 * Math.sin(a);
+    if (tg && Number.isFinite(tg.x) && Number.isFinite(tg.y)) { tx = tg.x; ty = tg.y; }
+    const d = Math.hypot(tx - p.x, ty - p.y);
+    C.chain = axe && C.ph >= 1 && !C.pick; // mashing: from wound-up to the contact
+    C.ph = 1; C.pick = !axe; C.yaw = d > 4 ? Math.atan2(ty - p.y, tx - p.x) : a; C.dist = d; C.u = 0; C.cT = axe ? cdt : 9; C.tailT = 0;
+    if (axe) { st.tool = 'axe'; st.stowed = true; st.drawStart = false; if (st.sw.on && st.sw.render) st.sw.on = false; }
+  } else if (C.cT < 9) C.cT += cdt;
+  if (C.ph === 1) { C.u = clamp(1 - cA / (C.pick ? PICK.T : CHOP.T), 0, 1); if (cA <= 0) { C.ph = 2; C.tailT = 0; } }
+  else if (C.ph === 2) { C.tailT += adt; if (C.tailT >= (C.pick ? PICK.rise : CHOP.tail)) { if (C.pick) C.ph = 0; else { C.ph = 3; C.holdT = 0; } } }
+  else if (C.ph === 3) { C.holdT += adt; if (C.holdT >= CHOP.hold) { C.ph = 0; if (st.tool === 'axe') { st.tool = null; st.drawStart = true; st.drawT = CHOP.draw; } } }
+  // ---- repair (G.repairHold): the target (a door or window cell, or the nearest phone pole), in 0.15 s, out 0.15 + a draw
+  const RP = st.rp, rh = G.repairHold;
+  const was = RP.w;
+  RP.on = !!rh && !p.dead;
+  if (RP.on) {
+    RP.t = rh.t || 0;
+    const tgt = rh.target;
+    RP.kind = rh.kind === 'phone' ? 'phone' : rh.kind === 'window' ? 'window' : 'door';
+    if (tgt && Number.isFinite(tgt.cx)) { RP.tx = tgt.cx * 32 + 16; RP.ty = tgt.cy * 32 + 16; }
+    else if (was <= 0) {
+      let best = Infinity; RP.tx = p.x + 20 * Math.cos(a); RP.ty = p.y + 20 * Math.sin(a);
+      for (const pr of (G.map && G.map.props) || []) { if (pr.kind !== 'phonepole') continue; const d = Math.hypot(pr.x - p.x, pr.y - p.y); if (d < best) { best = d; RP.tx = pr.x; RP.ty = pr.y; } }
+    }
+    RP.dist = Math.hypot(RP.tx - p.x, RP.ty - p.y);
+    // the left foot steps 4 toward the opening as he squares up to it, and stays there while he works
+    if (was <= 0) { const y = Math.atan2(RP.ty - p.y, RP.tx - p.x); RP.step = lungeStep(st, 0, 4 * Math.cos(y), 4 * Math.sin(y), 0.2, 2, 0.4); }
+    else if (RP.step) st.nOffT = Math.max(st.nOffT, 0.3);
+  }
+  RP.w = clamp(RP.w + (RP.on ? 1 : -1) * adt / (RP.on ? REPAIR.in : REPAIR.out), 0, 1);
+  // each blow lands on the phase's wrap (the 'hammer' sfx): a puff of wood chips at the strike point
+  if (RP.on && RP.kind !== 'phone' && st.tool === 'hammer') {
+    const k = Math.floor(RP.t * REPAIR.rate);
+    if (RP.blow !== undefined && k > RP.blow) {
+      const y = Math.atan2(RP.ty - p.y, RP.tx - p.x), Hx = clamp(RP.dist - REPAIR.faceBack, 11, 20) + 2, c = Math.cos(y), s = Math.sin(y);
+      startDust(st, p.x + c * Hx - s * REPAIR.z, p.y + s * Hx + c * REPAIR.z, y + Math.PI, REPAIR.chips, REPAIR.y[RP.kind] || 44);
+    }
+    RP.blow = k;
+  } else RP.blow = undefined;
+  // the hammer comes out at the in-blend's midpoint and goes away at the out-blend's; then the gun is drawn
+  if (RP.on && RP.w >= 0.5 && st.tool !== 'hammer' && st.tool !== 'splice') { st.tool = RP.kind === 'phone' ? 'splice' : 'hammer'; st.stowed = true; st.drawStart = false; C.ph = C.ph === 3 ? 0 : C.ph; }
+  if (!RP.on && (st.tool === 'hammer' || st.tool === 'splice') && RP.w < 0.5) { st.tool = null; st.drawStart = true; st.drawT = REPAIR.draw; }
+  if (p.dead) { RP.w = 0; RP.on = false; }
+  // ---- a shot draws the gun on the aim line THAT frame: the axe vanishes, the chop and its tail end (§4.4)
+  if (S.shot) {
+    if (C.ph) C.ph = 0;
+    M.ph = T.ph = 0; // (a shot during a strike or a takedown: the gun is back on the aim line for the flash)
+    // (every tool goes: a shot in the repair's out-blend (the sim interrupts the repair, then fires the next tick) has the
+    // gun on the aim line too, and the out-blend ends with it)
+    if (st.tool) st.tool = null;
+    if (!RP.on) RP.w = 0;
+    st.drawStart = false;
+    // (a shot inside a revive's stagger frees the aim for the rest of the cap window, §4.15)
+    if (st.rev < REVIVE.aimCapT) st.revFree = true;
+  }
+  st.stowed = !!st.tool || (st.rp.w >= 0.5 && st.rp.on);
+  meleeValues(st);
+  takedownValues(st);
+}
+/** The melee strike's values this frame (§4.12): the keys (connected: contact on frame 0 after the catch-up; whiff: mid-swing), the tail. */
+function meleeValues(st) {
+  const M = st.mel;
+  MC.w = 0; MC.gw = 0; MC.guardW = 0; MC.s2Pitch = 0; MC.lunge = 0; MC.cu = 1;
+  if (!M.ph) return;
+  const K = M.long ? MELEE.long : MELEE.pistol, u = M.ph === 1 ? M.u : 1;
+  MC.conn = M.conn; MC.long = M.long;
+  sampleV(M.conn ? K.hit : K.whiff, u, MC.live);
+  for (let i = 0; i < 9; i++) MC.wind[i] = K.windup[i];
+  MC.cu = M.conn ? catchU(M.cT) : 1;
+  // the catch-up: the raised (wind-up) key, then on to the live key
+  const c = MC.cu, k = c < 0.4 ? 0 : ES((c - 0.4) / 0.6);
+  for (let i = 0; i < 9; i++) MC.cur[i] = lerp(MC.wind[i], MC.live[i], k);
+  // the hit-stop freezes the contact (the sim holds meleeAnim): it shakes there (the spine and the fist)
+  if (M.conn && M.ph === 1 && G.fx && G.fx.stop > 0 && c >= 1) {
+    const SH = MELEE.shake, ph = 2 * Math.PI * SH.hz * S.now;
+    MC.cur[5] += SH.yaw * Math.sin(ph); MC.cur[0] += SH.hand * Math.sin(ph + 1.3); MC.cur[2] += SH.hand * Math.cos(ph * 1.13);
+  }
+  MC.w = M.ph === 2 ? 1 - ES(clamp(M.tailT / MELEE.tail, 0, 1)) : 1;
+  MC.gw = MC.w * (M.conn ? ES(clamp(c / 0.4, 0, 1)) : 1); // (the gun's own snapshot leg: from the base gun to the wind-up)
+  // (the guard comes up with the catch-up on a connected blow, over the first 0.15 of a whiff: at full weight on the edge
+  // frame the left hand jumped from the gun to the chin in one frame)
+  MC.guardW = M.long ? 0 : MC.w * (M.ph === 1 ? (M.conn ? Math.max(ES(MC.cu), ss(0, 0.15, u)) : ss(0, 0.15, u)) : 1);
+  const uc = M.conn ? Math.max(0.15, u) : u;
+  MC.s2Pitch = sample(MELEE.s2Pitch, uc) * MC.w; MC.lunge = sample(MELEE.lunge, uc) * MC.w;
+  // the snap at the contact: the head drives in, the right shoulder drops (over the first snap.T of real time after it)
+  const ct = M.conn ? Math.max(0, M.cT - TUNE.catchUp) : u * MELEE.T - 0.22 * MELEE.T;
+  MC.snap = ct >= 0 ? Math.sin(Math.PI * clamp(ct / MELEE.snap.T, 0, 1)) * MC.w : 0;
+}
+/** The takedown's values this frame (§4.13): contact on frame 0 after the catch-up through the raised key. */
+function takedownValues(st) {
+  const T = st.td;
+  TC.w = 0; TC.gw = 0; TC.collarW = 0;
+  if (!T.ph) return;
+  const K = T.long ? TAKEDOWN.long : TAKEDOWN.pistol, u = T.ph === 1 ? T.u : 1;
+  TC.long = T.long; TC.cu = catchU(T.cT);
+  sampleV(K.keys, u, _tk); sampleV(TAKEDOWN.body.keys, u, _tb);
+  const c = TC.cu, k = c < 0.4 ? 0 : ES((c - 0.4) / 0.6);
+  for (let i = 0; i < 4; i++) { TC.gun[i] = lerp(K.raised[i], _tk[i], k); TC.body[i] = lerp(TAKEDOWN.body.raised[i], _tb[i], k); }
+  // the hit-stop holds the contact (the sim freezes meleeAnim): it shakes there
+  if (T.ph === 1 && G.fx && G.fx.stop > 0 && c >= 1) { const SH = TAKEDOWN.shake, ph = 2 * Math.PI * SH.hz * S.now; TC.body[1] += SH.pitch * Math.sin(ph); TC.gun[1] += SH.hand * Math.sin(ph + 1.1); }
+  TC.w = T.ph === 2 ? 1 - ES(clamp(T.tailT / TAKEDOWN.tail, 0, 1)) : 1;
+  TC.gw = TC.w * ES(clamp(c / 0.4, 0, 1));
+  // the left hand on his collar from the contact to u .5, back on the gun by 1; it hauls him back onto the blow over u 0–.2
+  const cl = TAKEDOWN.collarL, pull = TAKEDOWN.collarPull * ES(clamp(u / 0.2, 0, 1));
+  TC.collar[0] = cl[0] - pull; TC.collar[1] = cl[1] + 0.3 * pull; TC.collar[2] = cl[2];
+  TC.collarW = T.ph === 1 ? (u < TAKEDOWN.collarTo ? 1 : 1 - ES((u - TAKEDOWN.collarTo) / (1 - TAKEDOWN.collarTo))) * ss(0, 0.6, c) : 0;
 }
 
 /* ---------------- aim distance D (§4.2): the mouse point on the y 30 plane, else the nearest enemy ahead, else 220 ---------------- */
@@ -502,10 +743,35 @@ function holdHips(st, lim, dt) {
   st.hip.x += d; if (st.hip.v * d < 0) st.hip.v = 0;
   return true;
 }
+/** The face yaw's target and spring rate this frame (§4.5): the aim, or an action's latched direction. */
+const FACE = { yaw: 0, omega: 25 };
+function faceTarget(r, p) {
+  const st = r.st, aim = p.angle || 0, SPR = TUNE.springs;
+  FACE.yaw = aim; FACE.omega = SPR.face;
+  const D = st.dg, sf = st.stateF;
+  if (sf === 'dodge' && !D.hop && D.ph === 1) {
+    // the dash: the face snaps to the dash direction; a side dash keeps half of it toward the aim
+    const k = DODGE.dash.chestSide * ss(30, 70, Math.abs(D.rel) / DEG);
+    FACE.yaw = D.dir + k * wrap(aim - D.dir); FACE.omega = DODGE.faceOmega;
+  } else if (sf === 'takedown') FACE.yaw = st.td.yaw;
+  else if (sf === 'chop' || sf === 'pick' || (st.ch.ph === 2 && !st.ch.pick)) FACE.yaw = st.ch.yaw;
+  else if (sf === 'repair' && st.rp.on) FACE.yaw = Math.atan2(st.rp.ty - p.y, st.rp.tx - p.x);
+  return FACE;
+}
 function facing(r, p) {
   const st = r.st, adt = S.adt, aim = p.angle || 0, SPR = TUNE.springs;
-  springAngle(st.face, aim, SPR.face, adt);
+  const FT = faceTarget(r, p);
+  springAngle(st.face, FT.yaw, FT.omega, adt);
   if (S.shot) resetSpring(st.face, st.face.x + wrap(aim - st.face.x));
+  if (p.dead) {
+    // death (§4.16): the face, the chest and the hips rotate to the template yaw F over 0.3 s (≤ 90° by construction)
+    const Dh = st.dth, k = ES(clamp(st.deathT / DEATH.turnT, 0, 1));
+    st.face.x = Dh.f0 + wrap(Dh.F - Dh.f0) * k; st.chest.x = Dh.c0 + wrap(Dh.F - Dh.c0) * k; st.hip.x = Dh.h0 + wrap(Dh.F - Dh.h0) * k;
+    st.face.v = st.chest.v = st.hip.v = 0; st.hipIdleT = st.hip.x; st.turning = false;
+    S.faceYaw = S.chestYaw = S.hipYaw = st.hip.x; S.tau = wrap(st.chest.x - st.hip.x); S.chestRef = st.chest.x; S.chestLag = 0; S.flickK = 1; st.mode = 'idle';
+    st.hipYawPrev = S.hipYaw; st.yawRate = st.yawAcc = 0;
+    return;
+  }
   S.faceYaw = st.face.x;
   const bl = (S.blade + GC.blade) * DEG;
   st.bladeNow = S.blade + GC.blade;
@@ -530,6 +796,13 @@ function facing(r, p) {
     if (S.wall) mode = 'wall';
     st.hipIdleT = st.hip.x; st.turning = false; st.turnT = 0;
     springAngle(st.hip, hipT, SPR.hipMove, S.animDt);
+  } else if (st.stateF === 'dodge' && !st.dg.hop && st.dg.ph === 1) {
+    // the dash: the hips whip round to the dash direction (the legs are FK; no planted foot holds them), but never more
+    // than hipCap off the aim (a side dash is a strafe-lunge: the shoulders and the gun stay near the target)
+    st.backpedal = false; mode = 'dash';
+    const aim = p.angle || 0, cap = DODGE.dash.hipCap * DEG;
+    springAngle(st.hip, aim + clamp(wrap(st.dg.dir - aim), -cap, cap), DODGE.hipOmega, adt);
+    st.hipIdleT = st.hip.x; st.turning = false; st.turnT = 0;
   } else {
     st.backpedal = false;
     // turn in place: the hips hold their stance until the aim has turned far enough off it, then the feet step round
@@ -546,7 +819,7 @@ function facing(r, p) {
     // (a turn in place whips the hips round faster than the idle stance follows small aim changes)
     springAngle(st.hip, st.hipIdleT, st.turning ? SPR.hipTurn : SPR.hipIdle, S.adt);
   }
-  const live = !p.dead && !S.teleport && S.adt > 0, lim = moving ? LO.hipHoldMove : LO.hipHoldIdle;
+  const live = !p.dead && !S.teleport && S.adt > 0 && mode !== 'dash', lim = moving ? LO.hipHoldMove : LO.hipHoldIdle;
   if (live) holdHips(st, lim, S.adt);
   // the twist budget (spine1 ±35°, spine2 ±45°: 80° in all): the hips are dragged round as far as the feet allow, and
   // beyond that the chest waits for the feet (the head still leads: neck and head take up to 75° more, see writeFK)
@@ -609,7 +882,8 @@ function gaitStart(st, simPhi) {
 function locomotion(r, p) {
   const st = r.st;
   const simPhi = ((((p.walkPhase || 0) / (2 * Math.PI)) % 1) + 1) % 1;
-  if (S.gaitOn && !st.planner.gait && !p.dead) gaitStart(st, simPhi);
+  const gaitHeld = st.stateF === 'dodge' && st.dg.ph === 2 && st.dg.tailT < 0.08;
+  if (S.gaitOn && !gaitHeld && !st.planner.gait && !p.dead) gaitStart(st, simPhi);
   if (S.gaitOn) {
     st.startT += S.animDt;
     const k = 0.15 * st.phaseRate / (2 * Math.PI) * S.animDt;
@@ -644,19 +918,29 @@ function locomotion(r, p) {
   I.sigma = S.sigma;
   I.half += 2 * S.strafeK * (st.mode === 'strafe' ? 1 : 0);
   I.dt = S.animDt; I.gait = S.gaitOn; I.phi = S.phi; I.rate = st.phaseRate;
+  // (the dodge's tail holds the gait off for its first 0.08 s: with the move key held the gait lifted the planted lead
+  // foot on the tail's first frame and the skid never played)
+  if (st.stateF === 'dodge' && st.dg.ph === 2 && st.dg.tailT < 0.08) I.gait = false;
   I.vx = S.wall ? 0 : st.vf[0]; I.vz = S.wall ? 0 : st.vf[1]; I.rx = p.x; I.rz = p.y; I.hipYaw = S.hipYaw;
   I.turning = st.turning; I.turnSide = st.turnSide; I.still = st.stillT; I.stanceChanged = st.stanceT > 0; I.settleT = LO.stillSettle;
   I.hipY = 37.5 + IDLE.pelvisDy * (1 - S.amp) + st.height.x * S.amp;
   neutralFeet(st, p, S.gaitOn ? S.hipYaw : st.hipIdleT, key);
+  // a forced step (melee lunge, takedown, repair) keeps its foot there while the action runs (the settle brings it back)
+  if (st.nOffT > 0) { for (let i = 0; i < 2; i++) { PI.neutral[i][0] += st.nOff[i][0]; PI.neutral[i][1] += st.nOff[i][1]; } st.nOffT -= S.adt; }
+  // the dodge and its tail own the feet (no idle step starts; it hands them back placed, frank3d dodgeFeet)
+  I.hold = st.stateF === 'dodge';
+  if (I.hold) st.stillT = 0;
   // a dodge skids the feet along with the body (M4 brings the dash and back-hop clips); a shove skids all but 5 u of
   // its push and asks for a corrective step
   S.skid = !p.dead && !S.teleport && (((p.dodgeT || 0) > 0 && S.jump > 0) || S.shove);
-  if (S.skid) {
+  // (the dodge clip owns the feet: the push-off foot stays where it is, the landings are placed; never dragged)
+  if (S.skid && !(st.stateF === 'dodge' && !S.shove)) {
     const k = S.shove ? S.shoveDrag : 1;
     st.planner.drag((p.x - st.prevPos[0]) * k, (p.y - st.prevPos[1]) * k);
     if (S.shove) st.planner.kick = true;
   }
   if (!p.dead) st.planner.update(I);
+  if (st.stateF === 'dodge') dodgeFeet(r, p);
   I.startLead = -1;
   for (let i = 0; i < 2; i++) st.planted[i] = !p.dead && st.planner.planted(i);
   st.contacts = st.planner.contacts;
@@ -685,12 +969,8 @@ function layerC(r, p) {
   springPend(st.stopP, 0, STOP_W, LO.stopZeta, S.adt, 0, -12, 14);
   st.absorbT = Math.max(0, st.absorbT - S.adt);
   const absorb = st.absorbT > 0 ? LO.absorb * Math.sin(Math.PI * (1 - st.absorbT / LO.absorbT)) : 0;
-  // a dodge (until M4's dash and back-hop): he ducks and leans into the dash
-  const du = (p.dodgeT || 0) > 0 && !p.dead ? clamp(1 - p.dodgeT / 0.22, 0, 1) : -1;
-  const dw = du >= 0 ? ss(0, 0.25, du) * (1 - ss(0.7, 1, du)) : 0;
-  const dashYaw = Math.atan2(p.dodgeDy || 0, p.dodgeDx || 0), dF = Math.cos(dashYaw - S.hipYaw), dS = Math.sin(dashYaw - S.hipYaw);
   P[PK.pel] = (S.wall ? LO.wallPush * amp : 0);
-  P[PK.pel + 1] = IDLE.pelvisDy * (1 - amp) + st.height.x * amp + bob - LO.turnDip * st.planner.stepping * (st.turning ? 1 : 0.5) - absorb - LO.dodgeDrop * dw;
+  P[PK.pel + 1] = IDLE.pelvisDy * (1 - amp) + st.height.x * amp + bob - LO.turnDip * st.planner.stepping * (st.turning ? 1 : 0.5) - absorb;
   P[PK.pel + 2] = -sway * Math.cos(2 * Math.PI * (S.phi - sig / 2));
   S.bob = bob;
   // lean: the idle stoop, the gait's torso pitch (spine1 40% / spine2 60%), leaning into acceleration and banking into curves
@@ -702,8 +982,8 @@ function layerC(r, p) {
   P[PK.pelRot] = IDLE.lean * 0.3;
   P[PK.pelRot + 1] = yawOsc * cphi * ds;
   P[PK.pelRot + 2] = rollOsc * sphi + st.leanS.x * 0.4;
-  P[PK.s1] = IDLE.lean * 0.3 + gp * 0.4 + 0.3 * st.stopP.x + LO.dodgeLean * dF * dw;
-  P[PK.s1 + 2] = -0.6 * rollOsc * sphi + st.leanS.x * 0.6 + (st.mode === 'strafe' ? 5 * Math.sign(wrap(st.moveYaw - S.hipYaw)) * S.strafeK : 0) + 0.8 * LO.dodgeLean * dS * dw;
+  P[PK.s1] = IDLE.lean * 0.3 + gp * 0.4 + 0.3 * st.stopP.x;
+  P[PK.s1 + 2] = -0.6 * rollOsc * sphi + st.leanS.x * 0.6 + (st.mode === 'strafe' ? 5 * Math.sign(wrap(st.moveYaw - S.hipYaw)) * S.strafeK : 0);
   P[PK.s2] = IDLE.lean * 0.4 + gp * 0.6 + (S.back ? -3 * amp : 0) + st.stopP.x;
   // relaxed arm swing against the legs (the pistol arm at half; reversed when backing up; nearly still when strafing)
   const AS = LO.arm;
@@ -718,8 +998,6 @@ function layerC(r, p) {
   aR.flex += (armA * cphi - back) * AS.gunArm; aR.elbow = Math.min(AS.elbowMax, lerp(aR.elbow, elb * AS.gunElbow, amp) + AS.elbowFwdGun * amp * Math.max(0, aR.flex)); aR.twist += AS.inR * inW;
   aL.abd += AS.sprintAbdL * amp * st.sprintW + AS.strafeAbd * S.strafeK * amp; aR.abd += AS.sprintAbdR * amp * st.sprintW + AS.strafeAbd * S.strafeK * amp;
   if (S.long) { const RL = IDLE.armRLong; aR.flex = RL.flex + armA * RL.swing * cphi; aR.elbow = RL.elbow; aR.wflex = RL.wflex; aR.abd = RL.abd; aR.twist = 0; }
-  // the dodge throws the arms out a little for balance
-  aL.abd += 14 * dw; aR.abd += 10 * dw; aL.elbow += 20 * dw;
   writeArm(P, PK.armL, aL); writeArm(P, PK.armR, aR);
   // spine2 counter-swings the pelvis (relaxed only): in a jog the shoulders turn against the hips, which reads from above;
   // the head cancels the chest's net swing (layer U)
@@ -769,39 +1047,361 @@ function layerU(r, p) {
   // the recoil's shoulders (both shrug up and draw back), the pump's left shoulder pulling the forend
   U[PK.clavL] += GC.rClavE + GC.actClavLE; U[PK.clavL + 1] += GC.rClavP + GC.actClavLP;
   U[PK.clavR] += GC.rClavE; U[PK.clavR + 1] += GC.rClavP;
-  // fade (a later U state change blends from the last output), then copy the owned channels into the pose
-  if (fadeApply(st.fadeU, U, S.adt) >= 1) { /* live */ }
+  // (M4) the melee strike (§4.12): the torso winds and whips through the blow (spine2, spine1 and the pelvis turn),
+  // spine2 pitches into the contact
+  if (MC.w > 0) {
+    const c = MC.cur, w = MC.w;
+    const kp = MC.long ? MELEE.longPitch : 1;
+    U[PK.s2 + 1] += c[5] * w; U[PK.s1 + 1] += c[6] * w; U[PK.pelRot + 1] += c[7] * w; U[PK.s2] += MC.s2Pitch * kp; U[PK.s1] += 0.5 * MC.s2Pitch * kp; U[PK.pel] += MC.lunge;
+    if (MC.long) U[PK.head] += MELEE.longHead * w; // (the head up on the target over the stock)
+    U[PK.head + 1] -= 0.6 * c[5] * w; // (the eyes stay on the target)
+    U[PK.head] += MELEE.snap.head * MC.snap; U[PK.clavR] += MELEE.snap.clavR * MC.snap;
+  }
+  // fade (a later U state change blends from the last output; a connected strike's catch-up runs on real time), then copy
+  // the owned channels into the pose
+  if (fadeApply(st.fadeU, U, st.fadeUreal ? (G.paused ? 0 : S.realDt) : S.adt) >= 1) { /* live */ }
   st.lastU.set(U);
   P.set(U);
 }
 
-/* ---------------- 8. layer F: full-body states (M2: the death placeholder) ---------------- */
+/* ---------------- 8. layer F: full-body clips (§4.13, §4.14, §4.16, §4.17) ---------------- */
+// Each clip starts from the composed pose (C + U) and writes the channels it owns with its own envelope weights; a switch
+// between two clips crossfades from the last output (states()).
 function layerF(r, p) {
-  const st = r.st;
-  if (!st.stateF) { st.lastF.set(PB); return; }
-  const F = PF;
+  const st = r.st, F = PF, s = st.stateF;
   F.set(PB);
-  if (st.stateF === 'death') {
-    // he falls back and lies still (M4 brings the full clip: fall direction, ground clamp, the coat spread)
-    const e = ss(0, 0.7, st.deathT);
-    F[PK.rootRot] = -86 * e * e; F[PK.root + 1] = 4.2 * e;
-    F[PK.head] = -8 * e; F[PK.head + 1] = 30 * e;
-    F[PK.footIKW] = 0; F[PK.aimW] = 0;
-    F[PK.legL] = F[PK.legR] = 4 * e; F[PK.legL + 3] = F[PK.legR + 3] = 6 * e;
-    F[PK.pel] = F[PK.pel + 1] = F[PK.pel + 2] = 0;
-  }
-  fadeApply(st.fadeF, F, S.liveDt);
+  FOOTW[0] = FOOTW[1] = 1;
+  if (s === 'death') deathPose(r, p, F);
+  else if (s === 'dodge') dodgePose(r, p, F);
+  else if (s === 'takedown') takedownPose(r, p, F);
+  else if (s === 'repair') repairPose(r, p, F);
+  else if (s === 'chop') chopPose(r, p, F);
+  else if (s === 'pick') pickPose(r, p, F);
+  fadeApply(st.fadeF, F, st.fadeFreal ? (G.paused ? 0 : S.realDt) : S.adt);
   st.lastF.set(F);
   PB.set(F);
 }
+const _v2a = [0, 0], _v4a = [0, 0, 0, 0], _v5a = [0, 0, 0, 0, 0], _cb = [0, 0, 0, 0, 0];
+const mixCh = (F, o, v, w) => { F[o] = PB[o] + (v - PB[o]) * w; };
+// per-foot IK weights a full-body clip sets this frame (the dash: the trail foot's push-off, the lead's plant); legs()
+// multiplies them into the pose's footIKW (reset each frame in layerF)
+const FOOTW = [1, 1];
+const _v3b = [0, 0, 0];
+/** The dash's clock: u while it runs, then on past 1 through the tail (1 + tail / T). */
+const dashV = (D) => (D.ph === 1 ? D.u : 1 + D.tailT / DODGE.T);
+/** The dodge (§4.14): the dash (one low stride along the dash: push-off, flight, the lead heel's plant and skid; the gun
+ *  tucked) or the back-hop (a tucked hop, the gun on target). */
+function dodgePose(r, p, F) {
+  const st = r.st, D = st.dg, live = D.ph === 1, u = live ? D.u : 1, tt = D.ph === 2 ? D.tailT : 0, v = dashV(D);
+  // in fast (the keys start at the rest pose), out over the tail: the head first, then the chest, then the hips
+  const wi = ss(0, 0.1, u);
+  const wH = live ? wi : 1 - ES(clamp(tt / 0.07, 0, 1)), wC = live ? wi : 1 - ES(clamp(tt / 0.11, 0, 1)), wP = live ? wi : 1 - ES(clamp(tt / DODGE.tail, 0, 1));
+  F[PK.footIKW] = 1;
+  if (!D.hop) {
+    const K = DODGE.dash;
+    mixCh(F, PK.pel + 1, sample(K.pelvisY, u) - 37.5, wP);
+    mixCh(F, PK.pelRot, sample(K.pelvisPitch, u), wP); mixCh(F, PK.pelRot + 1, 0, wP); mixCh(F, PK.pelRot + 2, 0, wP);
+    mixCh(F, PK.s1, IDLE.lean * 0.3 + sample(K.spine1, u), wC); mixCh(F, PK.s1 + 1, 0, wC);
+    mixCh(F, PK.s2, IDLE.lean * 0.4 + sample(K.spine2, u), wC);
+    // the eyes stay on the travel (the torso pitches ~48° forward)
+    const lean = sample(K.pelvisPitch, u) + sample(K.spine1, u) + sample(K.spine2, u);
+    mixCh(F, PK.neck, IDLE.neckPitch - 0.35 * lean, wH); mixCh(F, PK.head, -0.45 * lean + K.headPitch * ss(0.1, 0.4, u), wH);
+    // the FK legs, steered toward the travel: a side dash's hips stay within hipCap of the aim, so the legs swing in a plane
+    // turned by the rest (lead.flex·sin φ goes to abduction); the IK weights per foot (the trail's push-off, the lead's plant)
+    // (the lead leg's plane at most ±35° off the hips: its big flex would go into an abduction past the hip's limits; the
+    // trail leg, nearly straight down at its push-off, follows the travel in full, so it trails behind the line of travel
+    // even while the hips are still whipping round)
+    const phi0 = wrap(D.dir - S.hipYaw);
+    for (let i = 0; i < 2; i++) {
+      const isLead = i === D.lead, o = i ? PK.legR : PK.legL, sd = i ? 1 : -1;
+      const phi = clamp(phi0, (isLead ? -35 : -80) * DEG, (isLead ? 35 : 80) * DEG), cphi = Math.cos(phi), sphi = Math.sin(phi);
+      sampleV(isLead ? K.lead : K.trail, u, _v3b);
+      const fl = _v3b[0];
+      // (abduction is + outward for either leg: a flex toward a travel on the leg's own side abducts it)
+      F[o] = fl * cphi; F[o + 1] = (isLead ? 4 : 6) - fl * sphi * sd; F[o + 2] = 0; F[o + 3] = _v3b[1]; F[o + 4] = _v3b[2];
+    }
+    FOOTW[D.lead] = D.ph ? 1 - ss(K.leadOff[0], K.leadOff[1], v) * (1 - ss(K.plantU, K.plantIn, v)) : 1;
+    FOOTW[1 - D.lead] = D.ph ? (D.noPush ? 0 : 1 - ss(K.pushOff[0], K.pushOff[1], v)) * (1 - ss(K.trailOn, K.trailIn, v)) + ss(K.trailOn, K.trailIn, v) : 1;
+    // the free arm thrown back for balance (the pistol is tucked one-handed; a long gun keeps both hands at port arms)
+    if (!S.long) { const A = K.armL, wa = live ? ss(0.05, 0.25, u) : 1 - ES(clamp(tt / DODGE.tail, 0, 1)); mixCh(F, PK.armL, A[0], wa); mixCh(F, PK.armL + 1, A[1], wa); mixCh(F, PK.armL + 3, A[2], wa); }
+    F[PK.crouch] = wP;
+  } else {
+    const K = DODGE.hop;
+    mixCh(F, PK.pel + 1, sample(K.pelvisY, u) - 37.5, wP);
+    const th = sample(K.thigh, u), kn = sample(K.knee, u);
+    for (let i = 0; i < 2; i++) { const o = i ? PK.legR : PK.legL; F[o] = th; F[o + 1] = 5; F[o + 2] = 0; F[o + 3] = kn; F[o + 4] = -15; }
+    // the chest rocks back in the air and leans in on the landing
+    mixCh(F, PK.s2, IDLE.lean * 0.4 + sample(K.spine2, u) + K.landLean * ss(0.82, 1, u), wC);
+    mixCh(F, PK.s1, IDLE.lean * 0.3 + 0.5 * K.landLean * ss(0.82, 1, u), wC);
+    const w = live ? 1 - ss(K.ikOff[0], K.ikOff[1], u) * (1 - ss(K.ikOn, K.ikIn, u)) : 1;
+    FOOTW[0] = FOOTW[1] = w;
+    F[PK.crouch] = 0;
+  }
+}
+/** The dodge's feet in the planner (before the pose): the edge freezes both where they are (the push-off foot stays put:
+ *  no drag), the back-hop lands both at ±land, and the dash's skid. */
+function dodgeFeet(r, p) {
+  const st = r.st, D = st.dg, PL = st.planner;
+  if (D.ph === 1 && !D.frozen) {
+    // the edge: both feet held on the ground where they are (a swinging foot's spot below it)
+    D.frozen = true;
+    for (let i = 0; i < 2; i++) { const f = PL.feet[i]; if (!PL.planted(i)) PL.place(i, f.x, f.z, f.yaw, f.toeOff); }
+  }
+  if (D.hop) {
+    const K = DODGE.hop;
+    if (((D.ph === 1 && D.u >= K.ikOn) || D.ph === 2) && !D.placed) {
+      // where he will be when the hop ends (the rest of the dodge at its speed), the feet ±land either side
+      D.placed = true;
+      const rem = Math.max(0, p.dodgeT || 0) * Math.min(st.speed, 600), x = p.x + Math.cos(D.dir) * rem, z = p.y + Math.sin(D.dir) * rem, hy = S.hipYaw, ch = Math.cos(hy), sh = Math.sin(hy);
+      for (let i = 0; i < 2; i++) { const sd = i ? 1 : -1; PL.place(i, x - sh * sd * K.land, z + ch * sd * K.land, hy + sd * 8 * DEG, sd * 8 * DEG); }
+      startDust(st, x, z, D.dir);
+    }
+    return;
+  }
+  // the push-off: the trail foot rolls up onto its ball (the heel rises, the ball stays put) before it leaves the ground
+  if (D.ph === 1 && !D.noPush) { const t = 1 - D.lead, f = PL.feet[t], v = dashV(D); if (PL.planted(t) && v < DODGE.dash.pushOff[1]) PL._ankle(f, -DODGE.dash.toeOff * ss(0.02, DODGE.dash.pushOff[1], v), 1); }
+  // the dash's brake skid: the planted lead foot slides `skid` u on along the dash (ease-out) from its plant
+  if (D.placed && D.skidT < DODGE.dash.skidT) {
+    const K = DODGE.dash;
+    D.skidT += S.adt;
+    const k = EO(clamp(D.skidT / K.skidT, 0, 1)) * K.skid, dk = k - D.skid; D.skid = k;
+    if (dk > 0 && PL.planted(D.lead)) PL.slide(D.lead, Math.cos(D.dir) * dk, Math.sin(D.dir) * dk);
+    S.skid = true; // (the skid is a slide, never stance drift)
+  }
+}
+/** The dash's touchdowns (after FK, before the leg IK): the lead foot plants at its own FK heel's spot (on the ground below
+ *  it), the trail foot at its FK spot but never crossed over the line of travel. */
+function dodgePlace(r, p) {
+  const st = r.st, D = st.dg, PL = st.planner, K = DODGE.dash, B = r.bones;
+  if (D.hop || !D.ph) return;
+  const v = dashV(D), c = Math.cos(D.dir), s = Math.sin(D.dir);
+  // where the body will be when the dash ends (the rest of the dodge at its speed)
+  const rem = D.ph === 1 ? Math.max(0, p.dodgeT || 0) * Math.min(Math.max(st.speed, 300), 600) : 0, ex = p.x + c * rem, ez = p.y + s * rem;
+  if (!D.placed && v >= K.plantU) {
+    D.placed = true; D.skid = 0; D.skidT = 0;
+    _v1.setFromMatrixPosition(B[FEET[D.lead]].matrixWorld);
+    // (at its FK spot, but kept to a stance the leg can still hold when the body arrives over it: a side dash's FK foot,
+    // abducted, landed out of reach and the leg's limits sank it under the ground)
+    const sd = D.lead ? 1 : -1, yaw = S.hipYaw + sd * 8 * DEG;
+    const ox = _v1.x - ex, oz = _v1.z - ez, al = clamp(ox * c + oz * s, K.leadAlong[0], K.leadAlong[1]), sl = sd * clamp(sd * (-ox * s + oz * c), K.leadSide[0], K.leadSide[1]);
+    _v1.x = ex + c * al - s * sl; _v1.z = ez + s * al + c * sl;
+    PL.place(D.lead, _v1.x, _v1.z, yaw, sd * 8 * DEG);
+    // (a heel strike: the planted foot starts at the FK foot's pitch, toe up, and the planner rolls it flat about the heel;
+    // planted flat at once, the rotation's blend sank the heel under the ground)
+    _v2.set(1, 0, 0).transformDirection(B[FEET[D.lead]].matrixWorld); PL.feet[D.lead].pitch = clamp(Math.asin(clamp(_v2.y, -1, 1)), 0, 0.5);
+    startDust(st, _v1.x, _v1.z, D.dir);
+  }
+  if (!D.trailPlaced && v >= K.trailOn) {
+    D.trailPlaced = true;
+    const t = 1 - D.lead, sd = t ? 1 : -1;
+    _v1.setFromMatrixPosition(B[FEET[t]].matrixWorld);
+    // on its own side of the line of travel through the body (the travel's right is (−s, c); the hips are within 70° of
+    // the travel, so the right foot's side is the travel's right), at least trailLat out
+    const ox = _v1.x - ex, oz = _v1.z - ez, along = clamp(ox * c + oz * s, K.trailAlong[0], K.trailAlong[1]), side = -ox * s + oz * c;
+    const lat = sd * clamp(sd * side, K.trailLat, K.trailLat + 5);
+    PL.place(t, ex + c * along - s * lat, ez + s * along + c * lat, S.hipYaw + sd * 10 * DEG, sd * 10 * DEG);
+  }
+}
+function startDust(st, x, z, dir, K = DODGE.dust, y = 1.2) { const d = st.dust; d.t = 0; d.x = x; d.z = z; d.dir = dir; d.K = K; d.y = y; }
+/** The takedown (§4.13): he drops onto the blow (the hips down, the chest and head over the victim). */
+function takedownPose(r, p, F) {
+  const w = TC.w, b = TC.body;
+  F[PK.pel + 1] += b[0] * w; F[PK.s2] += b[1] * w; F[PK.s1] += b[2] * w; F[PK.head] += b[3] * w;
+  F[PK.aimW] = 0;
+}
+/** Repair (§4.17): squared up to the opening, hammering (the chest accents each blow), or crouched at the phone line. */
+function repairPose(r, p, F) {
+  const st = r.st, RP = st.rp, w = ES(RP.w);
+  if (RP.kind === 'phone') {
+    const P = REPAIR.phone;
+    F[PK.pel + 1] += P.pelvisY * w; F[PK.s1] += 10 * w; F[PK.s2] += 18 * w; F[PK.neck] += 10 * w; F[PK.head] += 12 * w;
+  } else {
+    const h = (RP.t * REPAIR.rate) % 1;
+    F[PK.pel + 1] += (REPAIR.pelvisY + sample(REPAIR.dip, h)) * w;
+    F[PK.s2] += (REPAIR.s2Pitch + sample(REPAIR.accent, h)) * w;
+    F[PK.s2 + 1] += sample(REPAIR.s2Yaw, h) * w;
+    F[PK.neck] += 10 * w; F[PK.head] += (10 + sample(REPAIR.nod, h)) * w; // (looking at the nail, nodding on each blow)
+  }
+  F[PK.aimW] *= 1 - w;
+}
+// the chop's body over u: [lean, spine2 yaw, pelvis yaw, pelvis z, pelvis dy] (the knees bend as the hips drop: the knee
+// angle → pelvis dy, about 0.17 u per degree)
+const CK = CHOP.contact, CHOP_DY = -0.17 * CK.knee;
+const CHOP_BODY = [[0, [CK.lean, CHOP.bite.s2Yaw, -4, 0, CHOP_DY]], [CHOP.bite.u, [CK.lean - 1, CHOP.bite.s2Yaw, -4, 0, CHOP_DY], 'L'],
+  [CHOP.wrench.u, [CK.lean - 6, CHOP.wrench.s2Yaw, -5, 0, CHOP_DY + 1], 'O'],
+  [1, [4, CHOP.windup.s2Yaw, CHOP.windup.pelvisYaw, CHOP.windup.pelvisZ, 0], 'S']];
+const CHOP_WOUND = CHOP_BODY[3][1];
+/** The axe (§4.17): contact on frame 0 (the catch-up from wound-up), the bite, the wind-up over the right shoulder; the tail lowers it. */
+function chopPose(r, p, F) {
+  const st = r.st, C = st.ch, live = C.ph === 1, u = live ? C.u : 1;
+  sampleV(CHOP_BODY, u, _cb);
+  if (live && C.cT < 9) { const cu = catchU(C.cT), k = cu < 0.4 ? 0 : ES((cu - 0.4) / 0.6); for (let i = 0; i < 5; i++) _cb[i] = lerp(CHOP_WOUND[i], _cb[i], k); }
+  const w = live ? 1 : 1 - ES(clamp(C.tailT / CHOP.tail, 0, 1));
+  const lean = _cb[0] * w;
+  F[PK.pelRot] += 0.25 * lean; F[PK.s1] += 0.3 * lean; F[PK.s2] += 0.45 * lean;
+  F[PK.s2 + 1] += _cb[1] * w; F[PK.pelRot + 1] += _cb[2] * w; F[PK.pel + 2] += _cb[3] * w; F[PK.pel + 1] += _cb[4] * w;
+  F[PK.head] -= 0.5 * lean; F[PK.head + 1] -= 0.5 * _cb[1] * w; // (eyes on the cut)
+  F[PK.aimW] *= 1 - w;
+}
+/** Pick (§4.17): down to the ground with the left hand (the gun stays in the right), then the rise. */
+function pickPose(r, p, F) {
+  const st = r.st, C = st.ch, live = C.ph === 1, u = live ? C.u : 1, w = live ? 1 : 1 - ES(clamp(C.tailT / PICK.rise, 0, 1));
+  F[PK.pel + 1] += sample(PICK.pelvisY, u) * w; F[PK.pelRot] += sample(PICK.pelvisPitch, u) * w;
+  F[PK.s1] += sample(PICK.spine1, u) * w; F[PK.s2] += sample(PICK.spine2, u) * w;
+  F[PK.head] -= 0.4 * sample(PICK.spine2, u) * w;
+  // the chest turns toward the camera (south, +y) as he reaches, so the reaching left arm swings into view: facing east
+  // his left side is away from the camera
+  F[PK.s2 + 1] += PICK.camYaw * Math.sign(Math.cos(st.ch.yaw) || 1) * ss(0, 0.5, u) * w;
+}
+/** Death's template (§4.16), entered on the death edge. */
+function deathStart(r, p) {
+  const st = r.st, Dh = st.dth, a = p.angle || 0;
+  const hurt = G.hurtDir && G.hurtDir.t > 0 && Number.isFinite(G.hurtDir.angle) ? G.hurtDir.angle : a + Math.PI;
+  Dh.variant = Math.abs(angleDiff(a, hurt)) < Math.PI / 2 ? 'back' : 'front';
+  Dh.F = Dh.variant === 'back' ? hurt : hurt + Math.PI;
+  Dh.f0 = st.face.x; Dh.h0 = st.hip.x; Dh.c0 = st.chest.x;
+  Dh.sign = Math.cos(Dh.F) >= 0 ? 1 : -1; // his right points to sim y = cos F: the camera (south) side
+  Dh.lift = 0; Dh.relOk = false; Dh.gun.on = false; Dh.fall = hurt + Math.PI;
+  st.deathT = 0;
+  // dying with the axe or the hammer in his hand: THAT drops as the prop (the gun stays stowed); the chop's clock stops
+  st.ch.ph = 0;
+  Dh.tool = st.tool === 'axe' || st.tool === 'hammer' ? st.tool : null;
+  if (Dh.tool) {
+    // (last frame's tool and hand: the prop leaves the hand from where it was)
+    _m1.compose(TOOL.p, TOOL.q, _gw2.set(1, 1, 1)); Dh.rel.copy(r.bones.handR.matrixWorld).invert().multiply(_m1); Dh.relOk = true;
+    Dh.gun.p[0] = TOOL.p.x; Dh.gun.p[1] = TOOL.p.y; Dh.gun.p[2] = TOOL.p.z; Dh.gun.v[0] = Dh.gun.v[1] = Dh.gun.v[2] = 0;
+  }
+  st.tool = null;
+}
+/** Death (§4.16): the fall rotated toward the hit, the bounce and settle, the head toward the camera; FK everywhere. */
+function deathPose(r, p, F) {
+  const st = r.st, Dh = st.dth, t = st.deathT, K = Dh.variant === 'front' ? DEATH.front : DEATH.back, sg = Dh.sign;
+  F[PK.pel] = 0; F[PK.pel + 1] = sample(K.pelvisY, t) - 37.5; F[PK.pel + 2] = 0;
+  F[PK.pelRot] = sample(K.pelvisPitch, t); F[PK.pelRot + 1] = 0; F[PK.pelRot + 2] = 0;
+  const sl = sample(K.slide, t), hy = S.hipYaw;
+  F[PK.root] = sl * Math.cos(hy); F[PK.root + 1] = 0; F[PK.root + 2] = sl * Math.sin(hy);
+  F[PK.rootRot] = F[PK.rootRot + 1] = F[PK.rootRot + 2] = 0;
+  F[PK.s1] = sample(K.spine1, t); F[PK.s1 + 1] = 0; F[PK.s1 + 2] = 0;
+  F[PK.s2] = sample(K.spine2, t); F[PK.s2 + 1] = 0; F[PK.s2 + 2] = 0;
+  F[PK.neck] = 0; F[PK.neck + 1] = 0; F[PK.neck + 2] = 0;
+  F[PK.head] = sample(K.headPitch, t); F[PK.head + 1] = sample(K.headYaw, t) * sg; F[PK.head + 2] = sample(K.headRoll, t) * sg;
+  F[PK.clavL] = F[PK.clavR] = 0; F[PK.clavL + 1] = F[PK.clavR + 1] = IDLE.clavProt;
+  for (let i = 0; i < 2; i++) { const o = i ? PK.legR : PK.legL; sampleV(i ? K.legR : K.legL, t, _v5a); F[o] = _v5a[0]; F[o + 1] = _v5a[3]; F[o + 2] = _v5a[4]; F[o + 3] = _v5a[1]; F[o + 4] = _v5a[2]; }
+  for (let i = 0; i < 2; i++) { const o = i ? PK.armR : PK.armL; sampleV(i ? K.armR : K.armL, t, _v4a); F[o] = _v4a[0]; F[o + 1] = _v4a[1]; F[o + 2] = _v4a[3]; F[o + 3] = _v4a[2]; F[o + 4] = -10; F[o + 5] = 0; F[o + 6] = 0; }
+  // (the feet stay planted through the crumple, the knees folding over them on the IK, and the legs go FK as he topples:
+  // the spec's FK from 0.12 drove the feet under the ground while the hips came down, and the clamp then held him up off
+  // it, hovering)
+  F[PK.footIKW] = 1 - ss(DEATH.ikOff, DEATH.ikTo, t); F[PK.aimW] = 0; F[PK.breath] = 0; F[PK.crouch] = 0;
+}
+// the ground clamp's tracked points (bone, body-space bind point): head top/back/face, hands, elbows, knees, heels, toes, the hips and the chest front and back
+const CLAMP_PTS = [['head', 0.3, 75, 0], ['head', -5.5, 67, 0], ['head', 6.5, 66, 0], ['handL', 0.3, 29, -11], ['handR', 0.3, 29, 11], ['forearmL', -1, 44.6, -11], ['forearmR', -1, 44.6, 11],
+  ['shinL', 2.5, 19.5, -4.6], ['shinR', 2.5, 19.5, 4.6], ['footL', -2.6, 2, -4.6], ['footR', -2.6, 2, 4.6], ['footL', 7, 2, -4.6], ['footR', 7, 2, 4.6],
+  ['pelvis', -7, 33, 0], ['pelvis', 7, 33, 0], ['spine2', -6.8, 50, 0], ['spine2', 6.8, 50, 0], ['spine1', 0, 38, -10.5], ['spine1', 0, 38, 10.5]];
+/** Death, after FK: the arms leave the IK'd aim over 0.12 s (from their last local rotations); deathClamp then lifts the hips so nothing sinks under y 1. */
+function deathFK(r, p) {
+  const st = r.st, B = r.bones, Dh = st.dth, t = st.deathT;
+  if (st.armQok && t < 0.12) {
+    const k = 1 - ES(t / 0.12), A = st.armQ, bs = [B.upperArmL, B.forearmL, B.handL, B.upperArmR, B.forearmR, B.handR];
+    for (let i = 0; i < 6; i++) bs[i].quaternion.slerp(A[i], k);
+    B.clavL.updateMatrixWorld(true); B.clavR.updateMatrixWorld(true);
+  }
+}
+/** Death, after the legs: the ground clamp (the feet don't count while the IK still plants them). */
+function deathClamp(r) {
+  const st = r.st, B = r.bones, Dh = st.dth, ik = PB[PK.footIKW] > 0.5;
+  let lo = Infinity;
+  for (const c of CLAMP_PTS) { if (ik && c[0][0] === 'f') continue; const y = bonePoint(r, c[0], c[1], c[2], c[3], _v1).y; if (y < lo) lo = y; }
+  const need = Math.max(0, DEATH.clampY - lo);
+  Dh.lift = need >= Dh.lift ? need : Math.max(need, Dh.lift - DEATH.liftRate * S.realDt);
+  if (Dh.lift > 1e-4) { B.pelvis.position.y += Dh.lift; B.pelvis.updateMatrixWorld(true); }
+}
+
+/** Dead and landed: a hand floating within snapRange of the ground is IK'd down onto it (its lowest point at snapY). */
+const HAND_PTS = [[0, 0, 0], [0, -4, 0], [0, -7, 0], [1.2, -3, 0], [-1.2, -3, 0]];
+function deathHands(r) {
+  const st = r.st, B = r.bones, w = ss(DEATH.snapFrom, DEATH.snapTo, st.deathT);
+  if (w <= 0) return;
+  // (armIK blends from the FK hands: this frame's, the fall's FK arms; weapons() doesn't capture them while he is dead)
+  boneFrame(B.handR, _fkRw, _fkRq); boneFrame(B.handL, _fkLw, _fkLq);
+  _fkRe.setFromMatrixPosition(B.forearmR.matrixWorld); _fkLe.setFromMatrixPosition(B.forearmL.matrixWorld);
+  for (let i = 0; i < 2; i++) {
+    const L = i ? 'R' : 'L', hand = B[i ? 'handR' : 'handL'];
+    let lo = Infinity;
+    for (const q of HAND_PTS) { _v1.set(q[0], q[1], q[2]).applyMatrix4(hand.matrixWorld); if (_v1.y < lo) lo = _v1.y; }
+    const drop = lo - DEATH.snapY;
+    if (!(drop > 0.05 && drop < DEATH.snapRange)) continue;
+    _wL.setFromMatrixPosition(hand.matrixWorld); _wL.y -= drop; worldQuat(hand, _qL);
+    // (solved in full, then blended in on the joints: the solver's elbow and twist limits differ from the fall's FK arm, and
+    // a small IK weight still jumped the arm to the solver's pose)
+    const up = B[NM[L].up], fo = B[NM[L].fo];
+    _dhq0.copy(up.quaternion); _dhq1.copy(fo.quaternion); _dhq3.copy(hand.quaternion);
+    armIK(r, L, _wL, _qL, POLE_GUARD, 1, 0, 0);
+    up.quaternion.slerpQuaternions(_dhq0, _dhq4.copy(up.quaternion), w); fo.quaternion.slerpQuaternions(_dhq1, _dhq5.copy(fo.quaternion), w); hand.quaternion.slerpQuaternions(_dhq3, _dhq6.copy(hand.quaternion), w);
+    up.updateMatrixWorld(true);
+  }
+}
+const _dhq0 = new THREE.Quaternion(), _dhq1 = new THREE.Quaternion(), _dhq3 = new THREE.Quaternion(), _dhq4 = new THREE.Quaternion(), _dhq5 = new THREE.Quaternion(), _dhq6 = new THREE.Quaternion();
 
 /* ---------------- 9. additives (§4.7): breath ---------------- */
+const FLX = { gunPitch: 0, gunYaw: 0, shieldW: 0, abdL: 0 };
+/** The flinch envelope (§4.15): up over 0.05 s (O), then one damped overshoot that settles by ~0.35 s. */
+function flinchEnv(t) {
+  const FL = FLINCH;
+  if (t < 0) return 0;
+  if (t < FL.rise) return EO(t / FL.rise);
+  const tp = t - FL.rise;
+  return Math.exp(-tp / FL.tau) * Math.cos(2 * Math.PI * FL.hz * tp);
+}
 function additives(r, p) {
-  const P = PB, b = S.breath, BO = IDLE.breathOut;
+  const st = r.st, P = PB, b = S.breath, BO = IDLE.breathOut;
   P[PK.s2] += BO.spine2Pitch * b;
   P[PK.head] += BO.headPitch * b;
   P[PK.clavL] += BO.clavElev * b; P[PK.clavR] += BO.clavElev * b;
   P[PK.breath] = b;
+  FLX.gunPitch = FLX.gunYaw = FLX.shieldW = FLX.abdL = 0;
+  if (p.dead) return;
+  // the flinch (§4.15), read on the hit frame: by direction (front / side / back of the chest), then by kind
+  const H = st.hurt;
+  if (H.t < 0.6) {
+    // (the gain is on the body channels only; the gun's kick uses the plain envelope, D6: the sim may fire mid-flinch)
+    const e0 = flinchEnv(H.t), e = e0 * FLINCH.gain, FL = FLINCH, fire = H.kind === 'fire', A = fire ? FL.fire.amp : H.A;
+    if (H.zone === 'front') {
+      P[PK.s2] += FL.front.s2 * A * e; P[PK.s1] += FL.front.s1 * A * e; P[PK.head] += FL.front.head * A * e; P[PK.pel] += FL.front.pelDx * A * e;
+      FLX.gunPitch = FL.front.gun * A * e0;
+    } else if (H.zone === 'side') {
+      // the chest and head twist and roll away from the source, the hips are knocked aside, the hit-side shoulder is driven
+      // back and up, and the gun goes with the chest
+      const s = H.s, FS = FL.side;
+      P[PK.s2 + 1] += FS.s2Yaw * A * s * e; P[PK.s2 + 2] += FS.s2Roll * A * s * e; P[PK.head + 1] += FS.headYaw * A * s * e; P[PK.head + 2] += FS.headRoll * A * s * e;
+      P[PK.pel + 2] -= FS.pelLat * A * s * e;
+      const cO = s > 0 ? PK.clavR : PK.clavL; P[cO] += FS.clavElev * A * e; P[cO + 1] += FS.clavProt * A * e;
+      FLX.gunYaw = FS.gunYaw * A * s * e0;
+    } else {
+      P[PK.s2] += FL.back.s2 * A * e; P[PK.head] += FL.back.head * A * e; P[PK.pel] += FL.back.pelDx * A * e;
+    }
+    // by kind: a ram stumbles (the hips roll toward the push, the left arm flies out; the shove logic steps him), a bite
+    // or a bat knocks the hips aside, fire throws the left forearm up as a shield and turns the head away
+    const push = H.ang + Math.PI, pr = Math.sin(wrap(push - S.hipYaw)); // + = the push toward his right
+    if (H.kind === 'ram' && H.t < FL.ram.T) {
+      // a ram: the hips roll toward the push, the chest is thrown back and both arms fly up for the first quarter second,
+      // the left arm out (the shove logic and a second kick at ram.step2 give the two corrective steps)
+      const k = Math.sin(Math.PI * H.t / FL.ram.T), kb = H.t < FL.ram.throwT ? Math.sin(Math.PI * H.t / FL.ram.throwT) : 0;
+      P[PK.pelRot + 2] += FL.ram.roll * pr * k; FLX.abdL = FL.ram.abdL * k; P[PK.armL + 1] += FLX.abdL; P[PK.armL + 3] += 0.5 * FLX.abdL;
+      P[PK.s2] += FL.ram.s2 * kb; P[PK.armL + 1] += FL.ram.armsUp * kb; P[PK.armR + 1] += FL.ram.armsUp * kb;
+      if (!H.step2 && H.t >= FL.ram.step2) { H.step2 = true; st.planner.kick = true; }
+    }
+    else if (H.kind === 'bite' && H.t < FL.bite.T) P[PK.pel + 2] += FL.bite.lat * pr * (1 - ES(H.t / FL.bite.T));
+    else if (fire && H.t < FL.fire.T) { const k = ss(0, 0.06, H.t) * (1 - ss(FL.fire.T - 0.12, FL.fire.T, H.t)); FLX.shieldW = k; P[PK.head + 1] -= FL.fire.headYaw * H.s * k; }
+  }
+  // the tremor while p.flinch lasts: the gun's yaw and pitch shake at 18 Hz
+  if ((p.flinch || 0) > 0.01) { const tr = FLINCH.tremor, k = tr.deg * p.flinch; FLX.gunYaw += k * noise1(S.now * tr.hz); FLX.gunPitch += k * noise1(S.now * tr.hz + 37.7); }
+  // a shot puts the gun back on the line for the flash (D6), then lets the flinch's gun kick back in
+  if (S.tShot < 0.14) { const k = S.tShot < 0.06 ? 0 : ss(0.06, 0.14, S.tShot); FLX.gunPitch *= k; FLX.gunYaw *= k; }
+  // the revive (§4.15): a 1 s stagger (the chest and head drop, the hips sink, the knees take it via the IK)
+  if (st.rev < REVIVE.T) {
+    const t = st.rev;
+    P[PK.s2] += sample(REVIVE.spine2, t); P[PK.pel + 1] += sample(REVIVE.pelvisY, t); P[PK.head] += sample(REVIVE.head, t);
+  }
 }
 
 /* ---------------- 10. FK from the pose buffer, with joint limits (§4.22) ---------------- */
@@ -821,13 +1421,13 @@ function writeFK(r) {
   // rest (up to 75° past the chest together), so in a flick the head leads while the chest waits for the feet. The head
   // keeps only 40% of the pelvis bob (the neck takes the rest), so it rides steadier than the hips.
   const w = P[PK.aimW];
-  const look = st.stateF ? 0 : angleDiff(S.hipYaw, S.faceYaw) / DEG - (t1 + t2);
+  const look = st.stateF === 'death' ? 0 : angleDiff(S.hipYaw, S.faceYaw) / DEG - (t1 + t2);
   const total = P[PK.head + 1] + look;
   let nY = clamp(0.4 * total, -35, 35);
   const hY = clamp(total - nY, -40, 40);
   nY = clamp(total - hY, -35, 35);
   setSpine(B.neck, clamp(P[PK.neck], -20, 25), clamp(P[PK.neck + 1] + nY, -35, 35), clamp(P[PK.neck + 2], -15, 15));
-  B.neck.position.copy(B.neck.userData.bind); B.neck.position.y -= 0.6 * (S.bob || 0) * (st.stateF ? 0 : 1);
+  B.neck.position.copy(B.neck.userData.bind); B.neck.position.y -= 0.6 * (S.bob || 0) * (st.stateF === 'death' ? 0 : 1);
   setSpine(B.head, clamp(P[PK.head], -25, 25), hY, clamp(P[PK.head + 2], -20, 20));
   B.head.scale.setScalar(TUNE.headScale);
   const aR = readArm(P, PK.armR, ARM_R), aL = readArm(P, PK.armL, ARM_L);
@@ -858,11 +1458,37 @@ const ANKLE_DORSI = 46;
 // (a planted foot keeps its sole flat a little further: in a sprint's or a strafe's late stance the shin leans up to ~52°
 // over the foot before the toe roll lifts the heel, and a clamp there tips the toes into the ground: a visible slide)
 const ANKLE_DORSI_PLANTED = 56;
-const _thQ = [new THREE.Quaternion(), new THREE.Quaternion()], _shQ = [new THREE.Quaternion(), new THREE.Quaternion()], _ftQ = [new THREE.Quaternion(), new THREE.Quaternion()];
+const _qL2 = new THREE.Quaternion(), _ftW = [new THREE.Quaternion(), new THREE.Quaternion()], _thQ = [new THREE.Quaternion(), new THREE.Quaternion()], _shQ = [new THREE.Quaternion(), new THREE.Quaternion()], _ftQ = [new THREE.Quaternion(), new THREE.Quaternion()];
 function legs(r, p) {
   const st = r.st, B = r.bones, PL = st.planner, crouch = DBG.pose === 'crouch' || DBG.pose === 'deepFlex';
-  const ikw = clamp(PB[PK.footIKW], 0, 1);
-  if (p.dead || ikw <= 0) { st.planted[0] = st.planted[1] = false; return; }
+  const ikw = clamp(PB[PK.footIKW], 0, 1), dying = st.stateF === 'death', dodge = st.stateF === 'dodge';
+  if (ikw * Math.max(FOOTW[0], FOOTW[1]) <= 0 && !dying && !dodge) { st.planted[0] = st.planted[1] = false; return; }
+  // dead (§4.16): the legs are always solved, from the planted feet (the crumple) to the fall's FK legs (their ankles and
+  // knees as writeFK left them), with every ankle held above the ground: the FK keys never drive a foot through it
+  if (dying) {
+    // (and once he has landed, a foot floating within snapRange of the ground is brought down onto it: the target allows for
+    // the ground clamp's lift, which deathClamp adds after the legs)
+    const Dh = st.dth, sw = ss(DEATH.snapFrom, DEATH.snapTo, st.deathT);
+    for (let i = 0; i < 2; i++) {
+      const foot = B[FEET[i]];
+      _dA[i].setFromMatrixPosition(foot.matrixWorld); _dK[i].setFromMatrixPosition(B[SHINS[i]].matrixWorld);
+      let lo = Infinity; for (const q of FOOT_PTS) { _v1.set(q[0], q[1], q[2]).applyMatrix4(foot.matrixWorld); if (_v1.y < lo) lo = _v1.y; }
+      const sh = lo - (DEATH.snapFootY - Dh.lift);
+      _dA[i].y -= sh < 0 ? sh : sh < DEATH.snapRange ? sh * sw : 0;
+    }
+  } else if (dodge) {
+    // the dodge blends FK ↔ IK the same way, as an ankle TARGET from the FK ankle (held above the ground) to the planted
+    // spot, solved in full: slerping the joint rotations between the two poses sank the foot through the ground mid-blend
+    // (the FK target is raised until the FK shoe's lowest point, heel, sole or toe, is at y 0.5: no FK foot under the ground)
+    const D = st.dg; D.lift = 0;
+    for (let i = 0; i < 2; i++) {
+      const foot = B[FEET[i]];
+      _dA[i].setFromMatrixPosition(foot.matrixWorld); _dK[i].setFromMatrixPosition(B[SHINS[i]].matrixWorld);
+      let lo = Infinity; for (const q of FOOT_PTS) { _v1.set(q[0], q[1], q[2]).applyMatrix4(foot.matrixWorld); if (_v1.y < lo) lo = _v1.y; }
+      const up = Math.max(0, 1.6 - lo); _dA[i].y += up; D.need[i] = up; D.lift = Math.max(D.lift, up);
+      worldQuat(foot, _ftW[i]); // (and the foot turns from its FK world rotation to the planted one: a world slerp)
+    }
+  }
   // the ankle targets (world) from the planner
   for (let i = 0; i < 2; i++) {
     const f = PL.feet[i];
@@ -875,7 +1501,7 @@ function legs(r, p) {
   let need = 0;
   for (let i = 0; i < 2; i++) {
     const f = PL.feet[i], pl = PL.planted(i);
-    if (!(pl || (f.mode === 1 && f.uu > 0.75))) continue;
+    if (!(pl || (f.mode === 1 && f.uu > 0.75)) || FOOTW[i] < 0.5) continue; // (a clip's FK foot isn't reached for)
     _hip.setFromMatrixPosition(B[THIGHS[i]].matrixWorld);
     // a landing foot: its need at the landing spot, eased in over the last quarter of the swing, so the hips are down
     // by the contact frame (a dropRate-limited catch-up there would slide the fresh plant)
@@ -889,6 +1515,7 @@ function legs(r, p) {
   // up: the slow spring
   if (need > st.drop.x) { st.drop.x = Math.min(need, st.drop.x + SPR.dropRate * S.adt); st.drop.v = 0; }
   else springTo(st.drop, need, SPR.pelvisDropSlow, S.adt);
+  if (dying) st.drop.x = st.drop.v = 0;
   if (st.drop.x > 1e-4) { B.pelvis.position.y -= st.drop.x; B.pelvis.updateMatrixWorld(true); }
   worldQuat(B.pelvis, _q3);
   for (let i = 0; i < 2; i++) {
@@ -896,6 +1523,12 @@ function legs(r, p) {
     const fyaw = f.yaw;
     _hip.setFromMatrixPosition(thigh.matrixWorld);
     _pole.set(30, -10, 0).applyAxisAngle(Y_AXIS, -fyaw).add(_hip);
+    if (dying || dodge) {
+      const k = dying ? 1 - ikw : 1 - ikw * FOOTW[i];
+      ANK[i].lerp(_dA[i], k);
+      _v2.addVectors(_hip, _dA[i]).multiplyScalar(0.5); _v3.subVectors(_dK[i], _v2).multiplyScalar(3).add(_dK[i]);
+      _pole.lerp(_v3, k);
+    }
     solveTwoBone(_hip, ANK[i], _pole, L_THIGH, L_SHIN, 1, IK);
     let ok = Number.isFinite(IK.q1.x) && Number.isFinite(IK.q2.x);
     if (ok) {
@@ -912,12 +1545,12 @@ function legs(r, p) {
     }
     // IK fallback: non-finite, or a PLANTED foot far out of reach for 3 frames → phase-driven FK for that leg until it
     // recovers, blended in and out over 0.1 s (a swinging foot out of reach just reaches as far as the leg goes)
-    const err = ok ? (PL.planted(i) ? Math.max(0, _hip.distanceTo(ANK[i]) - 0.999 * (L_THIGH + L_SHIN)) : 0) : 99;
+    const err = ok ? (PL.planted(i) && !dying && FOOTW[i] > 0.999 ? Math.max(0, _hip.distanceTo(ANK[i]) - 0.999 * (L_THIGH + L_SHIN)) : 0) : 99;
     st.ikBad[i] = err > 2 ? st.ikBad[i] + 1 : 0;
     if (st.ikBad[i] >= 3) { if (!st.fkLeg[i]) st.ikFails++; st.fkLeg[i] = true; } else if (st.ikBad[i] === 0) st.fkLeg[i] = false;
     st.fkW[i] = clamp(st.fkW[i] + (st.fkLeg[i] ? 1 : -1) * S.adt / 0.1, 0, 1);
     if (!ok) { st.ikFails++; continue; }
-    const lw = ikw * (1 - st.fkW[i]);
+    const lw = dying ? 1 : dodge ? 1 - st.fkW[i] : ikw * FOOTW[i] * (1 - st.fkW[i]);
     if (lw <= 0) continue;
     // thigh local, with the hip limits (flex −40..115, abd −25..35); the knee is a pure hinge 0..150 by construction
     _thQ[i].copy(_q3).invert().multiply(IK.q1);
@@ -940,15 +1573,19 @@ function legs(r, p) {
     _qy.setFromAxisAngle(Y_AXIS, -fyaw);
     _q1.setFromAxisAngle(_v1.set(0, 0, 1).applyQuaternion(_qy), f.pitch);
     _q2.copy(_q1).multiply(_qy);
+    if (dodge) { _qL2.copy(_q2); _q2.slerpQuaternions(_ftW[i], _qL2, ikw * FOOTW[i] * (1 - st.fkW[i])); }
     worldQuat(shin, _q4);
     _ftQ[i].copy(_q4).invert().multiply(_q2);
     _e1.setFromQuaternion(_ftQ[i], 'YXZ');
     const pl = PL.planted(i), rl = (pl ? 40 : 25) * DEG, dl = (pl ? ANKLE_DORSI_PLANTED : ANKLE_DORSI) * DEG;
     if (_e1.z < -50 * DEG || _e1.z > dl || Math.abs(_e1.x) > rl) { _e1.z = clamp(_e1.z, -50 * DEG, dl); _e1.x = clamp(_e1.x, -rl, rl); _ftQ[i].setFromEuler(_e1); }
-    foot.quaternion.slerp(_ftQ[i], lw);
+    foot.quaternion.slerp(_ftQ[i], dying ? ikw : lw);
     foot.updateMatrixWorld(true);
   }
 }
+const _dA = [new THREE.Vector3(), new THREE.Vector3()], _dK = [new THREE.Vector3(), new THREE.Vector3()];
+// a shoe's extreme points (foot-local: the sole's heel, ball and toe, the shoe's top at the toe and the heel)
+const FOOT_PTS = [[-3.4, -3.7, 0], [8.4, -3.5, 0], [3, -3.8, 0], [8.0, -1.2, 0], [-3.2, 1.5, 0]];
 
 /** The real stance drift (§4.6 debug): the heel and the ball of each planted foot, from the bones, never move. */
 function measureDrift(r, p) {
@@ -965,7 +1602,8 @@ function measureDrift(r, p) {
   st.footPrevOk = !p.dead;
   if (!p.dead && !st.stateF) st.minPelvisY = Math.min(st.minPelvisY, _v2.setFromMatrixPosition(r.bones.pelvis.matrixWorld).y);
   for (let i = 0; i < 2; i++) {
-    const d = st.drift[i], on = st.planted[i] && !S.teleport && !S.skid && !st.fkLeg[i];
+    // (and never while a full-body clip still blends the leg between FK and IK: the dodge's landing, the death)
+    const d = st.drift[i], on = st.planted[i] && !S.teleport && !S.skid && !st.fkLeg[i] && PB[PK.footIKW] * FOOTW[i] > 0.999 && st.stateF !== 'death';
     if (!on) { d.was = false; continue; }
     if (!d.was) { d.hasH = d.hasB = false; d.was = true; }
     const P = PL.feet[i].pitch, foot = r.bones[FEET[i]], piv = PL.feet[i].pivot;
@@ -1138,9 +1776,13 @@ function namedGun(r, name, out) {
 }
 /** The back sling (§4.8): diagonal across the back, the muzzle out over the left shoulder, the top facing back; slot 1 is the second owned long gun's place beside it. */
 function slingGun(r, out, slot = 0) {
-  const sock = slot ? SOCKETS.spine2.backSling2 : SOCKETS.spine2.backSling;
-  _v1.set(sock.dir[0], sock.dir[1], sock.dir[2]).normalize(); _v2.set(-1, 0, 0); _v3.crossVectors(_v1, _v2).normalize(); _v2.crossVectors(_v3, _v1).normalize();
-  _m1.makeBasis(_v1, _v2, _v3).setPosition(sock.at[0], sock.at[1], sock.at[2]);
+  const sock = slot ? SOCKETS.spine2.backSling2 : SOCKETS.spine2.backSling, k = r.st.slingLow;
+  // (while a tool is out the first slot lies flatter across his back (st.slingLow, eased): the chop's forward lean and
+  // twist stood it upright behind him like a mast; the second gun is put away meanwhile, weapons())
+  if (k > 0) { const L = slot ? SOCKETS.spine2.backSlingLow : SOCKETS.spine2.backSlingFlat; _v1.set(lerp(sock.dir[0], L.dir[0], k), lerp(sock.dir[1], L.dir[1], k), lerp(sock.dir[2], L.dir[2], k)).normalize(); _v4.set(lerp(sock.at[0], L.at[0], k), lerp(sock.at[1], L.at[1], k), lerp(sock.at[2], L.at[2], k)); }
+  else { _v1.set(sock.dir[0], sock.dir[1], sock.dir[2]).normalize(); _v4.set(sock.at[0], sock.at[1], sock.at[2]); }
+  _v2.set(-1, 0, 0); _v3.crossVectors(_v1, _v2).normalize(); _v2.crossVectors(_v3, _v1).normalize();
+  _m1.makeBasis(_v1, _v2, _v3).setPosition(_v4.x, _v4.y, _v4.z);
   _m1.premultiply(r.bones.spine2.matrixWorld);
   _m1.decompose(out.p, out.q, _s1);
   return out;
@@ -1153,10 +1795,11 @@ const stowGun = (r, w, out) => (LONG[w] ? slingGun(r, out, r.st.backSlot[1] === 
  */
 function backSlots(r) {
   const st = r.st, inv = (G.s && G.s.inv) || {}, W = st.sw, SL = st.backSlot;
-  const onBack = (w) => !!w && LONG[w] && (inv[w] || 0) > 0 && (w !== S.weapon || (W.on && W.to === w && GC.swF < SWAP.inStart && W.from !== w));
+  const onBack = (w) => !!w && LONG[w] && (inv[w] || 0) > 0 && (w !== S.weapon || st.stowed || (W.on && W.to === w && GC.swF < SWAP.inStart && W.from !== w));
   for (let i = 0; i < 2; i++) if (!onBack(SL[i])) SL[i] = null;
   for (const w of LONG_LIST) if (onBack(w) && SL[0] !== w && SL[1] !== w) SL[SL[0] ? 1 : 0] = w;
   st.slung = SL[0] || SL[1]; st.slung2 = SL[0] && SL[1] ? SL[1] : null;
+  st.slingLow = clamp(st.slingLow + (st.stowed && st.slung ? 1 : -1) * S.adt / 0.3, 0, 1);
 }
 /** The base gun of weapon w: relaxed → aim by the aim weight. */
 function baseGun(r, w, out) {
@@ -1480,9 +2123,18 @@ function swapClip(r, p) {
     W.snapOk = st.gunLOk && st.gunLW === W.from; W.snapP.copy(st.gunLP); W.snapQ.copy(st.gunLQ); // the gun as it was (spine2-local)
     W.relOk = false;
   }
-  if (W.on && (!(sT > 0) || p.dead || S.hardReset || W.to !== S.weapon)) W.on = false;
+  if (S.swapStart) W.render = false;
+  // (M4) the draw back after a tool (the hammer, the axe): a swap from empty hands on render time, so the right hand
+  // travels from where it let go of the tool to the holster or the sling and draws on the swap's own paths; a shot
+  // cancels it (the gun is on the aim line that frame)
+  if (st.drawStart) {
+    st.drawStart = false;
+    if (!W.on) { W.on = true; W.render = true; W.rT = 0; W.from = null; W.to = S.weapon; W.snapOk = false; W.relOk = false; }
+  }
+  if (W.on && W.render) { W.rT += S.adt; if (W.rT >= st.drawT || p.dead || S.hardReset || W.to !== S.weapon || S.shot || st.tool) W.on = false; }
+  else if (W.on && (!(sT > 0) || p.dead || S.hardReset || W.to !== S.weapon)) W.on = false;
   if (!W.on) return;
-  const f = clamp(1 - sT / SWAP.T, 0, 1);
+  const f = W.render ? clamp(W.rT / st.drawT, 0, 1) : clamp(1 - sT / SWAP.T, 0, 1);
   GC.sw = true; GC.swF = f; GC.swFrom = W.from; GC.swTo = W.to;
   const cross = W.from === 'pistol' || W.to === 'pistol';
   GC.s2Yaw = sample(cross ? SWAP.crossYaw : SWAP.longYaw, f); GC.pelY = sample(SWAP.pelvisY, f);
@@ -1519,13 +2171,296 @@ function drawGun(r, W, f, out) {
   return w;
 }
 
+/* -------- M4: the actions' gun, the tools in hand, the left hand's overrides, the dropped gun -------- */
+// the left hand on a handle (the axe): the right hand's grip mirrored across the gun's XY plane (thumb toward the head)
+const H_GRIP_L = { t: new THREE.Vector3(H_GRIP.t.x, H_GRIP.t.y, -H_GRIP.t.z), q: new THREE.Quaternion(-H_GRIP.q.x, -H_GRIP.q.y, H_GRIP.q.z, H_GRIP.q.w) };
+const Q_RZ90 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2), Q_RZM90 = Q_RZ90.clone().invert();
+const Q_RYM90 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -Math.PI / 2);
+const _hX = V(), _hY = V(), _hZ = V(), _hM = new THREE.Matrix4(), _tw = V(), _tw2 = V(), _tq = new THREE.Quaternion(), _tq2 = new THREE.Quaternion(), _tq3 = new THREE.Quaternion();
+const TOOL = { p: V(), q: new THREE.Quaternion() }, GR_ = { p: V(), q: new THREE.Quaternion() }, GL_ = { p: V(), q: new THREE.Quaternion() };
+/** A hand's world rotation from its finger direction (the hand's −Y) and palm normal (right hand −Z, left +Z), world vectors. */
+function handQW(f, palm, right, out) {
+  _hY.copy(f).normalize().negate(); _hZ.copy(palm); if (right) _hZ.negate();
+  _hZ.addScaledVector(_hY, -_hZ.dot(_hY)).normalize(); _hX.crossVectors(_hY, _hZ);
+  return out.setFromRotationMatrix(_hM.makeBasis(_hX, _hY, _hZ));
+}
+/** A work-frame vector (fwd, up, right at yaw y) to world, into out (added to `base` if given). */
+function workV(y, f, u, rt, out, base = null) {
+  const c = Math.cos(y), s = Math.sin(y);
+  out.set(c * f - s * rt, u, s * f + c * rt);
+  if (base) out.add(base);
+  return out;
+}
+/** A gun pose in frame A (origin spine2, yaw `yaw`): origin (fwd, up, right), pitch and yaw (rel.) in degrees. */
+function gunInA(r, yaw, f, u, rt, pitchD, yawD, out, rollD = 0) {
+  const o = aimOrigin(r, _gv); workV(yaw, f, u, rt, out.p, o);
+  gunQ(yaw + yawD * DEG, pitchD * DEG, rollD * DEG, out.q);
+  return out;
+}
+/** The dash's tuck (§4.14): the pistol up at the chest (spine2 frame), a long gun at port arms. */
+function tuckGun(r, w, out) {
+  const B = r.bones;
+  worldQuat(B.spine2, _sq);
+  if (LONG[w]) { const PO = RELAXED.port; out.p.set(PO.at[0], PO.at[1], PO.at[2]).applyMatrix4(B.spine2.matrixWorld); _eG.set(PO.roll * DEG, -PO.yaw * DEG, PO.pitch * DEG, 'YZX'); }
+  else { const T = DODGE.dash.pistol; out.p.set(T.at[0], T.at[1], T.at[2]).applyMatrix4(B.spine2.matrixWorld); _eG.set(T.roll * DEG, -T.yaw * DEG, T.pitch * DEG, 'YZX'); }
+  out.q.setFromEuler(_eG).premultiply(_sq);
+  return out;
+}
+/** The hammer's virtual gun frame (the fist at its grip, pitched like a pistol) at hammer phase h, and the hammer itself in TOOL. */
+function hammerFrames(r, p, h, out) {
+  const st = r.st, RP = st.rp, yaw = S.faceYaw, tilt = REPAIR.tilt;
+  const Hx = clamp(RP.dist - REPAIR.faceBack, 11, 20), Hy = REPAIR.y[RP.kind] || 44;
+  // the fist at the contact: the face of the head (hammer-local (11.3, −1.5, 0)) on the strike point
+  gunQ(yaw, -tilt * DEG, 0, _tq); _tq2.copy(_tq).multiply(Q_RZ90);
+  _tw.set(11.3, -1.5, 0).applyQuaternion(_tq2);
+  workV(yaw, Hx, Hy, REPAIR.z, _tw2); _tw2.x += p.x; _tw2.z += p.y; _tw2.sub(_tw);
+  sampleV(REPAIR.fist, h, _v3a); workV(yaw, _v3a[0], _v3a[1], _v3a[2], out.p); out.p.add(_tw2);
+  gunQ(yaw, (sample(REPAIR.pitch, h) - tilt) * DEG, 0, out.q);
+  TOOL.p.copy(out.p); TOOL.q.copy(out.q).multiply(Q_RZ90);
+  return out;
+}
+const _v3a = [0, 0, 0];
+// the axe's keys in the work frame: the right hand's grip, the handle direction (to the head), the edge's facing
+const AXE_K = {
+  contact: { h: CHOP.contact.hands, d: [0.35, -0.25, -0.9], e: [1, -0.3, 0] },
+  windup: { h: CHOP.windup.hands, d: CHOP.windup.dir, e: [1, 0.2, -0.3] },
+  lowered: { h: CHOP.lowered.hands, d: CHOP.lowered.dir, e: [1, 0, 0] },
+};
+const AXQ = { contact: new THREE.Quaternion(), windup: new THREE.Quaternion(), lowered: new THREE.Quaternion() }, _axH = { contact: V(), windup: V(), lowered: V(), wrench: V() };
+/** One axe key → its world rotation (X the handle toward the head, −Y the edge) and the right hand's grip point. */
+function axeKey(yaw, k, outQ, outH, p, Hfix = null) {
+  workV(yaw, k.d[0], k.d[1], k.d[2], _hX).normalize();
+  workV(yaw, k.e[0], k.e[1], k.e[2], _hZ); _hZ.addScaledVector(_hX, -_hZ.dot(_hX)).normalize(); // the edge
+  _hY.copy(_hZ).negate(); _hZ.crossVectors(_hX, _hY);
+  outQ.setFromRotationMatrix(_hM.makeBasis(_hX, _hY, _hZ));
+  if (Hfix) outH.copy(Hfix); else { workV(yaw, k.h[0], k.h[1], k.h[2], outH); outH.x += p.x; outH.z += p.y; }
+}
+/** The axe this frame (§4.17): TOOL (the axe), and the right/left hands' virtual gun frames on the handle. */
+function axeFrames(r, p) {
+  const st = r.st, C = st.ch, yaw = S.faceYaw, live = C.ph === 1, u = live ? C.u : 1;
+  axeKey(yaw, AXE_K.windup, AXQ.windup, _axH.windup, p);
+  axeKey(yaw, AXE_K.lowered, AXQ.lowered, _axH.lowered, p);
+  // the contact: the head on the tree's near side (the hands where that puts them, kept in front of him)
+  axeKey(yaw, AXE_K.contact, AXQ.contact, _axH.contact, p);
+  const reach = CHOP.headAt - CHOP.gripR, tx = clamp(C.dist - CHOP.trunk, 16, 36);
+  _hX.set(AXE_K.contact.d[0], AXE_K.contact.d[1], AXE_K.contact.d[2]).normalize();
+  workV(yaw, clamp(tx - _hX.x * reach, 10, 26), CHOP.contact.hands[1], clamp(-2 - _hX.z * reach, 2, 12), _axH.contact); _axH.contact.x += p.x; _axH.contact.z += p.y;
+  // the wrench: the hands pull back and up while the head is still in the wood
+  const WR = CHOP.wrench.hands; workV(yaw, WR[0], WR[1], WR[2], _axH.wrench).add(_axH.contact);
+  let qa = AXQ.windup, ha = _axH.windup, qb = AXQ.windup, hb = _axH.windup, k = 0;
+  if (C.ph === 1 || (C.ph === 2 && C.tailT <= 0)) {
+    const B = CHOP.bite.u, W = CHOP.wrench.u;
+    if (u < B) { qa = qb = AXQ.contact; ha = hb = _axH.contact; }
+    else if (u < W) { qa = qb = AXQ.contact; ha = _axH.contact; hb = _axH.wrench; k = EO((u - B) / (W - B)); }
+    else { qa = AXQ.contact; ha = _axH.wrench; k = ES((u - W) / (1 - W)); }
+    // the catch-up: wound-up → contact in 35 ms
+    if (live && C.cT < 9 && catchU(C.cT) < 1) { const cu = catchU(C.cT); qb = qa; hb = ha; qa = AXQ.windup; ha = _axH.windup; k = ES(cu); }
+  } else if (C.ph === 2) { qa = AXQ.windup; ha = _axH.windup; qb = AXQ.lowered; hb = _axH.lowered; k = ES(clamp(C.tailT / CHOP.tail, 0, 1)); }
+  else { qa = qb = AXQ.lowered; ha = hb = _axH.lowered; }
+  TOOL.q.slerpQuaternions(qa, qb, k);
+  GR_.p.lerpVectors(ha, hb, k);
+  if (live && u < CHOP.bite.u && catchU(C.cT) >= 1) { const t = u * CHOP.T, dk = Math.exp(-t / 0.03); GR_.p.y += CHOP.bite.amp * Math.sin(2 * Math.PI * CHOP.bite.hz * t) * dk; }
+  _hX.set(1, 0, 0).applyQuaternion(TOOL.q);
+  TOOL.p.copy(GR_.p).addScaledVector(_hX, -CHOP.gripR);
+  GR_.q.copy(TOOL.q).multiply(Q_RZM90); GL_.q.copy(GR_.q);
+  GL_.p.copy(TOOL.p).addScaledVector(_hX, CHOP.gripL);
+}
+/**
+ * The actions on the gun (after the base, reload and swap gun): the draw back after a tool, the dash's tuck, the melee
+ * strike, the takedown, the flinch's kick and tremor; a tool in hand puts the gun away (returns null). GN is the right
+ * hand's carrier either way.
+ */
+function actionGun(r, p, held) {
+  const st = r.st, w = S.weapon;
+  if (st.tool) return null;
+  if (!held) return held;
+  // the repair's in-blend: the gun goes where the hammer will be (it changes hands at the midpoint)
+  if (st.rp.on && st.rp.w > 0 && st.rp.kind !== 'phone') { hammerFrames(r, p, (st.rp.t * REPAIR.rate) % 1, GT); blendPose(GN, GT, ES(clamp(st.rp.w / 0.5, 0, 1)), GN); }
+  const D = st.dg;
+  if (st.stateF === 'dodge' && !D.hop) {
+    const live = D.ph === 1, u = live ? D.u : 1, wt = live ? ss(0, 0.14, u) : 1 - ES(clamp(D.tailT / DODGE.tail, 0, 1));
+    if (wt > 0) { tuckGun(r, w, GT); blendPose(GN, GT, wt, GN); }
+  } else if (st.stateF === 'dodge' && D.hop) {
+    // the back-hop's landing gives in the arms: the gun dips and comes back a little, then recovers over the tail
+    const K = DODGE.hop, k = D.ph === 1 ? ss(K.ikOn, 1, D.u) : 1 - ES(clamp(D.tailT / DODGE.tail, 0, 1));
+    if (k > 0) { GN.p.addScaledVector(_gv.set(-1, 0, 0).applyQuaternion(GN.q), K.gunBack * k); GN.q.multiply(_hq2.setFromAxisAngle(_gv.set(0, 0, 1), K.gunDip * k * DEG)); }
+  }
+  if (MC.w > 0) { const c = MC.cur; gunInA(r, S.faceYaw, c[0], c[1], c[2], c[3], c[4], GT, c[8]); blendPose(GN, GT, MC.gw, GN); }
+  if (TC.w > 0) { const c = TC.gun; gunInA(r, S.faceYaw, c[0], c[1], c[2], c[3], 0, GT); blendPose(GN, GT, TC.gw, GN); }
+  if (FLX.gunPitch || FLX.gunYaw) {
+    GN.q.multiply(_hq2.setFromAxisAngle(_gv.set(0, 0, 1), FLX.gunPitch * DEG));
+    GN.q.premultiply(_hq2.setFromAxisAngle(Y_AXIS, -FLX.gunYaw * DEG));
+  }
+  return held;
+}
+/** The left hand's override this frame (melee guard, takedown collar grab, dash support, fire shield, the pick's reach), or w 0. */
+const AL = { w: 0, p: V(), q: new THREE.Quaternion(), pole: [0, -1, -0.6] };
+const POLE_GUARD = [0.2, -1, -0.5], POLE_REACH = [0.3, -0.4, -1];
+/** One left-hand override candidate at weight w (frame A: origin o, yaw); kept if it outweighs the current one. */
+function setAL(yaw, o, w, f, u, rt, fing, palm, pole) {
+  if (w <= AL.w) return;
+  AL.w = w; workV(yaw, f, u, rt, AL.p, o);
+  handQW(workV(yaw, fing[0], fing[1], fing[2], _hX), workV(yaw, palm[0], palm[1], palm[2], _hZ), false, AL.q);
+  AL.p.sub(_tw2.set(GRIPL[0], GRIPL[1], GRIPL[2]).applyQuaternion(AL.q)); AL.pole = pole;
+}
+const FING_GUARD = [0.25, 1, 0.3], PALM_GUARD = [0.2, 0, 1], FING_COLLAR = [1, -0.4, 0.1], PALM_COLLAR = [0, -1, 0.2], FING_SHIELD = [0.1, 1, 0.3], PALM_SHIELD = [1, 0, 0.2];
+function leftOverride(r, p, held) {
+  const st = r.st, yaw = S.faceYaw, o = aimOrigin(r, _tw);
+  AL.w = 0;
+  if (MC.guardW > 0) { const g = MELEE.guardL; setAL(yaw, o, MC.guardW, g[0], g[1], g[2], FING_GUARD, PALM_GUARD, POLE_GUARD); }
+  if (TC.collarW > 0) { const g = TC.collar; setAL(yaw, o, TC.collarW, g[0], g[1], g[2], FING_COLLAR, PALM_COLLAR, POLE_REACH); }
+  if (FLX.shieldW > 0) { const g = FLINCH.fire.shieldL; setAL(yaw, o, FLX.shieldW, g[0], g[1], g[2], FING_SHIELD, PALM_SHIELD, POLE_GUARD); }
+  if (st.stateF === 'pick') {
+    const C = st.ch, u = C.ph === 1 ? C.u : 1, w = (C.ph === 1 ? ss(0.05, 0.5, u) : 1 - ES(clamp(C.tailT / PICK.rise, 0, 1)));
+    if (w > AL.w) {
+      // the ground spot in the work frame (absolute height), not frame A
+      AL.w = w; workV(st.ch.yaw, PICK.handL[0], 0, PICK.handL[2] + PICK.camSide * Math.sign(Math.cos(st.ch.yaw) || 1), AL.p); AL.p.x += p.x; AL.p.z += p.y; AL.p.y = PICK.handL[1];
+      handQW(workV(st.ch.yaw, 0.6, -1, 0, _hX), workV(st.ch.yaw, 0, -1, 0, _hZ), false, AL.q);
+      AL.p.sub(_tw2.set(GRIPL[0], GRIPL[1], GRIPL[2]).applyQuaternion(AL.q)); AL.pole = POLE_REACH;
+    }
+  }
+  return AL;
+}
+const POLE_AXE_R = [-0.3, -1, 0.7], POLE_HAM_R = [-0.4, -1, 0.5], POLE_AXE_L = [0.1, -1, -0.4], POLE_HAM_L = [0.2, -1, -0.6];
+/** A tool in hand (§4.17): the hammer and the plank, the phone splice, the axe (chop, bite, wind-up, lowered, held). Both arms IK'd; the props placed. */
+function toolHands(r, p) {
+  const st = r.st, B = r.bones, tool = st.tool, RP = st.rp, yaw = S.faceYaw;
+  // (the repair's out-blend: the hammer comes down to his side, the hands stay on it; the splice's hands let go)
+  const wOut = tool === 'splice' && !RP.on ? clamp(RP.w * 2 - 1, 0, 1) : 1;
+  let haveL = false;
+  if (tool === 'hammer') {
+    hammerFrames(r, p, (RP.t * REPAIR.rate) % 1, GR_);
+    if (!RP.on) {
+      // lowered: the fist by his right hip, the head down
+      const k = ES(clamp(2 - 2 * RP.w, 0, 1));
+      workV(yaw, 5, 31, 9, _tw); _tw.x += p.x; _tw.z += p.y; gunQ(yaw, -75 * DEG, 0, _tq);
+      GR_.p.lerp(_tw, k); GR_.q.slerp(_tq, k); TOOL.p.copy(GR_.p); TOOL.q.copy(GR_.q).multiply(Q_RZ90);
+    }
+    _m1.compose(TOOL.p, TOOL.q, _gw2.set(1, 1, 1)); showPropAt(r, B.hammer, _m1);
+    // the plank across the opening, the left palm pressing it flat
+    const Hx = clamp(RP.dist - REPAIR.faceBack, 11, 20), Hy = REPAIR.y[RP.kind] || 44, door = RP.kind !== 'window', pk = door ? REPAIR.plankDoor : REPAIR.plank, pl = door ? REPAIR.plankLDoor : REPAIR.plankL;
+    workV(yaw, Hx + pk[0], Hy + pk[1], REPAIR.z + pk[2], _tw); _tw.x += p.x; _tw.z += p.y;
+    gunQ(yaw, 0, 0, _tq).multiply(Q_RYM90);
+    _m1.compose(_tw, _tq, _gw2.set(1, 1, 1)); showPropAt(r, B.plank, _m1);
+    workV(yaw, Hx + pl[0], Hy + pl[1], REPAIR.z + pl[2], _wL); _wL.x += p.x; _wL.z += p.y;
+    handQW(workV(yaw, 0.1, 1, 0, _hX), workV(yaw, 1, 0, 0, _hZ), false, _qL);
+    _wL.sub(_tw2.set(GRIPL[0], GRIPL[1], GRIPL[2]).applyQuaternion(_qL)); haveL = true;
+    onFrame(GR_.p, GR_.q, H_GRIP, _wR, _qR);
+  } else if (tool === 'splice') {
+    // the phone line: both hands at the cut (y 30), twisting the wire
+    const Hx = clamp(RP.dist - 7, 12, 20), PH = REPAIR.phone, tw = PH.twist * Math.sin(2 * Math.PI * PH.hz * S.now) * DEG;
+    workV(yaw, Hx, PH.y, 2.5, _wR); _wR.x += p.x; _wR.z += p.y;
+    handQW(workV(yaw, 1, -0.4, -0.2, _hX), workV(yaw, 0, 0, -1, _hZ), true, _qR); _qR.multiply(_tq.setFromAxisAngle(_gv.set(0, 1, 0), tw));
+    _wR.sub(_tw2.set(GRIPR[0], GRIPR[1], GRIPR[2]).applyQuaternion(_qR));
+    workV(yaw, Hx, PH.y, -2.5, _wL); _wL.x += p.x; _wL.z += p.y;
+    handQW(workV(yaw, 1, -0.4, 0.2, _hX), workV(yaw, 0, 0, 1, _hZ), false, _qL); _qL.multiply(_tq.setFromAxisAngle(_gv.set(0, 1, 0), -tw));
+    _wL.sub(_tw2.set(GRIPL[0], GRIPL[1], GRIPL[2]).applyQuaternion(_qL)); haveL = true;
+  } else if (tool === 'axe') {
+    axeFrames(r, p);
+    _m1.compose(TOOL.p, TOOL.q, _gw2.set(1, 1, 1)); showPropAt(r, B.axe, _m1);
+    onFrame(GR_.p, GR_.q, H_GRIP, _wR, _qR); onFrame(GL_.p, GL_.q, H_GRIP_L, _wL, _qL); haveL = st.ch.ph !== 3; // (held at his side: one hand)
+  }
+  st.lastRw = true; st.lastRwP.copy(_wR); st.lastRwQ.copy(_qR);
+  let poleR = tool === 'axe' ? POLE_AXE_R : POLE_HAM_R;
+  if (tool === 'hammer' && RP.on) { const h = (RP.t * REPAIR.rate) % 1, k = ss(0.25, 0.65, h) * (1 - ss(0.82, 0.97, h)); poleR = lerp3(POLE_HAM_R, REPAIR.poleApex, k, POLE_TMP); }
+  armIK(r, 'R', _wR, _qR, poleR, wOut, 1, tool === 'axe' ? 40 * DEG : 15 * DEG);
+  const wL = tool === 'hammer' && !RP.on ? clamp(RP.w * 2 - 1, 0, 1) : wOut; // (the plank stays on the opening as he lets go)
+  if (haveL && wL > 0.001) armIK(r, 'L', _wL, _qL, tool === 'axe' ? POLE_AXE_L : POLE_HAM_L, wL, 1, tool === 'axe' ? 40 * DEG : 0);
+}
+/** Dead (§4.16): the gun rides the right hand until 0.12 s, then flies off as a physics prop (one bounce, rests flat) until the recovery. */
+const _dg = V(), _dq3 = new THREE.Quaternion();
+function deadGun(r, p) {
+  const st = r.st, B = r.bones, Dh = st.dth, Gd = Dh.gun, t = st.deathT, w = Gd.on ? Gd.w : (Dh.tool || S.weapon), gb = B[w];
+  const dt = G.paused ? 0 : S.realDt, GD = DEATH.gun;
+  // the long guns still on his back ride it down (on his face: across his back; on his back: under him)
+  for (let i = 0; i < 2; i++) {
+    const sl = st.backSlot[i]; if (!sl || sl === w) continue;
+    slingGun(r, GT, i);
+    // on his back the slung gun would go under him (8 u into the ground): it slides off and lies beside him, flat along
+    // his body on the camera side; either way both its ends stay above the ground
+    if (Dh.variant === 'back') {
+      const k = ES(ss(DEATH.slungFrom, DEATH.slungTo, t)), F = Dh.F, sg = Dh.sign, rx = -Math.sin(F) * sg, rz = Math.cos(F) * sg, off = DEATH.slungOff + 5 * i;
+      _gv.setFromMatrixPosition(B.spine1.matrixWorld); GT2.p.set(_gv.x + rx * off - Math.cos(F) * 6, 1.2, _gv.z + rz * off - Math.sin(F) * 6);
+      gunQ(F + Math.PI, 0, 90 * DEG * sg, GT2.q); blendPose(GT, GT2, k, GT);
+    }
+    const ends = DROP_ENDS[sl], lo = dropLow(GT.q, ends); if (GT.p.y + lo < 2) GT.p.y = 2 - lo;
+    _m1.compose(GT.p, GT.q, _gw2.set(1, 1, 1)); showPropAt(r, B[sl], _m1);
+  }
+  if (!gb || st.tool) return;
+  if (!Gd.on) {
+    if (!Dh.relOk) {
+      // the gun as it was (spine2-local, last frame), relative to the right hand now
+      if (!st.gunLOk || st.gunLW !== w) return;
+      worldQuat(B.spine2, _sq); _dg.copy(st.gunLP).applyMatrix4(B.spine2.matrixWorld); _dq3.copy(_sq).multiply(st.gunLQ);
+      _m1.compose(_dg, _dq3, _gw2.set(1, 1, 1)); Dh.rel.copy(B.handR.matrixWorld).invert().multiply(_m1); Dh.relOk = true;
+      Gd.p[0] = _dg.x; Gd.p[1] = _dg.y; Gd.p[2] = _dg.z; Gd.v[0] = Gd.v[1] = Gd.v[2] = 0;
+    }
+    _m1.copy(B.handR.matrixWorld).multiply(Dh.rel); _m1.decompose(_dg, _dq3, _s1);
+    if (dt > 0) { Gd.v[0] = (_dg.x - Gd.p[0]) / dt; Gd.v[1] = (_dg.y - Gd.p[1]) / dt; Gd.v[2] = (_dg.z - Gd.p[2]) / dt; }
+    Gd.p[0] = _dg.x; Gd.p[1] = _dg.y; Gd.p[2] = _dg.z;
+    if (t >= DEATH.gunAt) {
+      // let go: a little of the hand's velocity (the arm's swing and the turn to F throw the hand at 150–230 u/s, which flung
+      // the gun three tiles, often toward the killer), out along the fall, out to the camera side (his right × sign(cos F):
+      // clear of his body, where it is seen landing) and up; a spin about the gun's side axis tilted up
+      Gd.on = true; Gd.w = w; Gd.t = 0; Gd.bounced = false; Gd.rest = false;
+      let hx = Gd.v[0] * GD.handK, hz = Gd.v[2] * GD.handK; const hl = Math.hypot(hx, hz); if (hl > GD.handMax) { hx *= GD.handMax / hl; hz *= GD.handMax / hl; }
+      const sx = -Math.sin(Dh.F) * Dh.sign, sz = Math.cos(Dh.F) * Dh.sign; // his right, to the camera's side
+      Gd.v[0] = hx + Math.cos(Dh.fall) * GD.fwd + sx * GD.side; Gd.v[2] = hz + Math.sin(Dh.fall) * GD.fwd + sz * GD.side;
+      Gd.v[1] = clamp(Gd.v[1], -40, 40) + GD.up;
+      Gd.q.copy(_dq3); Gd.ax.set(0, 0, 1).applyQuaternion(_dq3).addScaledVector(Y_AXIS, 0.6).normalize();
+    } else { _m1.compose(_dg, _dq3, _gw2.set(1, 1, 1)); showPropAt(r, gb, _m1); return; }
+  }
+  // the flight: gravity, a spin, a wall stops it (bounces back off a solid cell), one bounce at 0.3 on whichever END hits the
+  // ground first (the muzzle, the butt or the grip: the grip alone let the muzzle dig in and the gun stand on it like a
+  // cane), then it lies flat on its side, the ends kept above the ground as it settles
+  const restY = LONG[w] ? 1.0 : 0.8, ends = DROP_ENDS[w] || DROP_ENDS.pistol;
+  if (dt > 0 && !Gd.rest) {
+    Gd.t += dt; Gd.v[1] -= GD.g * dt;
+    const nx = Gd.p[0] + Gd.v[0] * dt, nz = Gd.p[2] + Gd.v[2] * dt, m = G.map;
+    if (m && m.getSolid && PORT_SOLID.has(m.getSolid(Math.floor(nx / 32), Math.floor(nz / 32)))) { Gd.v[0] *= -0.3; Gd.v[2] *= -0.3; }
+    else { Gd.p[0] = nx; Gd.p[2] = nz; }
+    Gd.p[1] += Gd.v[1] * dt;
+    Gd.q.premultiply(_dq3.setFromAxisAngle(Gd.ax, GD.spin * (Gd.bounced ? 0.4 : 1) * dt));
+    const lo = dropLow(Gd.q, ends);
+    if (Gd.p[1] + lo < END_Y || Gd.p[1] < restY) {
+      Gd.p[1] = Math.max(restY, END_Y - lo);
+      if (!Gd.bounced && Gd.v[1] < -60) { Gd.bounced = true; Gd.v[1] *= -GD.rest; Gd.v[0] *= 0.45; Gd.v[2] *= 0.45; }
+      else {
+        Gd.rest = true; Gd.restT = 0; Gd.q0.copy(Gd.q); Gd.y0 = Gd.p[1];
+        // flat on whichever side is nearer, the bore level at its heading
+        _gv.set(1, 0, 0).applyQuaternion(Gd.q); const hd = Math.atan2(_gv.z, _gv.x); _gv2.set(0, 0, 1).applyQuaternion(Gd.q);
+        gunQ(hd, 0, (_gv2.y >= 0 ? -90 : 90) * DEG, Gd.qRest);
+      }
+    }
+  } else if (dt > 0) Gd.restT += dt;
+  if (Gd.rest) {
+    const k = ES(clamp(Gd.restT / GD.settleT, 0, 1));
+    Gd.q.slerpQuaternions(Gd.q0, Gd.qRest, k);
+    // it tips over onto its side about its lowest end: the origin comes down as the ends level out, never through the ground
+    Gd.p[1] = Math.max(END_Y - dropLow(Gd.q, ends), restY, lerp(Gd.y0, restY, k));
+  }
+  _m1.compose(_dg.set(Gd.p[0], Gd.p[1], Gd.p[2]), Gd.q, _gw2.set(1, 1, 1)); showPropAt(r, gb, _m1);
+  resetSubBones(r);
+}
+// the dropped prop's end points (its local frame): the muzzle, the butt (the pistol's grip base), and the origin; the axe's
+// head and handle end, the hammer's head and handle end
+const DROP_ENDS = {
+  pistol: [[SOCKETS.pistol.muzzle[0], 0, 0], [-1.6, -4.6, 0], [SOCKETS.pistol.slideRear[0], 2.3, 0]],
+  shotgun: [SOCKETS.shotgun.muzzle, SOCKETS.shotgun.butt, [0, -3, 0], [4, 1, 0.9], [4, 1, -0.9]],
+  rifle: [SOCKETS.rifle.muzzle, SOCKETS.rifle.butt, [0, -3, 0], SOCKETS.rifle.boltKnob, [0, 5, 0], [4, 1, 0.9], [4, 1, -0.9]],
+  axe: [[-6, 0, 0], [26, 1.2, 0], [26, -6.9, 0]], hammer: [[-3, 0, 0], [11.5, 3.7, 0], [11.5, -1.5, 0]],
+};
+const _de = V(), END_Y = 0.15; // (the prop's end points come to rest just above the ground; its origin at restY)
+/** The lowest Y offset of a dropped prop's end points (and its origin) at rotation q. */
+function dropLow(q, ends) { let lo = 0; for (let i = 0; i < ends.length; i++) { const e = ends[i]; const y = _de.set(e[0], e[1], e[2]).applyQuaternion(q).y; if (y < lo) lo = y; } return lo; }
+
 /* -------- per frame, after FK and the legs: gun → hands → props → casings -------- */
 function weapons(r, p) {
   const st = r.st, B = r.bones;
   for (let i = 0; i < PROP_NAMES.length; i++) hideProp(B[PROP_NAMES[i]]);
   resetSubBones(r);
   st.gunDriver = 'none'; st.inHand = null;
-  if (p.dead) { st.gunLOk = false; return; }
+  if (p.dead) { deadGun(r, p); st.gunLOk = false; return; }
   const w = S.weapon;
   // the FK hands (the relaxed pose the IK blends from)
   boneFrame(B.handR, _fkRw, _fkRq); boneFrame(B.handL, _fkLw, _fkLq);
@@ -1542,8 +2477,12 @@ function weapons(r, p) {
     if (GC.rl > 0 && GC.rlPose && GC.rlGun > 0) { namedGun(r, GC.rlPose, GT); if (GC.jig) { GT.p.addScaledVector(_gv.set(1, 0, 0).applyQuaternion(GT.q), GC.jig); GT.q.multiply(_hq2.setFromAxisAngle(_gv.set(0, 0, 1), GC.jig * GUN_POSES.shotgunReload.jigPitch * DEG)); } blendPose(GN, GT, GC.rl * GC.rlGun, GN); }
     if (GC.rl > 0 && (GC.rlJy || GC.rlJp)) { GN.p.y += GC.rlJy * GC.rl; GN.q.multiply(_hq2.setFromAxisAngle(_gv.set(0, 0, 1), GC.rlJp * GC.rl * DEG)); }
   }
+  // (M4) the actions on the gun: the draw back after a tool, the dash's tuck, the strike, the takedown, the flinch; a tool
+  // in hand puts it away
+  held = actionGun(r, p, held);
   st.inHand = held;
-  st.gunDriver = !held ? 'none' : GC.sw ? 'swap' : S.aimW > 0.5 ? 'aim' : LONG[w] ? 'chest' : 'hand';
+  const acting = MC.w > 0.5 || TC.w > 0.5 || (st.stateF === 'dodge' && !st.dg.hop);
+  st.gunDriver = !held ? (st.tool ? 'tool' : 'none') : GC.sw ? 'swap' : acting ? 'action' : S.aimW > 0.5 ? 'aim' : LONG[w] ? 'chest' : 'hand';
   if (held) {
     const gb = B[held];
     _m1.compose(GN.p, GN.q, _gw2.set(1, 1, 1)); showPropAt(r, gb, _m1);
@@ -1552,8 +2491,8 @@ function weapons(r, p) {
     // the gun in spine2-local, for a swap's snapshot next time
     _m2.copy(B.spine2.matrixWorld).invert(); st.gunLP.copy(GN.p).applyMatrix4(_m2); worldQuat(B.spine2, _sq); st.gunLQ.copy(_sq).invert().multiply(GN.q); st.gunLOk = true; st.gunLW = held;
   } else st.gunLOk = false;
-  // 2. the hands
-  handsOnGun(r, p, held);
+  // 2. the hands (on the gun, or on a tool)
+  if (st.tool) toolHands(r, p); else handsOnGun(r, p, held);
   // 3. props in the hands, the sling, the dropped magazine, casings, the beam
   propsInHands(r, p, held);
   if (GC.dropMag && held === 'pistol') dropMag(r);
@@ -1615,7 +2554,7 @@ function handsOnGun(r, p, held) {
   } else if (held) {
     wpRight(r, GC.rA, held, GN, _wA, _qA);
     if (GC.rU > 0 && GC.rB !== GC.rA) { wpRight(r, GC.rB, held, GN, _wB, _qB); travel(r, _wA, _qA, _wB, _qB, GC.rU, _wR, _qR); } else { _wR.copy(_wA); _qR.copy(_qA); }
-    rw = !LONG[held] && S.aimW <= 0.001 && GC.rl <= 0 && GC.rU <= 0 && st.port.x <= 0.001 ? 0 : 1;
+    rw = !LONG[held] && S.aimW <= 0.001 && GC.rl <= 0 && GC.rU <= 0 && st.port.x <= 0.001 && st.gunDriver !== 'action' && !(st.rp.w > 0) ? 0 : 1;
   }
   st.lastRw = rw > 0; if (rw > 0) { st.lastRwP.copy(_wR); st.lastRwQ.copy(_qR); }
   // (the long guns' elbow poles blend relaxed → aimed with the aim weight: a switch at 0.5 popped the elbows mid-raise)
@@ -1631,13 +2570,18 @@ function handsOnGun(r, p, held) {
   // (the grip roll of the gun the hand is on or reaching for: a long gun's stock wrist lets the hand turn 40°)
   const gripW = held || (GC.sw ? st.sw.to : w);
   const rollR = lerp(LONG[gripW] ? TUNE.gripRoll.long : TUNE.gripRoll.pistol, TUNE.gripRoll.knob, GC.rB === WP.KNOB ? GC.rU : 0) * DEG;
-  if (rw > 0) armIK(r, 'R', _wR, _qR, poleR, 1, LONG[held] || GC.sw ? 1 : Math.max(S.aimW, GC.rl, GC.rU), rollR);
+  if (rw > 0) armIK(r, 'R', _wR, _qR, poleR, 1, LONG[held] || GC.sw || st.gunDriver === 'action' ? 1 : Math.max(S.aimW, GC.rl, GC.rU), rollR);
   // the left hand: the support grip (pistol, aimed) or the forend (long guns), the reload's waypoints, the swap's drop
   let lw = 0, lb = WP.FK;
   if (held === 'pistol') { lb = WP.SUPPORT; lw = S.aimW * S.supW; }
   else if (held) { lb = WP.FOREND; lw = 1; }
   if (st.port.x > 0.01 && held === 'pistol') lw *= 1 - TUNE.highPort.pistolSupportOff * st.port.x;
-  if (lw > 0 || GC.rl > 0 || GC.sw) {
+  // (M4) the dash: the pistol is tucked one-handed and the free arm thrown back (its FK, dodgePose); a ram's stumble
+  // throws the left arm out (its FK)
+  if (held === 'pistol' && st.stateF === 'dodge' && !st.dg.hop) lw *= 1 - (st.dg.ph === 1 ? ss(0, 0.2, st.dg.u) : 1 - ES(clamp(st.dg.tailT / DODGE.tail, 0, 1)));
+  if (FLX.abdL > 0) lw *= 1 - 0.8 * FLX.abdL / FLINCH.ram.abdL;
+  const ALo = leftOverride(r, p, held);
+  if (lw > 0 || GC.rl > 0 || GC.sw || ALo.w > 0) {
     if (lw > 0) wpLeft(r, lb, held, GN, _wL, _qL); else { _wL.copy(_fkLw); _qL.copy(_fkLq); }
     if (GC.sw) {
       const f = GC.swF, W = st.sw;
@@ -1653,10 +2597,13 @@ function handsOnGun(r, p, held) {
     }
     // a dry fire: the support hand taps the magazine's base
     if (GC.dryTap > 0 && held === 'pistol' && lw > 0 && !GC.sw && GC.rl <= 0) { wpLeft(r, WP.WELL_LOW, held, GN, _wA, _qA); _wL.lerp(_wA, GC.dryTap); _qL.slerp(_qA, GC.dryTap); }
+    // the overrides: the melee guard, the collar grab, the fire shield, the pick's reach
+    if (ALo.w > 0) { if (lw > 0) { _wL.lerp(ALo.p, ALo.w); _qL.slerp(ALo.q, ALo.w); } else { _wL.copy(ALo.p); _qL.copy(ALo.q); } lw = Math.max(lw, ALo.w); }
     let poleL = LONG[held || w] ? lerp3(RELAXED.long.poleL, AP.poleL, S.aimW, POLE_L) : AP.poleL;
+    if (ALo.w > 0) poleL = lerp3(poleL, ALo.pole, ALo.w, POLE_L2);
     // the shell chain: the elbow out to the side, so the hand passes outside the coat on its way to the belt
     if (GC.rlPose === 'shotgunReload' && GC.rl > 0) poleL = lerp3(poleL, GUN_POSES.shotgunReload.poleL, GC.rl, POLE_L2);
-    const rollL = (lb === WP.FOREND ? TUNE.gripRoll.forend : lb === WP.SUPPORT ? TUNE.gripRoll.support : 0) * DEG * (1 - GC.rl);
+    const rollL = (lb === WP.FOREND ? TUNE.gripRoll.forend : lb === WP.SUPPORT ? TUNE.gripRoll.support : 0) * DEG * (1 - GC.rl) * (1 - ALo.w);
     if (lw > 0.001) armIK(r, 'L', _wL, _qL, poleL, lw, lw, rollL);
   }
 }
@@ -1791,6 +2738,9 @@ function propsInHands(r, p, held) {
   for (let i = 0; i < 2; i++) {
     const sl = st.backSlot[i];
     if (sl && sl !== held && !(GC.sw && sl === st.sw.from && GC.swF < swapTimes(st.sw).outEnd) && !(GC.sw && sl === st.sw.to && GC.swF >= SWAP.inStart)) {
+      // (the second gun is put away while a tool is out: two long guns on a man chopping or hammering stood up over his
+      // head like antennas, whatever their angle)
+      if (i === 1 && st.slingLow > 0.5 && sl !== st.sw.to) continue;
       slingGun(r, GT, i); _m1.compose(GT.p, GT.q, _gw2.set(1, 1, 1)); showPropAt(r, B[sl], _m1);
     }
   }
@@ -1937,7 +2887,7 @@ function beam(r, p, ctx) {
 // out (a hard lower clamp: the front panels kick on every stride), and nothing passes through the legs or the ground.
 const _cP = new THREE.Vector3(), _cK = new THREE.Vector3(), _cA = new THREE.Vector3(), _cQ = new THREE.Quaternion(), _cN = new THREE.Vector3(), _cT = new THREE.Vector3();
 const _qa = new THREE.Quaternion(), _qb = new THREE.Quaternion(), _axN = new THREE.Vector3(), _axT = new THREE.Vector3();
-const CNX = new Float64Array(6), CNZ = new Float64Array(6), CTX = new Float64Array(6), CTZ = new Float64Array(6);
+const CNX = new Float64Array(6), CNZ = new Float64Array(6), CTX = new Float64Array(6), CTZ = new Float64Array(6), AHI_DEG = 78;
 const KNEE_CONE = Math.cos(60 * DEG);
 function coatSim(r, p) {
   if (!TUNE.enable.coat) return;
@@ -1947,11 +2897,19 @@ function coatSim(r, p) {
   worldQuat(B.pelvis, _cQ);
   const vx = st.vf[0], vz = st.vf[1], spd = st.speed, vhx = spd > 1 ? vx / spd : 0, vhz = spd > 1 ? vz / spd : 0;
   const ax = st.acc[0], az = st.acc[1];
-  const rest = C.rest * DEG, fling = Math.min(C.flingMax * DEG, Math.atan(C.fling * st.yawRate * st.yawRate));
+  // (the dash's hip whip to the dash direction is not a turn the coat should bell out for: its fling is capped)
+  const dashing = st.stateF === 'dodge' && !st.dg.hop;
+  const rest = C.rest * DEG, fling = Math.min((dashing ? 10 : C.flingMax) * DEG, Math.atan(C.fling * st.yawRate * st.yawRate));
   const t = S.now, rain = G.rainLevel || 0;
   const flutter = st.sprintW > 0 ? C.flutter * (Math.sin(2 * Math.PI * 6 * t) + 0.5 * Math.sin(2 * Math.PI * 11 * t)) * clamp((spd - 130) / 50, 0, 1) * st.sprintW : 0;
   const twistK = 0.5 * C.twist * DEG * Math.pow(Math.min(1, spd / 185), 1.2);
-  const dash = (p.dodgeT || 0) > 0 && !p.dead ? C.dash * ss(0, 0.06, 0.22 - p.dodgeT) : 0; // the M2 dodge placeholder's flare
+  // the dash (§4.14): α* += dash (50–70° in all, the lining showing) through the dash and out over its tail; a side dash or
+  // one toward the camera (south, +y) flares less and each panel is capped (they belled into a disc or a dome over the
+  // legs), and a ripple runs round the hem so the skirt never moves as one rigid sheet
+  const Dg = st.dg, KD = DODGE.dash, dashOn = st.stateF === 'dodge' && !Dg.hop;
+  const dashSide = dashOn ? Math.max(ss(30, 60, Math.abs(Dg.rel) / DEG), ss(0.3, 0.7, Math.sin(Dg.dir))) : 0;
+  const dash = dashOn ? lerp(KD.flare, KD.flareSide, dashSide) * (Dg.ph === 1 ? ss(0, 0.25, Dg.u) : 1 - ES(clamp(Dg.tailT / DODGE.tail, 0, 1))) : 0;
+  const flareCap = dashOn ? lerp(AHI_DEG, KD.flareCap, dashSide) * DEG : 9;
   for (let k = 0; k < n; k++) {
     const a = th[k] * DEG;
     _cN.set(Math.cos(a), 0, Math.sin(a)).applyQuaternion(_cQ); _cT.set(-Math.sin(a), 0, Math.cos(a)).applyQuaternion(_cQ);
@@ -1962,7 +2920,9 @@ function coatSim(r, p) {
     const front = k === 0 || k === n - 1;
     const drag = clamp(-(vx * CNX[k] + vz * CNZ[k]) / 185 * C.drag, C.dragFront, front ? C.dragBackFront : C.drag);
     const storm = rain > 0.7 ? C.storm * noise1(1.3 * t + k * 7.1) : 0;
-    cs.aT[k] = p.dead ? 0 : rest + (drag + flutter + storm + dash) * DEG + fling;
+    // (the dash's flare is mostly on the trailing panels: the whole skirt at +20° read as a round cape from above)
+    const dk = dash ? dash * (0.3 + 0.7 * Math.max(0, -(vhx * CNX[k] + vhz * CNZ[k]))) + KD.ripple * (dash / KD.flare) * Math.sin(2 * Math.PI * (KD.rippleHz * t - k / n)) : 0;
+    cs.aT[k] = p.dead ? 0 : Math.min(flareCap, rest + (drag + flutter + storm + dk) * DEG + fling);
     // β: the side panels trail the motion. (Sign note: the spec writes β* ∝ dot(t_k, −v̂), −accGain·dot(a, t_k) and
     // −yawAccGain·ψ''; with its own convention, +β moves the hem toward −t_k, and +yaw moves n_k toward +t_k, so the signs
     // here, +dot(t_k, v̂), +dot(a, t_k), +ψ'', are the ones that make the hem lag: the spec text has them flipped.)
@@ -2008,10 +2968,16 @@ function coatSim(r, p) {
   for (let k = 0; k < n; k++) if (cs.xs[k] > 0) cs.lo[k] = Math.max(cs.lo[k], cs.xs[k]);
   // a long gun's kick: the front panels swing out, the back ones in (§4.9 coat impulse, rad/s)
   if (S.shot && LONG[S.weapon]) { const ci = RECOIL[S.weapon].coat || 0; for (let k = 0; k < n; k++) cs.va[k] += ci * Math.cos(th[k] * DEG); }
+  // the dash's landing: the panels facing the travel swing on (3 rad/s); a hit: the panels facing the push (1.4 rad/s)
+  if (Dg.ph === 2 && Dg.tailT <= S.adt + 1e-6 && !Dg.hop) for (let k = 0; k < n; k++) cs.va[k] += 3 * Math.max(0, CNX[k] * Math.cos(Dg.dir) + CNZ[k] * Math.sin(Dg.dir));
+  if (S.hit && !p.dead) { const pa = st.hurt.ang + Math.PI; for (let k = 0; k < n; k++) cs.va[k] += FLINCH.coat * Math.max(0, CNX[k] * Math.cos(pa) + CNZ[k] * Math.sin(pa)); }
   // integrate at 120 Hz (semi-implicit Euler), clamps zero the velocity
   const hz = rain > 0.3 ? C.hzRain : C.hz, w = 2 * Math.PI * hz, wL = 2 * Math.PI * C.lowerHz, zL = C.lowerZeta;
   const ns = dt > 0 ? Math.min(8, Math.ceil(dt / SPRING_H - 1e-9)) : 0, h = ns ? dt / ns : 0;
   const ALO = -15 * DEG, AHI = 78 * DEG, GLO = -10 * DEG, GHI = 40 * DEG;
+  // (a side dash or one toward the camera: the pendulums themselves stop at the flare cap + 8°, not just their targets:
+  // they overshot into one flat trailing 'wing'; the lower panels don't curl on past it)
+  const aHi = Math.min(AHI, flareCap + 8 * DEG), gHi = dashSide > 0.5 ? 15 * DEG : GHI;
   for (let k = 0; k < n; k++) {
     const front = k === 0 || k === n - 1, z = front ? C.frontZeta : C.zeta, BLIM = (front ? C.bLimFront : hq ? C.bLim : C.bLimLow) * DEG;
     const accN = ax * CNX[k] + az * CNZ[k], accT = ax * CTX[k] + az * CTZ[k];
@@ -2024,7 +2990,7 @@ function coatSim(r, p) {
     for (let s = 0; s < ns; s++) {
       const aa = -w * w * (a - aT) - 2 * z * w * va - C.accGain * accN;
       va += aa * h; a += va * h;
-      if (a < lo) { a = lo; if (va < 0) va = 0; } else if (a > AHI) { a = AHI; if (va > 0) va = 0; }
+      if (a < lo) { a = lo; if (va < 0) va = 0; } else if (a > aHi) { a = aHi; if (va > 0) va = 0; }
       const bb = -w * w * (b - bT) - 2 * z * w * vb + C.accGain * accT + C.yawAccGain * st.yawAcc;
       vb += bb * h; b += vb * h;
       if (b < -BLIM) { b = -BLIM; if (vb < 0) vb = 0; } else if (b > BLIM) { b = BLIM; if (vb > 0) vb = 0; }
@@ -2032,7 +2998,7 @@ function coatSim(r, p) {
         const gg = -wL * wL * (g - gT) - 2 * zL * wL * vg - C.lowerAcc * aa;
         vg += gg * h; g += vg * h;
         const glo = Math.max(front ? C.gloFront * DEG : GLO, cs.loG[k]);
-        if (g < glo) { g = glo; if (vg < 0) vg = 0; } else if (g > GHI) { g = GHI; if (vg > 0) vg = 0; }
+        if (g < glo) { g = glo; if (vg < 0) vg = 0; } else if (g > gHi) { g = gHi; if (vg > 0) vg = 0; }
       }
     }
     // a frame without time still honours this frame's collisions
@@ -2068,6 +3034,89 @@ function coatSim(r, p) {
     B[hq ? SKU[k] : SK4[k]].quaternion.copy(_qa).multiply(_qb);
     if (hq) B[SKL[k]].quaternion.setFromAxisAngle(_axT, cs.g[k]);
   }
+  if (p.dead) coatOnGround(r, hq, th, n);
+}
+/**
+ * Dead (§4.16, §4.21): the skirt falls with gravity and spreads on the ground. Each panel's hem is aimed (world) from its
+ * pivot down to the ground and out away from the body (the upper panel slopes to the ground, the lower one lies flat),
+ * then blended in from the live pendulums as he lands.
+ */
+const _gP = V(), _gL = V(), _gD = V(), _gO = V(), _gA = V(), _gB = V(), _gO2 = V(), _gP2 = V(), _gQ = new THREE.Quaternion(), _gQ2 = new THREE.Quaternion(), _gQ3 = new THREE.Quaternion(), _gQ4 = new THREE.Quaternion();
+const SK_BIND = new Map(), _gQ5 = new THREE.Quaternion(), _gQ6 = new THREE.Quaternion();
+/** A panel blended from q0 (live) toward qG (on the ground) by w: if its hem would end under y 1.6 the blend goes on just as
+ *  far as it must (bisection) toward the ground pose, so the hem never digs in and never snaps across in one frame. */
+function hemTipY(bone, q0, qG, k, dir, len, piv) { bone.quaternion.slerpQuaternions(q0, qG, k); bone.updateMatrixWorld(true); return _gO2.set(dir.x * len, dir.y * len, dir.z * len).applyQuaternion(worldQuat(bone, _gQ6)).y + piv.y; }
+function groundBlend(bone, q0, qG, w, dir, len, piv, Y = 1.6) {
+  if (hemTipY(bone, q0, qG, w, dir, len, piv) >= Y) return;
+  let a = w, b = 1;
+  if (hemTipY(bone, q0, qG, 1, dir, len, piv) < Y) return; // (the ground pose itself: nothing better to do)
+  for (let it = 0; it < 5; it++) { const m = (a + b) / 2; if (hemTipY(bone, q0, qG, m, dir, len, piv) < Y) a = m; else b = m; }
+  hemTipY(bone, q0, qG, b, dir, len, piv);
+}
+function skBind(r, hq, k) {
+  // the panels' bind directions in their parent's frame (pivot → lower pivot / hem), cached per quality
+  const key = (hq ? 'h' : 'l') + k;
+  let v = SK_BIND.get(key);
+  if (!v) {
+    const th = (hq ? SKIRT6 : SKIRT4)[k] * DEG, a = coatSurface(38, th, 0.5), b = coatSurface(hq ? 28 : 18, th, 0.5), c = coatSurface(18, th, 0.5);
+    v = { up: new THREE.Vector3(b[0] - a[0], b[1] - a[1], b[2] - a[2]), lo: new THREE.Vector3(c[0] - b[0], c[1] - b[1], c[2] - b[2]) };
+    v.lenU = v.up.length(); v.lenL = v.lo.length(); v.up.normalize(); v.lo.normalize();
+    SK_BIND.set(key, v);
+  }
+  return v;
+}
+function coatOnGround(r, hq, th, n) {
+  const st = r.st, B = r.bones, t = st.deathT, w = ss(DEATH.coatFrom, DEATH.coatTo, t);
+  if (w <= 0) return;
+  worldQuat(B.pelvis, _gQ);
+  // the body's line along the legs (pelvis −Y in world, flattened) and the pelvis centre
+  _gD.set(0, -1, 0).applyQuaternion(_gQ); _gD.y = 0; if (_gD.lengthSq() < 1e-4) _gD.set(Math.cos(S.hipYaw), 0, Math.sin(S.hipYaw)); _gD.normalize();
+  _gO.setFromMatrixPosition(B.pelvis.matrixWorld);
+  for (let k = 0; k < n; k++) {
+    const up = B[hq ? SKU[k] : SK4[k]], bd = skBind(r, hq, k);
+    _gP.setFromMatrixPosition(up.matrixWorld);
+    // outward: from the body's centre line to the pivot, flattened; the spread blends it with the line along the legs
+    _gA.subVectors(_gP, _gO); _gA.y = 0; _gA.addScaledVector(_gD, -_gA.dot(_gD));
+    if (_gA.lengthSq() < 1e-4) _gA.set(0, 0, 0); else _gA.normalize();
+    _gB.copy(_gD).addScaledVector(_gA, DEATH.spread * 1.6).normalize(); // the horizontal direction this panel lies along
+    // (the hem aimed 2 u up: the panels' corners and cloth thickness reach below their centre line)
+    const L1 = bd.lenU, h = Math.max(0, _gP.y - 2.0), drop = Math.min(h, 0.97 * L1), flat = Math.sqrt(Math.max(0, L1 * L1 - drop * drop));
+    _gL.copy(_gB).multiplyScalar(flat); _gL.y = -drop; _gL.normalize(); // the upper panel's world direction
+    // into the pelvis frame, the rotation from its bind direction
+    _gA.copy(_gL).applyQuaternion(_gQ2.copy(_gQ).invert());
+    _gQ3.setFromUnitVectors(bd.up, _gA);
+    // (from coatFrom on, a panel whose hem would go under the ground takes its ground pose in full, whatever the blend: at
+    // the impact the skirt went 9–12 u into the ground)
+    _gQ2.copy(up.quaternion); up.quaternion.slerp(_gQ3, w);
+    if (w < 1) groundBlend(up, _gQ2, _gQ3, w, bd.up, L1, _gP);
+    if (hq) {
+      up.updateMatrixWorld(true);
+      // (the lower panel lies flat: no 0.97 cap, the rear vent stood up as a fin)
+      const lo = B[SKL[k]], h2 = Math.max(0, _gP.y + _gL.y * L1 - 3.0), d2 = Math.min(h2, bd.lenL), f2 = Math.sqrt(Math.max(0, bd.lenL * bd.lenL - d2 * d2));
+      _gL.copy(_gB).multiplyScalar(f2); _gL.y = -d2; _gL.normalize();
+      worldQuat(up, _gQ2); _gA.copy(_gL).applyQuaternion(_gQ2.invert());
+      _gQ3.setFromUnitVectors(bd.lo, _gA);
+      _gQ5.copy(lo.quaternion); lo.quaternion.slerp(_gQ3, w);
+      if (w < 1) { _gP2.setFromMatrixPosition(lo.matrixWorld); groundBlend(lo, _gQ5, _gQ3, w, bd.lo, bd.lenL, _gP2, 2.9); } // (the lower panels are wide: their corners sit ~3 under the centre line)
+    }
+  }
+}
+
+/* ---------------- 15. the dodge's dust puff (§3.7, §4.14): 8 points, 0.35 s ---------------- */
+const DUST_R = [0.9, 0.62, 1.0, 0.75, 0.95, 0.58, 0.85, 0.7], DUST_U = [0.6, 1.0, 0.7, 0.9, 0.5, 1.0, 0.8, 0.65];
+function dustUpdate(r) {
+  const st = r.st, d = st.dust, P = r.dust, DU = d.K || DODGE.dust;
+  if (!P) return;
+  if (d.t >= DU.T) { if (P.visible) P.visible = false; return; }
+  d.t += G.paused ? 0 : (S.adt || S.realDt);
+  const u = clamp(d.t / DU.T, 0, 1), e = EO(u), pos = P.geometry.attributes.position, c = Math.cos(d.dir), s = Math.sin(d.dir);
+  for (let i = 0; i < DU.n; i++) {
+    // a low ring thrown out from the skidding foot, pushed on along the skid
+    const a = d.dir + (i / DU.n) * 2 * Math.PI, rr = DU.r * e * DUST_R[i];
+    pos.setXYZ(i, d.x + Math.cos(a) * rr + c * 4 * e, (d.y || 1.2) + DU.rise * e * DUST_U[i] - (d.y > 5 ? 9 * u * u : 0), d.z + Math.sin(a) * rr + s * 4 * e);
+  }
+  pos.needsUpdate = true; P.visible = true;
+  P.material.opacity = 0.8 * (1 - u * u); P.material.size = DU.size * (0.6 + 0.9 * e);
 }
 
 /* ---------------- 13. forelocks (HQ): two 2-DOF springs on the strands (§4.21) ---------------- */
@@ -2098,7 +3147,9 @@ function forelocks(r, p) {
   }
   // the acceleration in the head's frame
   _v2.set(st.headA[0], st.headA[1], st.headA[2]).applyQuaternion(_q1.copy(_hq).invert());
-  const lim = FL.max * DEG, tgtP = -FL.hang * pitchW;
+  // (the dash streams them back, §4.14)
+  const Dg = st.dg, stream = st.stateF === 'dodge' && !Dg.hop ? (Dg.ph === 1 ? ss(0, 0.3, Dg.u) : 1 - ES(clamp(Dg.tailT / DODGE.tail, 0, 1))) : 0;
+  const lim = FL.max * DEG, tgtP = -FL.hang * pitchW - 35 * DEG * stream;
   const ns = dt > 0 ? Math.min(8, Math.ceil(dt / SPRING_H - 1e-9)) : 0, h = ns ? dt / ns : 0;
   for (let i = 0; i < 2; i++) {
     const f = st.fl[i], w = 2 * Math.PI * FL.hz * (1 + 0.12 * i), z = FL.zeta;
@@ -2133,7 +3184,9 @@ function updateDecal(r, p, ctx) {
   d.position.set(p.x, 0, p.y);
   const dead = !!p.dead, a = p.angle || 0, ca = Math.cos(a), sa = Math.sin(a);
   // blob: offset along the sun-shadow direction (Low: longer and stronger)
-  const off = q ? 8 : 3, stretch = q ? 1.4 : 1, wide = dead ? 1.3 : 1, bA = q ? 0.5 : 0.35;
+  // (the back-hop: the blob shrinks as he rises, so the shadow visibly leaves him)
+  const rise = r.st.stateF === 'dodge' && r.st.dg.hop ? ss(0, 6, (PB[PK.pel + 1] || 0)) : 0;
+  const cr = clamp(PB[PK.crouch] || 0, 0, 1), off = q ? 8 : 3, stretch = q ? 1.4 : 1, wide = dead ? 1.3 : (1 - 0.2 * cr) * lerp(1, DODGE.hop.blobMin, rise), bA = (q ? 0.5 : 0.35) * (1 + 0.3 * cr) * lerp(1, 0.7, rise);
   for (let i = 0; i <= DECAL.blobSeg; i++) {
     if (i === 0) { pos.setXYZ(Lo.blob0, SHADOW_DIR[0] * off, 0.5, SHADOW_DIR[1] * off); col.setW(Lo.blob0, bA); continue; }
     const t = (i - 1) / DECAL.blobSeg * Math.PI * 2;
@@ -2262,6 +3315,8 @@ export function prewarmFrank(R, scene, camera, q) {
 
 /* ---------------- debug snapshot (§7.3) ---------------- */
 const _dbA = V(), _dbB = V(), _dbC = V(), _dbQ = new THREE.Quaternion();
+/** The lowest of the ground clamp's tracked points (world y). */
+function lowestPoint(r) { let lo = Infinity; for (const c of CLAMP_PTS) { const y = bonePoint(r, c[0], c[1], c[2], c[3], _dbA).y; if (y < lo) lo = y; } return round2(lo); }
 /** The eye (head socket) against the held gun's bore line: [lateral (+ = right of the bore), up (above it), along]. */
 function eyeToBore(r, w) {
   const B = r.bones, g = B[w], Sk = SOCKETS[w];
@@ -2319,7 +3374,7 @@ export function frankDebug(r) {
   return {
     kind: r.kind, skinned: !!r.mesh.isSkinnedMesh, q: r.q, young: r.young, serial: r.serial, bones: r.skeleton.bones.length, tris: r.assets.tris, verts: r.assets.verts,
     draws: [r.mesh, r.decal, r.debris, r.dust, r.cone].filter((o) => o && o.visible && (o !== r.debris || r.debris.count > 0)).length,
-    patched: ps.ok && ps.compiled, full: p.dead ? 'death' : 'none', upper: st.sw.on ? 'swap' : st.rl.on ? 'reload' : st.act ? 'action' : st.aimW > 0.5 ? 'aim' : 'relaxed', loco, locoAt: loco,
+    patched: ps.ok && ps.compiled, full: st.stateF || 'none', upper: st.mel.ph ? 'melee' : st.sw.on ? 'swap' : st.rl.on ? 'reload' : st.act ? 'action' : st.aimW > 0.5 ? 'aim' : 'relaxed', loco, locoAt: loco,
     aimW: +st.aimW.toFixed(3), weapon, gunDriver: st.gunDriver || 'hand',
     muzzleWorld: mz.toArray().map(round2), muzzleRel: [round2(rx * Math.cos(a) + rz * Math.sin(a)), round2(mz.y), round2(-rx * Math.sin(a) + rz * Math.cos(a))],
     flashExpect: r.fx.valid ? r.fx.flashPos.toArray().map(round2) : null, lightOrigin: r.fx.valid ? r.fx.lightOrigin.toArray().map(round2) : null,
@@ -2336,6 +3391,14 @@ export function frankDebug(r) {
     port: round2(st.port.x), slideLocked: !!st.slideLocked, act: st.act, reload: st.rl.on ? { kind: st.rl.kind, weapon: st.rl.weapon, empty: st.rl.empty, f: round2(st.rl.f), tau: round2(st.rl.tau), cycle: st.rl.cycle, w: round2(GC.rl) } : null,
     swap: st.sw.on ? { from: st.sw.from, to: st.sw.to, f: round2(GC.swF) } : null, boreMiss: r.fx.valid ? round2(st.boreMissRest || 0) : null, boreMissLive: boreMiss(r, p, weapon), handErr: handErr(r, weapon),
     recoil: { pitch: round2(GC.rPitch), back: round2(GC.rBack), slide: round2(GC.slideX) }, sub: subState(r), lProp: GC.lProp,
+    // M4: the actions
+    actions: { dodge: st.dg.ph ? { variant: st.dg.hop ? 'hop' : 'dash', u: round2(st.dg.u), tail: st.dg.ph === 2 ? round2(st.dg.tailT) : null, lead: st.dg.lead } : null,
+      melee: st.mel.ph ? { conn: st.mel.conn, u: round2(st.mel.u), cu: round2(MC.cu), w: round2(MC.w) } : null, takedown: st.td.ph ? { u: round2(st.td.u), cu: round2(TC.cu) } : null,
+      chop: st.ch.ph ? { pick: st.ch.pick, ph: st.ch.ph, u: round2(st.ch.u) } : null, repair: st.rp.w > 0 ? { kind: st.rp.kind, w: round2(st.rp.w), dist: round2(st.rp.dist) } : null,
+      tool: st.tool, stowed: st.stowed, draw: st.sw.on && st.sw.render ? round2(GC.swF) : null, hurt: st.hurt.t < 1 ? { zone: st.hurt.zone, kind: st.hurt.kind, s: st.hurt.s, A: round2(st.hurt.A), t: round2(st.hurt.t) } : null,
+      revive: st.rev < 2 ? round2(st.rev) : null, sinceRevive: round2(Math.min(99, st.sinceRevive)), visible: r.body.visible,
+      death: p.dead ? { variant: st.dth.variant, F: round2(st.dth.F / DEG), t: round2(st.deathT), lift: round2(st.dth.lift), gun: st.dth.gun.on ? { rest: st.dth.gun.rest, p: st.dth.gun.p.map(round2) } : null } : null },
+    lowest: lowestPoint(r),
     reachErr: st.reach.map(round2), debris: st.debrisN, debrisPts: Array.from({ length: Math.min(4, r.debris.count) }, (_, i) => { r.debris.getMatrixAt(i, _m1); return _v1.setFromMatrixPosition(_m1).toArray().map(round2); }), wrist: st.wrist.map((w) => w.map((v) => +v.toFixed(1))), wristMax: round2(st.wristMax), swivels: st.swivels, elbowClamps: st.elbowClamps, shots: st.shots,
     samples: {
       coatFront: P('spine1', 6.05, 41.6, 4.4), coatSide: P('pelvis', -3, 30, 10.6), trouser: P('shinR', 2.7, 6.5, 4.6), shirt: P('spine2', 6.2, 55.0, 0.4),

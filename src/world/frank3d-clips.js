@@ -13,11 +13,12 @@ export const TUNE = {
     steel: '#3c3e44', steelWorn: '#6a6e76', walnut: '#5a3420', brass: '#c9a43a', shell: '#c0392b',
     stubbleLow: '#a8907f', browLow: '#3a2a22',
   },
+  // (M4: the hit flash 0.45 over 0.06 s, from 0.6 over 0.08: the full white-out hid the flinch's first 70 ms, its peak)
   // Night: a less saturated, lower fill keeps the coat blue-charcoal (not navy) and lets the moon-side rim do the reading.
   // (M2: the fill a little less blue again, '#c4cce6' → '#c8cad4', about the same luminance: in motion the navy coat merged
   // with the navy trousers and the stride stopped reading)
   light: { fillDay: [1.25, '#fff0e0'], fillNight: [1.5, '#c8cad4'], rimDay: [0.045, '#ffe0b8'], rimNight: [0.40, '#8fa8ff'],
-           rimFloorDay: 0.20, rimFloorNight: 0.30, sheenDay: 0.30, sheenNight: 0.30, sheenCol: '#9a948e', fillSkin: '#ffe6d6', flash: 0.6, flashT: 0.08, wetTau: 2 },
+           rimFloorDay: 0.20, rimFloorNight: 0.30, sheenDay: 0.30, sheenNight: 0.30, sheenCol: '#9a948e', fillSkin: '#ffe6d6', flash: 0.45, flashT: 0.06, wetTau: 2 },
   // Surfaces: (roughness, metalness, cloth/sheen, skin); the hair's slick lives in its painted highlight band, not a specular hotspot.
   surf: {
     wool: [0.95, 0, 0.55, 0], lining: [0.55, 0, 0, 0], trousers: [0.85, 0, 0.25, 0], shirt: [0.80, 0, 0.10, 0.3],
@@ -80,11 +81,9 @@ export const TUNE = {
   // The wall push marches in place with the walk column's body (wallSpeed) and leans and presses into the input.
   // The stop: the amplitudes and the crouch let go on slower springs (stopRelease, heightRise ω), the upper body pitches
   // on with its momentum (a pendulum ω 2π·2.2, kicked by stopKick °/s at 125 u/s) and the pelvis absorbs the last plant.
-  // dodge*: the M2 placeholder (duck and lean into the dash) until M4's dash and back-hop clips.
   loco: { counterJog: 0.9, accLean: 0.0035, accLeanMin: -1.5, accLeanMax: 7, bank: 0.003, bankMax: 7, leanHz: 1.6, turnDip: 0.6,
           turnHard: 55, turnSoft: 25, turnSoftT: 0.4, stillSettle: 0.12, hipHoldMove: 55, hipHoldIdle: 50,
           wallLean: 12, wallSpeed: 70, wallPush: 1.5, stopRelease: 7, heightRise: 5, stopKick: 170, stopZeta: 0.45, absorb: 1.5, absorbT: 0.16,
-          dodgeDrop: 4, dodgeLean: 10,
           // relaxed arm swing on top of the gait table: the swing sits back of the hang by `back`×amplitude, the elbow closes
           // in front, the upper arms roll in (a true twist, °) in a jog so the forearms swing across the body; the gun arm
           // swings at half with a more open elbow; strafing all but stops the swing and keeps the arms in by the body
@@ -100,7 +99,7 @@ export const TUNE = {
   // roll past 130° to hold the forend)
   gripRoll: { pistol: 10, long: 40, forend: 70, support: 20, knob: 45 },
   headScale: 1.06, // the head bone's scale about its pivot (Y 63): reads at phone size; the hair top stays under 76
-  catchUp: 0.035, blinkHz: 20, blinkHurtWindow: 1.0, reviveBlink: 2.5,
+  catchUp: 0.035, blinkHz: 20, blinkHurtWindow: 1.0, reviveBlink: 2.5, blinkHold: 0.15, reviveHold: 0.35,
   pipLowPass: 0.25, shellHandScale: 2.0,
   // the reload layer's fade in (s): the spec's 0.1 left the hand's first trip (support → pocket, 0.12 s on a fast reload)
   // mostly inside the fade, so the mag-out read late
@@ -126,6 +125,9 @@ export const SOCKETS = {
             // gun it takes)
             // (dir 49° off vertical: the review's 37° stood the gun up behind him like a mast from the high camera)
             backSling: { at: [-7.0, -11.0, 6.6], dir: [-0.12, 0.66, -0.74] }, backSling2: { at: [-9.6, -12.2, 5.8], dir: [-0.08, 0.68, -0.73] },
+            // (while a tool is out the gun in his hands goes onto his back too: the second slot rides muzzle down across the
+            // back, so two guns never stand up over his head like antennas)
+            backSlingLow: { at: [-9.0, -9.0, 3.0], dir: [-0.1, -0.7, -0.7] }, backSlingFlat: { at: [-7.5, -10.0, 6.4], dir: [-0.25, 0.32, -0.91] },
             lapelL: [6.2, 9.5, -3.0],
             mouth: [6.4, 15.5, -1.0], earL: [2.0, 18.0, -5.0], chestPocket: [6.0, 8.0, -4.0] },
   // shellBelt: the shotgun reload's fetch spot on the left hip, 1 u out from the coat
@@ -470,6 +472,228 @@ export const RECOIL = {
   vary: { lo: 0.85, hi: 1.2, yaw: 2.5 },
 };
 
+/* ---------------- M4 actions (§4.12–§4.17) ---------------- */
+// Positions in aim frame A (fwd, up, right; origin spine2, yaw faceYaw) unless stated; angles in degrees. Vector tracks
+// are [t, [values], ease] (frank3d-anim.js sampleV); scalar tracks [t, value, ease] (sample).
+export const MELEE = {
+  // (tail 0.22, not the spec's 0.15: the strike's energy now lives after the contact, and the recovery must come home
+  // slower than the blow went out)
+  T: 0.18, tail: 0.22,
+  // pistol hook / pistol-whip: [handR A fwd, up, right, gun pitch, gun yaw (rel. aim), spine2.yaw, spine1.yaw, pelvis.yaw,
+  // gun roll]. A connected strike starts on CONTACT (after the 35 ms catch-up through the wind-up), a whiff on the
+  // mid-swing key. The ENERGY is after the contact (the hit-stop freezes the impact, then the follow-through carries the
+  // hand 15 u on across the body with the torso still turning, overshooting, and settles): the old keys did all their
+  // moving in the catch-up and then held one pose for 150 ms. The gun lies flat across the hook (rolled, the side up, the
+  // butt leading), so from the high camera its whole silhouette sweeps: upright on end it read as checking the gun.
+  pistol: {
+    // (final pass: the hook is a DOWNWARD diagonal, cocked high by the right ear, through the contact at the man's chest,
+    // driving down and across to the left hip: a purely level hook swept along the camera's depth from the high camera
+    // and the side views and read as a twist; the 20 u drop reads from every angle)
+    windup: [8, 13, 15, 8, 80, 30, 12, 8, 70],
+    hit: [[0, [25, 3, -3, 0, -15, -30, -12, -12, 90]], [0.3, [17, -8, -20, -8, -80, -55, -22, -18, 90], 'O'], [0.55, [17, -6, -16, 0, -60, -44, -17, -14, 80], 'S'], [1, [16, -1, -4, 10, -15, -12, -5, -5, 30], 'S']],
+    whiff: [[0, [16, 10, 9, 5, 45, 18, 7, 5, 80]], [0.22, [25, 3, -3, 0, -15, -30, -12, -12, 90], 'O'], [0.45, [17, -8, -20, -8, -80, -55, -22, -18, 90], 'O'], [0.7, [17, -6, -16, 0, -60, -44, -17, -14, 80], 'S'], [1, [16, -1, -4, 10, -15, -12, -5, -5, 30], 'S']],
+  },
+  // long gun butt-stroke, both hands on the gun: [gun origin A fwd, up, right, gun pitch, gun yaw (rel. aim)] (+ the
+  // pistol's torso columns, roll 0). The muzzle drops back past his right hip and the butt drives up and forward beside
+  // his face (out to his right, not across it: across, his face was buried in his forearms); the follow-through carries
+  // on after the contact, and the recovery comes home slowly (gun yaw 120, not 60: the recovery was bigger than the blow)
+  long: {
+    // (the stroke at the man's chest, not at Frank's own face height: there his head came down over his forearms and it
+    // read as cowering; his head stays up on the target, longHead, and the chest pitches in at half)
+    windup: [9, -4, 9, -50, 70, 32, 12, 8, 0],
+    // (final pass: after the contact the butt DRIVES on 7 u through the man (u .3, overshoot) with the chest still turning,
+    // then rebounds: the old follow-through moved 3 u and the stroke read as one held pose for 200 ms)
+    hit: [[0, [17, -3, 9, -15, 162, -30, -12, -12, 0]], [0.3, [24, -1, 4, -8, 176, -50, -20, -16, 0], 'O'], [0.55, [20, -2, 6, -10, 170, -40, -15, -12, 0], 'S'], [1, [13, 1, 5, 5, 120, -25, -10, -8, 0], 'S']],
+    whiff: [[0, [12, -2, 9, -40, 120, 22, 9, 6, 0]], [0.22, [17, -3, 9, -15, 162, -30, -12, -12, 0], 'O'], [0.45, [24, -1, 4, -8, 176, -50, -20, -16, 0], 'O'], [0.7, [20, -2, 6, -10, 170, -40, -15, -12, 0], 'S'], [1, [13, 1, 5, 5, 120, -25, -10, -8, 0], 'S']],
+  },
+  // (and the body lunges into it: the pelvis forward, the chest over the blow; the head snaps in and the right shoulder
+  // drops at the contact)
+  // (the guard a little under the spec's chin spot A(9, 9, −5): there the forearm hid his face from the high camera)
+  guardL: [9, 6, -4], s2Pitch: [[0, 0], [0.12, 12, 'O'], [0.6, 4, 'S'], [1, 0, 'S']], lunge: [[0, 2], [0.15, 8, 'O'], [0.6, 3, 'S'], [1, 0, 'S']], step: 6, stepT: 0.12, stepLift: 2,
+  snap: { head: 6, clavR: -4, T: 0.12 }, longHead: -12, longPitch: 0.5,
+  // while the hit-stop freezes the contact, it shakes (spine2 yaw °, the hand u, at hz)
+  shake: { yaw: 1.5, hand: 0.6, hz: 30 },
+};
+export const TAKEDOWN = {
+  T: 0.25, tail: 0.2,
+  // pistol hammer-fist, the butt down: [handR A fwd, up, right, gun pitch]; raised = the catch-up's key: the fist cocked
+  // high behind his ear with the elbow out (a clear wind-up silhouette even for its one frame; the old raised key read as a
+  // hand on his head). (The sim drops the victim on the edge frame, so the blow follows him down: the spec's contact at A up
+  // −2 struck the air over a man already on the ground.) After the 0.12 s hit-stop the blow DRIVES 6 u on through (u .12,
+  // overshoot), rebounds (u .3) and recovers: the old clip held one hunch for 250 ms
+  pistol: { raised: [4, 28, 12, 110], keys: [[0, [22, -9, 1, 75]], [0.12, [24, -15, 1, 55], 'O'], [0.3, [21, -6, 2, 70], 'S'], [1, [15, -1, 1, 20], 'S']] },
+  // long gun butt smash: [gun origin A fwd, up, right, gun pitch]
+  long: { raised: [12, 14, 1, 110], keys: [[0, [17, -4, 1, 100]], [0.12, [19, -9, 1, 92], 'O'], [0.3, [16, -2, 1, 100], 'S'], [1, [12, 1, 2, 30], 'S']] },
+  // [pelvis dy, spine2 pitch, spine1 pitch, head pitch]
+  body: { raised: [-2, 6, 2, -4], keys: [[0, [-7, 30, 14, 18]], [0.12, [-9, 36, 16, 24], 'O'], [0.5, [-4, 16, 6, 10], 'S'], [1, [-1, 3, 0, 0], 'S']] },
+  // the left hand on his collar, hauling him back onto the blow (collarPull u toward Frank over u 0–.2)
+  collarL: [20, -9, -5], collarPull: 6, collarTo: 0.5, step: 4, stepT: 0.1,
+  shake: { pitch: 2, hand: 0.6, hz: 30 }, // (the hit-stop's shake: spine2 pitch °, the fist u)
+};
+// The dodge (dodgeT 0.22): a low combat dash (forward and side) or a back-hop (backward, and the no-input default)
+export const DODGE = {
+  // (the hips whip round at hipOmega, not the face's 60: at 60 a side dash swung the lead foot 17 u in one frame)
+  T: 0.22, tail: 0.16, hopFrom: 125, faceOmega: 60, hipOmega: 60,
+  dash: {
+    // ONE STRIDE, not a held pose (the spec's frozen FK lunge glided 70 u with the shoes 4–7 u under the ground and planted
+    // with a 22 u pop): the trail foot stays planted (IK) as the push-off until it leaves the ground behind him (u .15–.27),
+    // then both feet are in the air: the trail leg folds and swings through, the lead leg reaches out heel first and plants
+    // at u plantU at its own FK heel's spot (IK in by plantIn: no pop), skidding `skid` u along the dash over skidT s (the
+    // only allowed plant slide); the trail foot touches down at trailOn (in the dash clock v = u, then 1 + tail/T), never
+    // crossed. A ground clamp lifts the hips over any FK foot that would dip under y 0.5.
+    // (a LOW, flat leap: the hips stay under 32 through the flight, the legs tuck high instead; the landing sinks deep into
+    // the lunge)
+    pelvisY: [[0, 37.3], [0.2, 31, 'O'], [0.5, 31.5, 'S'], [0.8, 31.5, 'S'], [0.95, 28.5, 'S'], [1, 29.5, 'S']], // absolute
+    // (pitched 30, not the spec's 20: from the high camera the flat back and the head out in front are what tells the dash
+    // from the sprint)
+    pelvisPitch: [[0, 0], [0.18, 30, 'O'], [0.8, 30], [1, 22, 'S']], spine1: [[0, 0], [0.18, 10, 'O'], [0.8, 10], [1, 6, 'S']], spine2: [[0, 0], [0.18, 8, 'O'], [0.8, 8], [1, 4, 'S']],
+    // FK legs [thigh flex (relative to the pelvis, pitched 30° forward), knee, ankle (+ toe up)]
+    lead: [[0, [0, 8, 0]], [0.18, [80, 120, -10], 'O'], [0.5, [88, 112, -5], 'S'], [0.8, [76, 32, 10], 'S'], [1, [60, 40, 0], 'S']],
+    trail: [[0, [0, 8, 0]], [0.18, [-5, 15, -25], 'O'], [0.27, [-12, 12, -35], 'S'], [0.55, [10, 105, -30], 'S'], [0.85, [50, 100, -15], 'S'], [1, [40, 90, -5], 'S']],
+    leadOff: [0.02, 0.1], pushOff: [0.1, 0.32], plantU: 0.8, plantIn: 1.0, trailOn: 1.0, trailIn: 1.25, skid: 6, skidT: 0.1, trailLat: 4.4,
+    // the touchdowns relative to where the body stops (along the travel, out to the foot's own side)
+    leadAlong: [-2, 12], leadSide: [1, 12], trailAlong: [-14, 0], toeOff: 0.32, // (the push-off's heel rise, rad)
+    // the chest: a side dash keeps 80% toward the aim, and the hips whip at most hipCap° off the aim (a strafe-lunge: the
+    // gun and the shoulders stay near the target)
+    chestSide: 0.8, hipCap: 55,
+    // the gun tucked: the pistol in the spine2 frame, pitched up (one hand); the long guns at port arms (both hands)
+    pistol: { at: [6, 4, 1], pitch: 70, yaw: -10, roll: 0 },
+    // the free (left) arm back and out for balance with the pistol tucked: [shoulder flex (relative to the ~48° pitched
+    // chest, so 10 is well back of the vertical), abd, elbow] (−30 flung it up over his back like a raised arm)
+    armL: [20, 25, 80], headPitch: -10,
+    // the coat: the dash's extra flare (forward dashes), less on side dashes and dashes toward the camera (it belled out
+    // into a disc / a dome over the legs), each panel's flare capped at flareCap there; a ripple runs round the hem
+    flare: 20, flareSide: 8, flareCap: 35, ripple: 6, rippleHz: 7,
+  },
+  hop: {
+    // (bigger than the spec's: from the high camera its 40.5 peak and 30°/60° tuck read as a twitch)
+    pelvisY: [[0, 37.3], [0.2, 35, 'O'], [0.5, 44, 'S'], [0.85, 36, 'S'], [1, 33.5, 'I']],
+    thigh: [[0, 0], [0.3, 55, 'S'], [0.7, 55, 'H'], [1, 30, 'S']], knee: [[0, 8], [0.3, 105, 'S'], [0.75, 75, 'S'], [1, 55, 'S']],
+    spine2: [[0, 0], [0.3, -16, 'S'], [0.7, -16, 'H'], [1, 0, 'S']], landLean: 14, ikOff: [0.1, 0.2], ikOn: 0.88, ikIn: 1, land: 6,
+    // the landing's give in the arms: the gun dips (pitch, back along the bore) over u .88–1, back over the tail; the
+    // shadow blob shrinks as he rises
+    gunDip: -6, gunBack: 1.5, blobMin: 0.75,
+  },
+  dust: { n: 8, T: 0.35, r: 11, rise: 5, size: 16 }, // (the spec's size 7 vanished against the leaf litter at the game's zoom)
+};
+// Flinch (additive), by direction and kind; revive stagger
+export const FLINCH = {
+  // gain: on every channel below (the spec's angles at a typical bullet's A of 0.35–0.5 moved the chest 5–7° and the head
+  // 6–9°, and the hit flash covers the first 0.07 s of it: from the high camera the flinch didn't read)
+  // (accepted amendment, §4.15/D6: the gain is on the body channels; the gun's kick (front gun, side gunYaw) uses the plain
+  // envelope and is zeroed on a shot's flash frame). rise 0.08, not the spec's 0.05: the peak lands after the hit flash
+  // (TUNE.light.flashT 0.06) instead of under it
+  rise: 0.08, tau: 0.12, hz: 2.2, gain: 1.8,
+  front: { s2: -14, s1: -6, head: -18, gun: 16, pelDx: -1.5 },
+  // (the side hit also knocks the hips aside (pelLat), drives the hit-side shoulder back and up, and swings the gun with the
+  // chest: the spec's head-and-chest-only side flinch moved the gun 0.4 u and read as a head tilt)
+  side: { s2Yaw: -14, s2Roll: -8, headYaw: -18, headRoll: -10, gunYaw: -12, pelLat: 2.5, clavElev: 6, clavProt: -10 },
+  back: { s2: 12, head: 10, pelDx: 3 },
+  coat: 1.4, tremor: { deg: 1.5, hz: 18 },
+  // the ram: + the chest thrown back and both arms flung up for throwT, a second corrective step at step2
+  ram: { T: 0.5, roll: 8, abdL: 40, s2: -20, armsUp: 15, throwT: 0.25, step2: 0.22 }, bite: { lat: 2, T: 0.2 }, fire: { T: 0.4, shieldL: [10, 14, -4], headYaw: 25, amp: 0.3 },
+};
+export const REVIVE = {
+  T: 1.0, spine2: [[0, 0], [0.15, 15, 'O'], [0.5, 6, 'S'], [1, 0, 'S']], pelvisY: [[0, 0], [0.15, -5, 'O'], [1, 0, 'S']],
+  head: [[0, 0], [0.15, 12, 'O'], [1, 0, 'S']], aimCap: 0.2, aimCapT: 0.3,
+};
+// Death (clock deathT, real seconds). Absolute pelvis values; root slide along the template yaw F.
+export const DEATH = {
+  turnT: 0.3, ikOff: 0.32, ikTo: 0.58, gunAt: 0.12,
+  back: {
+    pelvisY: [[0, 37.3], [0.12, 36, 'O'], [0.45, 24, 'I'], [0.75, 6.5, 'I'], [0.84, 8.0, 'O'], [0.95, 6.5, 'I']],
+    pelvisPitch: [[0, 0], [0.12, 4, 'O'], [0.45, -10, 'S'], [0.75, -88, 'I'], [0.84, -85, 'O'], [0.95, -88, 'I']],
+    slide: [[0, 0], [0.45, -3, 'S'], [0.75, -16, 'I']],
+    spine1: [[0, 0], [0.12, -6, 'O'], [0.45, 6, 'S'], [0.75, -2, 'I'], [0.95, 0, 'S']],
+    spine2: [[0, 0], [0.06, -18, 'O'], [0.45, -8, 'S'], [0.75, 0, 'I']],
+    headPitch: [[0, 0], [0.06, -25, 'O'], [0.45, 15, 'S'], [0.75, 20, 'I'], [0.84, -8, 'O'], [0.95, 5, 'I']],
+    headYaw: [[0, 0], [0.45, 0], [0.75, 35, 'S']], headRoll: [[0.75, 0], [1.1, 15, 'S']], // × sign(cos F): toward the camera
+    // [thigh flex, knee, ankle, thigh abd, thigh twist (rolled out)]
+    legL: [[0, [0, 8, 0, 0, 0]], [0.45, [40, 75, 0, 4, 10], 'I'], [0.75, [45, 105, -20, 8, 25], 'I'], [0.95, [40, 100, -20, 8, 30], 'S']],
+    legR: [[0, [0, 8, 0, 0, 0]], [0.45, [30, 60, 0, 4, 10], 'I'], [0.75, [5, 10, -40, 10, 30], 'I'], [0.95, [-4, 4, -20, 12, 30], 'S']],
+    // [shoulder flex, abd, elbow, twist]
+    // (the settle: the right arm flung over his head and the left out to the side, both lying ON the ground: the spec's
+    // flex 150 / elbow 70 left the hands floating 10 u over him. Through the stagger the arms fly out bent, not straight
+    // ahead and straight up like a mannequin's)
+    armR: [[0, [8, 9, 18, 0]], [0.06, [70, 15, 20, 0], 'O'], [0.45, [95, 30, 55, 0], 'S'], [0.75, [158, 35, 30, 0], 'I'], [0.95, [168, 42, 25, 0], 'S']],
+    // (final pass: the left arm flung UP and out, the elbow at shoulder height and the hand by his head (humeral twist −60):
+    // at [10, 45, 50, 0] its forearm pointed straight ahead at chest height for 330 ms and still read as a mannequin's)
+    armL: [[0, [4, 9, 12, 0]], [0.06, [20, 75, 70, -60], 'O'], [0.45, [5, 90, 75, -50], 'S'], [0.75, [0, 55, 25, 0], 'I'], [0.95, [-4, 62, 18, 0], 'S']],
+  },
+  front: {
+    pelvisY: [[0, 37.3], [0.12, 35, 'O'], [0.45, 22, 'I'], [0.75, 6.5, 'I'], [0.84, 8.0, 'O'], [0.95, 6.5, 'I']],
+    pelvisPitch: [[0, 0], [0.12, 6, 'O'], [0.45, 28, 'S'], [0.75, 82, 'I'], [0.84, 79, 'O'], [0.95, 82, 'I']],
+    slide: [[0, 0], [0.45, 4, 'S'], [0.75, 16, 'I']],
+    spine1: [[0, 0], [0.12, 6, 'O'], [0.45, 10, 'S'], [0.75, 0, 'I']],
+    spine2: [[0, 0], [0.06, 18, 'O'], [0.45, 10, 'S'], [0.75, -4, 'I'], [0.95, 0, 'S']],
+    headPitch: [[0, 0], [0.06, 18, 'O'], [0.45, -12, 'S'], [0.75, -18, 'I'], [0.84, -6, 'O'], [0.95, -10, 'I']],
+    headYaw: [[0, 0], [0.45, 10], [0.75, 70, 'S']], headRoll: [[0.75, 0], [1.1, 10, 'S']],
+    // (the settle: the legs out straight, the toes down: the spec's bent knees and flexed ankles held both shoes 8 u up)
+    legL: [[0, [0, 8, 0, 0, 0]], [0.12, [10, 25, 0, 0, 0], 'O'], [0.45, [-12, 80, -10, 4, 5], 'I'], [0.75, [-6, 20, 10, 8, 15], 'I'], [0.95, [-4, 6, 25, 8, 15], 'S']],
+    legR: [[0, [0, 8, 0, 0, 0]], [0.12, [15, 20, 0, 0, 0], 'O'], [0.45, [20, 50, 0, 4, 5], 'I'], [0.75, [-2, 20, 10, 10, 15], 'I'], [0.95, [0, 8, 25, 10, 15], 'S']],
+    // (face down: the right arm by his side, the left one up past his head, both on the ground; flex 90 is straight down)
+    armR: [[0, [8, 9, 18, 0]], [0.06, [20, 20, 30, 0], 'O'], [0.45, [40, 30, 45, 0], 'S'], [0.75, [4, 26, 15, 0], 'I'], [0.95, [2, 30, 18, 0], 'S']],
+    armL: [[0, [4, 9, 12, 0]], [0.06, [40, 15, 30, 0], 'O'], [0.45, [90, 20, 25, 0], 'S'], [0.75, [158, 30, 30, 0], 'I'], [0.95, [164, 36, 10, 0], 'S']],
+  },
+  clampY: 1.0, liftRate: 40,
+  // the dropped gun: launch (fall direction, up), spin, gravity, one bounce
+  // (handK/handMax: the hand's horizontal velocity × 0.3, at most 60 u/s; side: out to the camera's side of him; it lands
+  // 15–45 u from the hand)
+  gun: { fwd: 20, side: 35, up: 70, handK: 0.3, handMax: 60, spin: 8, g: 900, rest: 0.3, settleT: 0.15 },
+  // the coat on the ground: blend in from coatFrom to coatTo (s); the panels spread outward by `spread`
+  coatFrom: 0.45, coatTo: 0.8, spread: 0.9,
+  // once he has landed (snapFrom → snapTo s), a hand or a foot floating within snapRange of the ground comes down onto it
+  // (the hand's lowest point at snapY, the shoe's at snapFootY); a long gun slung on his back slides off and lies beside him
+  // on the back variant (slungFrom → slungTo s, slungOff u out to the camera side)
+  snapFrom: 0.72, snapTo: 1.0, snapRange: 16, snapY: 1.5, snapFootY: 0.6, slungFrom: 0.4, slungTo: 0.8, slungOff: 14,
+};
+// Repair, chop, pick (§4.17)
+export const REPAIR = {
+  in: 0.15, out: 0.15, draw: 0.2, rate: 3,
+  // the hammer head's strike point in the work frame (origin root, yaw faceYaw): on the opening's face, x = clamp(dist −
+  // faceBack, 11, 20) (the spec's dist − 4 is the cell centre: the head went into the door), y per kind; z out to his right
+  // (6, not 3: he works off his right shoulder, outside his own silhouette, so the camera behind him sees the blow)
+  faceBack: 17, y: { door: 44, window: 46 }, z: 6,
+  // the fist relative to its contact spot over the hammer phase h, and the hammer's pitch about the grip. The apex is up
+  // and out beside his head with the head cocked back over it (pitch 105): seen from behind (he repairs facing away from
+  // the camera) the spec's apex hid behind his neck and shoulders for the whole cycle
+  fist: [[0, [0, 0, 0]], [0.12, [-1.5, 2.5, 0], 'O'], [0.72, [-3, 30, 9], 'S'], [1, [0, 0, 0], 'I3']],
+  pitch: [[0, 0], [0.72, 105, 'S'], [1, 0, 'I3']], tilt: 25,
+  // the hammer arm's elbow winged out and up toward the apex (aim-frame pole), blended in over the lift
+  poleApex: [-0.2, 0.3, 1],
+  // the body works every blow: the chest turns into the lift and back through the strike, spine2 pitches into each contact
+  // (accent), the hips dip and the head nods on it
+  s2Yaw: [[0, -2], [0.72, 16, 'S'], [1, -8, 'I3']], s2Pitch: 6, accent: [[0, 8], [0.12, 0, 'O'], [0.95, 0], [1, 8, 'I']],
+  dip: [[0, -1.5], [0.15, 0, 'O'], [0.95, 0], [1, -1.5, 'I']], nod: [[0, 6], [0.15, 0, 'O'], [0.95, 0], [1, 6, 'I']],
+  pelvisY: -1.5, footL: 4,
+  // the plank across the opening (work frame offsets from the strike point), the left palm pressing it flat; at a door it
+  // stands 2.5 u proud of the door's face (flush, it vanished into the door), and sticks out past his left side
+  plank: [1.2, 0.5, -5], plankL: [0.0, 0.5, -10], plankDoor: [-1.5, -4, -8], plankLDoor: [-2.7, -4, -14],
+  // each blow throws a little puff of wood chips at the strike point
+  chips: { n: 8, T: 0.25, r: 4, rise: 4, size: 8 },
+  phone: { pelvisY: -8, y: 30, twist: 25, hz: 1.5 },
+};
+export const CHOP = {
+  T: 0.25, tail: 0.3, hold: 1.2, draw: 0.25,
+  // hands (the right hand's grip; the left hand at gripL, 10 u down the handle) in the work frame; the axe head at the
+  // tree. (A hip-driven forehand: lean 32, the knees bent 28, the hands out at (20, 34, 4))
+  contact: { hands: [20, 34, 4], lean: 32, knee: 28 }, // (the axe's roll is its edge direction, AXE_K.contact.e)
+  // the axe stays bitten in the wood to bite.u (the hands shiver: amp at hz, decaying), the wrench pulls it out over
+  // bite.u → wrench.u (the hands back and up, the chest twisting back), then the wind-up: the head cocked behind the right
+  // shoulder with the handle diagonal (the old wound-up axe stood upright by his ear like a torch)
+  bite: { u: 0.2, amp: 0.6, hz: 25, s2Yaw: -20 },
+  wrench: { u: 0.35, hands: [-3, 3, 0], s2Yaw: -24 },
+  windup: { hands: [-4, 60, 12], dir: [-0.65, 0.58, 0.45], s2Yaw: 45, pelvisYaw: 10, pelvisZ: 1.5 },
+  lowered: { hands: [6, 26, 10], dir: [0.15, -0.95, 0.2] }, // the tail: the axe at his side, the head near the right foot
+  // (a felling axe, §3.5 amended: the 22 u hatchet read as a toy at Frank's 75 u = 1.8 m; handle −6..27, head at x 26)
+  gripR: 5, gripL: -5, headAt: 26.5, trunk: 5, // (the head bites the trunk this far short of the tree's centre)
+};
+export const PICK = { T: 0.2, rise: 0.3, pelvisY: [[0, 0], [0.5, -13, 'O'], [1, -13, 'H']], spine2: [[0, 0], [0.5, 35, 'O'], [1, 35, 'H']], spine1: [[0, 0], [0.5, 18, 'O'], [1, 18, 'H']],
+  pelvisPitch: [[0, 0], [0.5, 14, 'O'], [1, 14, 'H']], handL: [14, 5, -3],
+  // (the chest turns camYaw° toward the camera and the hand reaches camSide u toward it: facing east the reach was hidden
+  // behind his body)
+  camYaw: 20, camSide: 4 };
+
 /* ---------------- fidgets (§4.7) ---------------- */
 export const FIDGETS = {
   neckRoll: { T: 1.4, headRoll: [[0, 0], [0.25, 9, 'S'], [0.5, 0, 'S'], [0.75, -9, 'S'], [1, 0, 'S']], headPitch: [[0, 0], [0.5, 8, 'S'], [1, 0, 'S']] },
@@ -486,5 +710,6 @@ export function allTracks() {
     if (o && typeof o === 'object' && !Array.isArray(o)) for (const k of Object.keys(o)) walk(o[k], path + '.' + k);
   };
   walk(RECOIL, 'RECOIL'); walk(FIDGETS, 'FIDGETS'); walk(ACTIONS, 'ACTIONS'); walk(SWAP, 'SWAP'); walk(GUN_POSES, 'GUN_POSES');
+  walk(MELEE, 'MELEE'); walk(TAKEDOWN, 'TAKEDOWN'); walk(DODGE, 'DODGE'); walk(REVIVE, 'REVIVE'); walk(DEATH, 'DEATH'); walk(REPAIR, 'REPAIR'); walk(PICK, 'PICK');
   return out;
 }

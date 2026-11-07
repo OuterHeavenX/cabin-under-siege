@@ -627,7 +627,8 @@ if (want('desktop')) {
   await sleep(300);
   // Ruth (now ♥3) pulls you up once per attack — spend that first.
   await ev(page, () => { const G = window.__cus.G; G.allyState = { revived: true }; G.player.invuln = 0; G.player.hp = 5; window.__cus.dbg.damagePlayer(50, G.player.x + 10, G.player.y); });
-  await sleep(500);
+  // The defeat screen waits 1.6 s of game time for Frank's fall to play (siege.js FALL_S), so poll for it.
+  for (let i = 0; i < 100 && !(await page.textContent('#modal-root')).includes('blacked out'); i++) await sleep(150);
   check('10a. Defeat screen shown', (await page.textContent('#modal-root')).includes('blacked out'));
   await page.screenshot({ path: OUT + 'desktop-defeat.png' });
   await page.click('[data-go]');
@@ -1072,7 +1073,8 @@ if (want('v3')) {
   await page.screenshot({ path: OUT + 'v3-endless.png' });
   for (let i = 0; i < 60 && !(await ev(page, () => window.__cus.G.siegeActive)); i++) await sleep(150);
   await ev(page, () => { const p = window.__cus.G.player; p.invuln = 0; window.__cus.dbg.damagePlayer(9999, p.x + 10, p.y, 'melee'); });
-  await sleep(2400);
+  // The result waits 1.6 s of game time for Frank's fall (siege.js FALL_S): poll for it.
+  for (let i = 0; i < 100 && !(await page.textContent('#modal-root')).includes('waves survived'); i++) await sleep(150);
   const res = await page.textContent('#modal-root');
   check('v3 Endless Siege: defeat shows waves survived and records a personal best', res.includes('waves survived') && res.includes('personal best'));
   await page.click('[data-title]'); await sleep(300);
@@ -1847,9 +1849,15 @@ if (want('life')) {
 
   // --- Phase B: make it home ---
   await C(() => window.__cus.newGame('normal')); await sleep(500); await skipDialogues(page);
+  // Let the intro finish completely before setting the story up: under load a dialogue can still be open after the fixed
+  // wait, and then the setup below races the intro.
+  for (let i = 0; i < 30 && await C(() => !!(window.__cus.G.modal || window.__cus.G.cutscene)); i++) { await sleep(200); await skipDialogues(page); }
   await C(() => { const c = window.__cus; c.G.s.story.step = 'town_trust'; c.G.s.story.flags.jobsBase = 0; c.G.s.story.flags.townOpen = true; c.G.s.jobsDone = 3; c.G.s.errands.abe_pies = { state: 'done' }; c.G.s.errands.jenny_cat = { state: 'done' }; c.G.events.emit('jobDone'); });
   await sleep(300); await skipDialogues(page); await sleep(300); await skipDialogues(page);
-  check('Life: earning the town\'s trust opens "Make Pine Hollow home" (phase B)', (await step(page)) === 'ch1_life' && /Make Pine Hollow home \(0\/3\)/.test(await C(() => document.getElementById('objective').textContent)));
+  // The step moves on through a short dialogue chain; under load that can take longer than the two waits above.
+  for (let i = 0; i < 20 && (await step(page)) !== 'ch1_life'; i++) { await sleep(300); await skipDialogues(page); }
+  const pb = { step: await step(page), obj: await C(() => document.getElementById('objective').textContent), modal: await C(() => window.__cus.G.modal || null), moments: await mod('./src/game/life.js', (m) => m.lifeMomentsDone()) };
+  check('Life: earning the town\'s trust opens "Make Pine Hollow home" (phase B)', pb.step === 'ch1_life' && /Make Pine Hollow home \(0\/3\)/.test(pb.obj), JSON.stringify(pb));
   await C(() => { window.__cus.G.events.emit('cooked', 'stew'); window.__cus.G.events.emit('cooked', 'stew'); });
   check('Life: the same kind of moment only counts once', await mod('./src/game/life.js', (m) => m.lifeMomentsDone().length) === 1);
   await C(() => { window.__cus.G.events.emit('gift', 'dee'); window.__cus.G.events.emit('supper'); });
@@ -2776,6 +2784,58 @@ if (want('3d')) {
       await frames(0.3);
       check('3D Frank: the weapon probes never produced a non-finite transform or an IK failure', (await FR()).resets === 0, '');
     }
+    // M4, actions (§7.3): frozen pose probes again. A dodge halfway (dodgeT 0.11): forward along the aim it is the low
+    // dash, straight back the back-hop; death keeps him in the scene, on the ground (the gun dropped beside him), and the
+    // recovery puts him back on his feet.
+    {
+      const frames = async (t = 0.3) => { const t0 = await C(() => window.__cus.G.time); for (let i = 0; i < 200 && (await C(() => window.__cus.G.time)) - t0 < t; i++) await sleep(100); };
+      const pose = (fn, a) => C(fn, a);
+      await pose(() => { const c = window.__cus, p = c.G.player; c.G.modal = 'pose'; p.weapon = 'pistol'; p.mag = 8; p.reloadT = 0; p.swapT = 0; p.muzzle = -1; p.angle = 0; p.lastCombat = 0; p.dodgeT = 0; });
+      await frames(0.3);
+      await pose(() => { const p = window.__cus.G.player; p.dodgeT = 0.11; p.dodgeDx = 1; p.dodgeDy = 0; });
+      await frames(0.3); let F4 = await FR();
+      check('3D Frank: a dodge is a low dash', F4.full === 'dodge' && F4.pelvisY < 32 && F4.actions && F4.actions.dodge && F4.actions.dodge.variant === 'dash', JSON.stringify({ full: F4.full, pelvisY: F4.pelvisY, dodge: F4.actions && F4.actions.dodge }));
+      await pose(() => { window.__cus.G.player.dodgeT = 0; }); await frames(0.4);
+      await pose(() => { const p = window.__cus.G.player; p.dodgeT = 0.11; p.dodgeDx = -1; p.dodgeDy = 0; });
+      await frames(0.3); const H4 = await FR();
+      check('3D Frank: a dodge backward is a back-hop (up in the air, the gun still on target)', H4.full === 'dodge' && H4.actions.dodge && H4.actions.dodge.variant === 'hop' && H4.pelvisY > 38 && H4.gunDriver === 'aim',
+        JSON.stringify({ full: H4.full, pelvisY: H4.pelvisY, dodge: H4.actions && H4.actions.dodge, gunDriver: H4.gunDriver }));
+      await pose(() => { window.__cus.G.player.dodgeT = 0; }); await frames(0.4);
+      await pose(() => { const c = window.__cus, p = c.G.player; c.G.hurtDir = { angle: 0.2, t: 1.2 }; p.dead = true; });
+      await frames(1.6); F4 = await FR();
+      const ppl = (await mod('./src/world/render3d.js', (m) => m.view3dState())).people;
+      const DA = F4.actions && F4.actions.death;
+      check('3D Frank: death keeps him in the scene, down on the ground', ppl >= 1 && F4.full === 'death' && F4.pelvisY < 12 && F4.lowest >= 0.9 && F4.actions.visible && DA && DA.variant === 'back' && DA.gun && DA.gun.rest && DA.gun.p[1] < 1.5,
+        JSON.stringify({ ppl, full: F4.full, pelvisY: F4.pelvisY, lowest: F4.lowest, death: DA, visible: F4.actions && F4.actions.visible }));
+      await pose(() => { const c = window.__cus; c.G.player.dead = false; c.G.hurtDir = null; });
+      await frames(0.4); F4 = await FR();
+      check('3D Frank: back on his feet after recovery', F4.full !== 'death' && F4.pelvisY > 30 && F4.inHand === 'pistol', JSON.stringify({ full: F4.full, pelvisY: F4.pelvisY, inHand: F4.inHand }));
+      await pose(() => { const c = window.__cus, p = c.G.player; c.G.modal = null; p.lastCombat = 99; });
+      await frames(0.3);
+      check('3D Frank: the action probes never produced a non-finite transform', (await FR()).resets === 0, '');
+      // a real defeat (damagePlayer → handleDefeat): the defeat screen waits for the fall to play (nothing over Frank for
+      // the first 1.2 s), then opens; the fall is under way by then
+      {
+        await C(() => { const c = window.__cus, G = c.G; G.siegeActive = false; G.assault = null; G.allyState = { revived: true }; G.player.invuln = 0; G.player.hp = 5; });
+        const t0 = Date.now();
+        await mod('./src/game/player.js', (m) => { const p = window.__cus.G.player; m.damagePlayer(9999, p.x + 200, p.y + 40, 'bullet'); });
+        // The wait runs on the game's capped frame clock (like the fall itself), so with software WebGL at a few fps the
+        // screen opens several seconds of wall time later; allow up to ~40 s and judge it by Frank's pose, not the clock.
+        let early = 0, seen = null;
+        for (let i = 0; i < 400; i++) {
+          const n = await C(() => document.querySelectorAll('#modal-root .modal-wrap').length);
+          const dt = Date.now() - t0;
+          if (n && seen === null) seen = dt;
+          if (n && dt < 1200) early++;
+          if (seen !== null) break;
+          await sleep(100);
+        }
+        const FD = await FR();
+        check('3D Frank: a real defeat lets the fall play before the defeat screen opens', early === 0 && seen !== null && FD.full === 'death' && FD.pelvisY < 20, JSON.stringify({ early, seen, full: FD.full, pelvisY: FD.pelvisY }));
+        await C(() => { const c = window.__cus, G = c.G; c.dbg.closeAll(); G.modal = null; G.transition = null; G.player.dead = false; G.player.hp = 60; G.hurtDir = null; });
+        await sleep(600);
+      }
+    }
     await C((o) => { const p = window.__cus.G.player; p.x = o.x; p.y = o.y; }, home);
     await sleep(600);
   }
@@ -2969,10 +3029,14 @@ if (want('frank')) {
   {
     const clips = await import('../src/world/frank3d-clips.js');
     const bad = [];
+    // (M4: a key's value may be a vector, [t, [v0, v1, ...], ease] (frank3d-anim.js sampleV): every component finite, and
+    // the same length through the track)
+    const fin = (v, n) => Number.isFinite(v) || (Array.isArray(v) && v.length > 0 && v.every(Number.isFinite) && (n === undefined || v.length === n));
     for (const [path, tr] of clips.allTracks()) {
+      const n = Array.isArray(tr[0] && tr[0][1]) ? tr[0][1].length : undefined;
       for (let i = 0; i < tr.length; i++) {
         const k = tr[i];
-        if (!(Number.isFinite(k[0]) && Number.isFinite(k[1]) && k[0] >= 0) || (i && k[0] < tr[i - 1][0]) || (k[2] !== undefined && !anim.EASE_IDS.includes(k[2]))) { bad.push(path + '#' + i); break; }
+        if (!(Number.isFinite(k[0]) && fin(k[1], n) && k[0] >= 0) || (i && k[0] < tr[i - 1][0]) || (k[2] !== undefined && !anim.EASE_IDS.includes(k[2]))) { bad.push(path + '#' + i); break; }
       }
     }
     const flash = [];
@@ -3190,6 +3254,217 @@ if (want('frank')) {
         const s = rig(w); G.enemies = D === 220 ? [] : [{ x: 500 + D, y: 500, radius: 10, dead: false }]; run(s, 0.8); res.cheek[w + D] = F.frankDebug(s.r).eyeToBore;
       }
     }
+    // M4, the actions, on the same live rig: the sim's action timers (dodge motion at 400 u/s, meleeAnim, chopAnim, a
+    // repair hold) ticked like updatePlayer does
+    const res4 = {};
+    {
+      const tick4 = (s) => {
+        const { p } = s;
+        // (the sim's hit-stop (updateFx) freezes the update: meleeAnim holds at the contact while G.fx.stop lasts)
+        if (!(G.fx && G.fx.stop > 0)) p.meleeAnim -= dt;
+        p.chopAnim -= dt; p.invuln -= dt; p.flinch = Math.max(0, p.flinch - dt * 2.5);
+        if (p.dodgeT > 0) { p.dodgeT -= dt; p.x += p.dodgeDx * 400 * dt; p.y += p.dodgeDy * 400 * dt; }
+        if (G.repairHold) G.repairHold.t += dt;
+        if (G.fx && G.fx.stop > 0) G.fx.stop -= dt;
+        tick(s);
+      };
+      const run4 = (s, sec, fn) => { for (let i = 0; i < Math.round(sec / dt); i++) { tick4(s); if (fn) fn(i); } };
+      const D = (s) => F.frankDebug(s.r);
+      // (a) the dodge: the dash goes low (FK legs), the back-hop goes up; both hand the feet back planted, no IK failure
+      res4.dodge = {};
+      for (const [nm, dx, dy] of [['fwd', 1, 0], ['side', 0, 1], ['hop', -1, 0]]) {
+        const s = rig('pistol'); run4(s, 0.8);
+        s.p.dodgeDx = dx; s.p.dodgeDy = dy; s.p.dodgeT = 0.22;
+        let lo = 99, hi = 0, full = new Set(), variant = null;
+        run4(s, 0.38, () => { const d = D(s); lo = Math.min(lo, d.pelvisY); hi = Math.max(hi, d.pelvisY); full.add(d.full); if (d.actions.dodge) variant = d.actions.dodge.variant; });
+        run4(s, 0.9); const d = D(s);
+        res4.dodge[nm] = { variant, lo: +lo.toFixed(1), hi: +hi.toFixed(1), full: [...full], planted: d.planted, feetY: Math.max(...d.feet.map((f) => f[1])), ik: s.r.st.ikFails, resets: s.r.st.resets, after: d.full };
+      }
+      // (b) death, both variants: down on the ground (pelvis < 12) with nothing under y 0.9 once he lands (the ground clamp),
+      // never hidden, the gun dropped and lying on the ground; the recovery is a hard reset to his feet
+      res4.death = {};
+      for (const [nm, hurt] of [['back', 0.3], ['front', Math.PI - 0.3]]) {
+        const s = rig(nm === 'back' ? 'pistol' : 'shotgun'); run4(s, 0.8);
+        G.hurtDir = { angle: hurt, t: 1.2 }; s.p.lastHurt = 0; s.p.hp = 0; s.p.dead = true; s.p.invuln = 0.55;
+        let lowest = 99, hidden = 0;
+        run4(s, 1.8, (i) => { const d = D(s); if (i * dt > 0.9) lowest = Math.min(lowest, d.lowest); if (!d.actions.visible) hidden++; });
+        const d = D(s), gb = s.r.bones[s.p.weapon], gy = gb.scale.x > 0.5 ? new T3.Vector3().setFromMatrixPosition(gb.matrixWorld).y : null;
+        s.p.dead = false; s.p.hp = 60; run4(s, 0.1); const u = D(s);
+        res4.death[nm] = { variant: d.actions.death && d.actions.death.variant, pelvisY: d.pelvisY, lowest: +lowest.toFixed(2), hidden, gun: d.actions.death && d.actions.death.gun, gunY: gy && +gy.toFixed(2), up: [u.full, u.pelvisY], ik: s.r.st.ikFails, resets: s.r.st.resets };
+      }
+      // (c) the strike: a connected blow is at the contact key once the 35 ms catch-up has run (the gun at A(23, 1, −3)), a
+      // whiff starts mid-swing; both hand back to the aim
+      res4.melee = {};
+      for (const conn of [true, false]) {
+        const s = rig('pistol'); run4(s, 0.8); G.fx = { stop: conn ? 0.05 : 0 }; s.p.meleeAnim = 0.18;
+        tick4(s); const d0 = D(s); run4(s, 0.04); const d1 = D(s);
+        const B = s.r.bones, o = new T3.Vector3().setFromMatrixPosition(B.spine2.matrixWorld), g = new T3.Vector3().setFromMatrixPosition(B.pistol.matrixWorld).sub(o);
+        run4(s, 0.5); const d2 = D(s);
+        res4.melee[conn ? 'hit' : 'whiff'] = { edge: [d0.upper, d0.actions.melee && d0.actions.melee.conn], gunA: [+g.x.toFixed(1), +g.y.toFixed(1), +g.z.toFixed(1)], after: d2.upper, ik: s.r.st.ikFails, resets: s.r.st.resets };
+        G.fx = null;
+      }
+      // (d) the axe: the gun goes away and the axe is in his hands at once; after the 1.2 s hold the gun comes back
+      {
+        const s = rig('pistol'); run4(s, 0.8); G.interactTarget = { x: s.p.x + 34, y: s.p.y }; s.p.chopAnim = 0.25; tick4(s);
+        const B = s.r.bones, a0 = [B.axe.scale.x, B.pistol.scale.x], f0 = D(s).full; run4(s, 0.5); const a1 = [B.axe.scale.x, B.pistol.scale.x];
+        run4(s, 1.6); const a2 = [B.axe.scale.x, B.pistol.scale.x], d2 = D(s);
+        res4.chop = { edge: [f0, ...a0], held: a1, after: [d2.full, d2.inHand, ...a2], ik: s.r.st.ikFails, resets: s.r.st.resets };
+        G.interactTarget = null;
+      }
+      // (e) repair: the hammer and the plank come out, then the gun goes back in his hand
+      {
+        const s = rig('pistol'); run4(s, 0.8); G.repairHold = { target: { cx: Math.floor((s.p.x + 34) / 32), cy: Math.floor(s.p.y / 32) }, kind: 'door', t: 0, time: 99, cost: 0, x: s.p.x, y: s.p.y };
+        run4(s, 0.6); const B = s.r.bones, d1 = D(s), h1 = [B.hammer.scale.x, B.plank.scale.x, B.pistol.scale.x];
+        G.repairHold = null; run4(s, 0.6); const d2 = D(s);
+        res4.repair = { during: [d1.full, ...h1], after: [d2.full, d2.inHand, B.hammer.scale.x], ik: s.r.st.ikFails, resets: s.r.st.resets };
+      }
+      // (f) the flinch reads the hit's side on the hit frame
+      {
+        const s = rig('pistol'); run4(s, 0.8); G.hurtDir = { angle: Math.PI / 2, t: 1.2 }; s.p.lastHurt = 0; s.p.hp = 86; s.p.invuln = 0.55; s.p.flinch = 0.6; tick4(s);
+        const d = D(s); run4(s, 0.6);
+        res4.flinch = { hurt: d.actions.hurt, resets: s.r.st.resets };
+      }
+    }
+    // ---- M4 fix: measured claims (the skinned mesh itself: getVertexPosition on the CPU) ----
+    const res5 = {};
+    {
+      const tick4 = (s) => {
+        const { p } = s;
+        // (the sim's hit-stop (updateFx) freezes the update: meleeAnim holds at the contact while G.fx.stop lasts)
+        if (!(G.fx && G.fx.stop > 0)) p.meleeAnim -= dt;
+        p.chopAnim -= dt; p.invuln -= dt; p.flinch = Math.max(0, p.flinch - dt * 2.5);
+        if (p.dodgeT > 0) { p.dodgeT -= dt; p.x += p.dodgeDx * 400 * dt; p.y += p.dodgeDy * 400 * dt; }
+        if (G.repairHold) G.repairHold.t += dt;
+        if (G.fx && G.fx.stop > 0) G.fx.stop -= dt;
+        tick(s);
+      };
+      const run4 = (s, sec, fn) => { for (let i = 0; i < Math.round(sec / dt); i++) { tick4(s); if (fn) fn(i); } };
+      const D = (s) => F.frankDebug(s.r);
+      const PROPB = new Set(['pistol', 'shotgun', 'rifle', 'axe', 'hammer', 'plank', 'parcel', 'rod', 'spareMag', 'shellHand', 'roundHand', 'pistolSlide', 'pistolMag', 'shotgunForend', 'rifleBolt']);
+      // each vertex's dominant bone, once per rig
+      const domOf = (r) => { const m = r.mesh, g = m.geometry, si = g.attributes.skinIndex, sw = g.attributes.skinWeight, nm = m.skeleton.bones.map((b) => b.name), out = []; for (let i = 0; i < g.attributes.position.count; i++) { let best = 0, bw = -1; for (let k = 0; k < 4; k++) { const w = sw.getComponent(i, k); if (w > bw) { bw = w; best = si.getComponent(i, k); } } out.push(nm[best]); } return out; };
+      const VV = V3();
+      /** The skinned positions of the vertices whose dominant bone passes `f` (flat array), and their lowest y. */
+      const skinned = (r, dom, f, out) => { const m = r.mesh; m.updateMatrixWorld(true); m.skeleton.update(); let lo = Infinity, n = 0; for (let i = 0; i < dom.length; i++) { if (!f(dom[i])) continue; m.getVertexPosition(i, VV); VV.applyMatrix4(m.matrixWorld); out[n++] = VV.x; out[n++] = VV.y; out[n++] = VV.z; if (VV.y < lo) lo = VV.y; } out.length = n; return lo; };
+      const isShoe = (b) => b === 'footL' || b === 'footR', isBody = (b) => !PROPB.has(b);
+      // (a) every frame of the forward, side and back dodges: no shoe vertex under y −0.5, and no foot pop (the change of a
+      // shoe vertex's per-frame motion, its second difference, ≤ 13 u: the old plant popped 20+); the landing hands the feet
+      // back planted with the ankles on the ground, and the planted lead foot slides only by the skid
+      res5.dodge = {};
+      for (const [nm, dx, dy] of [['fwd', 1, 0], ['side', 0, 1], ['hop', -1, 0]]) {
+        const s = rig('pistol'), dom = domOf(s.r); run4(s, 0.8);
+        s.p.dodgeDx = dx; s.p.dodgeDy = dy; s.p.dodgeT = 0.22;
+        let lo = 99, pop = 0, prev = null, prevD = null, slide = 0, ankLo = 99; const cur = [], pl = [null, null], sl = [0, 0];
+        run4(s, 0.42, () => {
+          lo = Math.min(lo, skinned(s.r, dom, isShoe, cur));
+          if (prev) { const d = cur.map((v, k) => v - prev[k]); if (prevD) for (let k = 0; k < d.length; k += 3) pop = Math.max(pop, Math.hypot(d[k] - prevD[k], d[k + 1] - prevD[k + 1], d[k + 2] - prevD[k + 2])); prevD = d; }
+          prev = cur.slice();
+          const Dg = s.r.st.dg, v = Dg.ph === 1 ? Dg.u : Dg.ph === 2 ? 1 + Dg.tailT / 0.22 : 0;
+          if (Dg.ph && v >= 0.85) for (let i = 0; i < 2; i++) {
+            const f = s.r.st.planner.feet[i];
+            const pd = s.r.st.planner.planted(i) && pl[i] ? Math.hypot(f.plant[0] - pl[i][0], f.plant[1] - pl[i][1]) : 0;
+            if (pd > 3) sl[i] = 0; else sl[i] += pd; // (a jump of the plant is a placement: the slide starts over)
+            slide = Math.max(slide, sl[i]);
+            pl[i] = s.r.st.planner.planted(i) ? [f.plant[0], f.plant[1]] : null;
+            if (v >= 1.3 && Dg.ph) ankLo = Math.min(ankLo, new T3.Vector3().setFromMatrixPosition(s.r.bones[i ? 'footR' : 'footL'].matrixWorld).y);
+          }
+        });
+        const d = D(s);
+        res5.dodge[nm] = { lo: +lo.toFixed(2), pop: +pop.toFixed(1), slide: +slide.toFixed(2), ankLo: +ankLo.toFixed(2), planted: d.planted, resets: s.r.st.resets };
+      }
+      // (b) death: after 1.8 s both hands and both feet lie within 3 u of the ground, the coat and a slung gun stay above
+      // y −0.5; no body vertex jumps more than 15 u in a frame; the dropped gun lands within 60 u of him, over hits that
+      // turn him up to 90° to the fall's yaw
+      res5.death = {};
+      for (const [nm, hurt, w, aim] of [['back', 0.3, 'shotgun', 0], ['front', Math.PI - 0.3, 'rifle', 0], ['turn', 2.0, 'pistol', 1.0], ['turn2', -1.2, 'shotgun', 0.6], ['side', Math.PI / 2, 'pistol', 0]]) {
+        const s = rig(w), dom = domOf(s.r); s.p.angle = aim; run4(s, 0.8);
+        G.hurtDir = { angle: hurt, t: 1.2 }; s.p.lastHurt = 0; s.p.hp = 0; s.p.dead = true; s.p.invuln = 0.55;
+        let jump = 0, prev = null; const cur = [];
+        run4(s, 1.8, () => { skinned(s.r, dom, isBody, cur); if (prev) for (let k = 0; k < cur.length; k += 3) jump = Math.max(jump, Math.hypot(cur[k] - prev[k], cur[k + 1] - prev[k + 1], cur[k + 2] - prev[k + 2])); prev = cur.slice(); });
+        const part = {}; for (const b of ['handL', 'handR', 'footL', 'footR']) part[b] = +skinned(s.r, dom, (x) => x === b, cur).toFixed(2);
+        const coat = skinned(s.r, dom, (x) => x.startsWith('sk'), cur), slung = s.r.st.backSlot.filter(Boolean), sl = slung.length ? Math.min(...slung.map((g) => skinned(s.r, dom, (x) => x === g, cur))) : 99;
+        const g = s.r.st.dth.gun;
+        res5.death[nm] = { part, coat: +coat.toFixed(2), slung: +sl.toFixed(2), jump: +jump.toFixed(1), gunDist: +Math.hypot(g.p[0] - s.p.x, g.p[2] - s.p.y).toFixed(1), rest: g.rest, resets: s.r.st.resets };
+      }
+      // (c) the whiff's first frame is the mid-swing key (the gun within 4 u of MELEE.pistol.whiff[0]); a connected strike moves on
+      // ≥ 12 u from its contact by u .55 (the energy is after the contact)
+      {
+        const s = rig('pistol'); run4(s, 0.8); G.fx = { stop: 0 }; s.p.meleeAnim = 0.18 + dt; tick4(s); // (the edge frame: u 0)
+        const B = s.r.bones, o = V3().setFromMatrixPosition(B.spine2.matrixWorld), g = V3().setFromMatrixPosition(B.pistol.matrixWorld).sub(o);
+        const mk = CL.MELEE.pistol.whiff[0][1]; // (the mid-swing key, read from the clip table so a re-key keeps the check exact)
+        res5.whiff0 = +Math.hypot(g.x - mk[0], g.y - mk[1], g.z - mk[2]).toFixed(1);
+        // (the sim's hit-stop holds meleeAnim for 0.05 s: the contact, then the follow-through to u .55)
+        const s2 = rig('pistol'); run4(s2, 0.8); G.fx = { stop: 0.05 }; s2.p.meleeAnim = 0.18;
+        run4(s2, 0.045); const p0 = V3().setFromMatrixPosition(s2.r.bones.pistol.matrixWorld); G.fx.stop = 0; run4(s2, 0.55 * 0.18); const p1 = V3().setFromMatrixPosition(s2.r.bones.pistol.matrixWorld);
+        res5.hitTravel = +p0.distanceTo(p1).toFixed(1); G.fx = null;
+      }
+      // (d) the axe's edge bites the trunk by the second frame (within 4 u of the trunk's face)
+      {
+        const s = rig('pistol'); run4(s, 0.8); G.interactTarget = { x: s.p.x + 34, y: s.p.y }; s.p.chopAnim = 0.25; tick4(s); tick4(s);
+        const e = new T3.Vector3(26, -6.8, 0).applyMatrix4(s.r.bones.axe.matrixWorld);
+        res5.axe = { face: +Math.abs(Math.hypot(e.x - G.interactTarget.x, e.z - G.interactTarget.y) - CL.CHOP.trunk).toFixed(1), y: +e.y.toFixed(1) };
+        G.interactTarget = null;
+      }
+      // (e) a hit moves the chest or the head ≥ 4° within 0.1 s (side and front), and the blink never hides the hit frame
+      res5.flinch = {};
+      for (const [nm, ang] of [['side', Math.PI / 2], ['front', 0]]) {
+        const s = rig('pistol'); run4(s, 0.8); const q0 = new T3.Quaternion(), q1 = new T3.Quaternion();
+        s.r.bones.head.getWorldQuaternion(q0);
+        G.hurtDir = { angle: ang, t: 1.2 }; s.p.lastHurt = 0; s.p.hp = 86; s.p.invuln = 1.0; s.p.flinch = 0.6;
+        let mx = 0, vis0 = null;
+        run4(s, 0.1, (i) => { s.r.bones.head.getWorldQuaternion(q1); mx = Math.max(mx, q0.angleTo(q1) / (Math.PI / 180)); if (i === 0) vis0 = s.r.body.visible; });
+        res5.flinch[nm] = { deg: +mx.toFixed(1), vis0 };
+      }
+      // (f) a shot right after a repair is interrupted: the gun (not the hammer) is on the aim line on the flash frame
+      {
+        const s = rig('pistol'); run4(s, 0.8); G.repairHold = { target: { cx: Math.floor((s.p.x + 34) / 32), cy: Math.floor(s.p.y / 32) }, kind: 'door', t: 0, time: 99, cost: 0, x: s.p.x, y: s.p.y };
+        run4(s, 0.6); G.repairHold = null; shoot(s); tick4(s);
+        const B = s.r.bones, d = D(s); res5.repairShot = [B.pistol.scale.x, B.hammer.scale.x, s.r.fx.valid, d.gunDriver];
+      }
+      // (g) a shot inside a revive's aim cap frees the aim for the rest of the window
+      {
+        const s = rig('pistol'); run4(s, 0.8); G.hurtDir = { angle: 0.4, t: 1.2 }; s.p.lastHurt = 0; s.p.hp = 45; s.p.invuln = 2.5;
+        run4(s, 0.1); shoot(s); tick4(s); const w0 = s.r.st.aimW; tick4(s); tick4(s); res5.revive = [+w0.toFixed(2), +s.r.st.aimW.toFixed(2)];
+      }
+      // (h) a dodge mashed inside the last one's tail crossfades (no one-frame pelvis pop at the new edge)
+      {
+        const s = rig('pistol'); run4(s, 0.8); s.p.dodgeDx = 1; s.p.dodgeDy = 0; s.p.dodgeT = 0.22; let fired = -1, prevY = null, step = 0;
+        run4(s, 0.5, (i) => { const y = D(s).pelvisY; if (fired >= 0 && i <= fired + 3 && prevY !== null) step = Math.max(step, Math.abs(y - prevY)); prevY = y; if (fired < 0 && s.p.dodgeT <= 0) { fired = i; s.p.dodgeT = 0.22; } });
+        res5.chain = +step.toFixed(2);
+      }
+      // (i) dying with the axe in his hands: the axe drops (shown, at rest on the ground), the chop's clock stops
+      {
+        const s = rig('pistol'); run4(s, 0.8); G.interactTarget = { x: s.p.x + 34, y: s.p.y }; s.p.chopAnim = 0.25; run4(s, 0.3);
+        G.hurtDir = { angle: 0.3, t: 1.2 }; s.p.lastHurt = 0; s.p.hp = 0; s.p.dead = true; run4(s, 1.6);
+        const ax = s.r.bones.axe, y = V3().setFromMatrixPosition(ax.matrixWorld).y;
+        res5.deathAxe = { shown: ax.scale.x, y: +y.toFixed(1), rest: s.r.st.dth.gun.rest, w: s.r.st.dth.gun.w, chop: s.r.st.ch.ph }; G.interactTarget = null;
+      }
+      // (j) a bullet hit while walking at 30 fps reads as a bullet, not a bite
+      {
+        const s = rig('pistol'); run4(s, 0.8); const h = 1 / 30;
+        for (let i = 0; i < 20; i++) { G.time += h; G.frameDt = h; s.p.lastHurt += h; s.p.x += 125 * h; s.p.vx = 125; s.p.walkPhase += 10 * h; if (i === 15) { G.hurtDir = { angle: 1.2, t: 1.2 }; s.p.lastHurt = 0; s.p.hp -= 12; } F.poseFrank(s.r, s.p, { dk: 0, camera: null }); }
+        res5.kind = s.r.st.hurt.kind;
+      }
+    }
+    const R5 = res5, ok5 = Object.values(R5.dodge).every((d) => d.lo >= -0.5 && d.pop <= 13 && d.slide <= CL.DODGE.dash.skid + 0.5 && d.ankLo >= 3.1 && d.planted.every(Boolean) && d.resets === 0) &&
+      Object.values(R5.death).every((d) => Object.values(d.part).every((y) => y <= 3) && d.coat >= -0.5 && d.slung >= -0.5 && d.jump <= 15 && d.gunDist < 60 && d.rest && d.resets === 0) &&
+      R5.whiff0 <= 4 && R5.hitTravel >= 12 && R5.axe.face <= 4 && R5.axe.y > 15 && R5.axe.y < 45 &&
+      Object.values(R5.flinch).every((f) => f.deg >= 4 && f.vis0 === true) &&
+      R5.repairShot[0] === 1 && R5.repairShot[1] === 0 && R5.repairShot[2] === true && R5.repairShot[3] === 'aim' &&
+      R5.revive[0] === 1 && R5.revive[1] === 1 && R5.chain < 2.2 &&
+      R5.deathAxe.shown === 1 && R5.deathAxe.y < 4 && R5.deathAxe.rest && R5.deathAxe.w === 'axe' && R5.deathAxe.chop === 0 && R5.kind === 'bullet';
+    check('Frank actions, measured (node): no shoe under the ground nor a foot pop through any dodge, the landing planted with only the skid sliding; dead, hands/feet on the ground, the coat and a slung gun above it, no vertex pop, the dropped gun within 60 u; the whiff starts mid-swing, the blow travels on after contact, the axe bites the trunk; the flinch turns the head ≥ 4° in 0.1 s, seen; a shot after a repair has the gun; a shot frees a revive\'s aim; a mashed dodge crossfades; a dying axe drops; a hit while walking at 30 fps is a bullet', ok5, JSON.stringify(R5));
+    const R4 = res4, ok4 = R4.dodge.fwd.variant === 'dash' && R4.dodge.side.variant === 'dash' && R4.dodge.hop.variant === 'hop' && R4.dodge.fwd.lo < 30 && R4.dodge.side.lo < 30 && R4.dodge.hop.hi > 38 &&
+      Object.values(R4.dodge).every((d) => d.full.includes('dodge') && d.after === 'none' && d.planted.every(Boolean) && d.feetY < 1.2 && d.ik === 0 && d.resets === 0) &&
+      R4.death.back.variant === 'back' && R4.death.front.variant === 'front' &&
+      Object.values(R4.death).every((d) => d.pelvisY < 12 && d.lowest >= 0.9 && d.hidden === 0 && d.gun && d.gun.rest && d.gunY !== null && d.gunY < 1.5 && d.up[0] === 'none' && d.up[1] > 30 && d.resets === 0) &&
+      R4.melee.hit.edge[0] === 'melee' && R4.melee.hit.edge[1] === true && Math.hypot(R4.melee.hit.gunA[0] - 23, R4.melee.hit.gunA[1] - 1, R4.melee.hit.gunA[2] + 3) < 6 && R4.melee.whiff.edge[1] === false &&
+      Object.values(R4.melee).every((m) => m.after !== 'melee' && m.resets === 0) &&
+      R4.chop.edge[0] === 'chop' && R4.chop.edge[1] === 1 && R4.chop.edge[2] === 0 && R4.chop.held[0] === 1 && R4.chop.after[1] === 'pistol' && R4.chop.after[2] === 0 && R4.chop.after[3] === 1 && R4.chop.resets === 0 &&
+      R4.repair.during[0] === 'repair' && R4.repair.during[1] === 1 && R4.repair.during[2] === 1 && R4.repair.during[3] === 0 && R4.repair.after[1] === 'pistol' && R4.repair.after[2] === 0 && R4.repair.resets === 0 &&
+      R4.flinch.hurt && R4.flinch.hurt.zone === 'side' && R4.flinch.hurt.s === 1 && R4.flinch.resets === 0;
+    check('Frank actions (node): the dash goes low and the back-hop up, both land planted; death (both variants) lies on the ground above y 0.9, never hidden, the gun dropped and at rest, back on his feet on recovery; a connected strike shows its contact inside the catch-up, a whiff starts mid-swing; the axe and the hammer replace the gun and give it back; the flinch reads the side on the hit frame', ok4, JSON.stringify(R4));
+    G.repairHold = null; G.hurtDir = null; G.fx = null;
     fs.rmSync(TMP, { recursive: true, force: true });
     // (jump: a pop is a gun that moves further in one frame than a hand can swing it; the fastest legitimate move, a long
     // gun thrown onto the back in a cross swap's 0.11 s out, peaks near 600 u/s, so the bound is 12 u per 60 fps frame)

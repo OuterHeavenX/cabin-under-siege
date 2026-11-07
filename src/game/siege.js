@@ -479,16 +479,22 @@ export function maybeAmbushOnArrival() {
 }
 
 /* ---------------- defeat ---------------- */
+// The defeat screens wait for Frank's fall to play out (the 'hold' transition freezes the sim; the 3D death runs on the
+// frame clock), as the siege summary and the prequel's defeat already wait; the fade comes up over 1.2 s (main.js).
+// The wait is counted by the transition on the same capped frame clock as the fall (not a wall-clock timer), so on a slow
+// device the screen still opens only once the fall has played.
+const FALL_S = 1.6;
+function afterFall(fn) { const tr = G.transition; if (!tr) { fn(); return; } tr.onHold = fn; tr.holdFor = FALL_S; tr.holdT = 0; }
 export function handleDefeat() {
   if (G.transition && G.transition.kind === 'defeat') return;
-  G.transition = { kind: 'defeat', phase: 'hold', fade: 0.65, t: 0 };
+  G.transition = { kind: 'defeat', phase: 'hold', fade: 0, fadeTo: 0.65, t: 0 };
   if (G.prequel) { sfx('defeat'); setTimeout(() => prequelDefeat(), 1400); return; }
   if (G.endless) {
     const res = endlessDefeat();
     allyEndSiege();
     sfx('defeat');
     setMusic('night');
-    showEndlessResult(res);
+    afterFall(() => showEndlessResult(res));
     return;
   }
   const w = G.s.world;
@@ -497,13 +503,13 @@ export function handleDefeat() {
     sfx('defeat');
     setMusic('night');
     G.assault = null;
-    showDefeat({
+    afterFall(() => showDefeat({
       lost,
       rescuer: 'Mickey',
       text: 'Somebody dragged you out through the service road and threw you in the back of a tow truck. You woke up on a cot at Doyle\'s Towing with Mickey Doyle holding an ice pack to your head. "You went up there alone? You crazy Corsetti."',
       story: false,
       onContinue: () => recoverFromDefeat({ lost, story: false, onCabin: false, assault: true }),
-    });
+    }));
     w.defeats++;
     return;
   }
@@ -532,7 +538,7 @@ export function handleDefeat() {
       'Marcus called it in on his radio. Sirens scattered them. He found you in the yard and took you in for the night.',
     ],
   };
-  showDefeat({
+  afterFall(() => showDefeat({
     lost,
     rescuer,
     text: onCabin
@@ -540,7 +546,7 @@ export function handleDefeat() {
       : `${skName} found you slumped behind the store and hauled you inside. "Whoever they were, they took off when I hit the lights."`,
     story,
     onContinue: () => recoverFromDefeat({ lost, story, onCabin }),
-  });
+  }));
   w.defeats++;
 }
 

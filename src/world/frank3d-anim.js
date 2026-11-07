@@ -55,6 +55,27 @@ export function sample(track, t) {
   }
   return track[n - 1][1];
 }
+/**
+ * Sample a keyed VECTOR track: keys [t, [v0, v1, ...], ease?] (the same rules as sample()), into out (an array of the
+ * same length). Allocation-free.
+ */
+export function sampleV(track, t, out) {
+  const n = track.length, m = out.length;
+  if (!n) return out;
+  let a = track[0], b = a, u = 0;
+  if (t > a[0]) {
+    let i = 1;
+    while (i < n && t > track[i][0]) i++;
+    if (i >= n) { a = b = track[n - 1]; }
+    else {
+      a = track[i - 1]; b = track[i];
+      const e = b[2] || 'S', span = b[0] - a[0];
+      u = e === 'H' ? 0 : (EASE[e] || EASE.S)(span > 1e-9 ? (t - a[0]) / span : 1);
+    }
+  }
+  for (let k = 0; k < m; k++) out[k] = a[1][k] + (b[1][k] - a[1][k]) * u;
+  return out;
+}
 
 /* ---------------- angles ---------------- */
 export function wrap(a) {
@@ -333,6 +354,27 @@ export class StepPlanner {
       f.hasHeel = f.hasBall = false;
     }
   }
+  /** Plant foot i at (x, z) with yaw (world) and toe-out, now (a full-body clip hands the foot back to the planner). */
+  place(i, x, z, yaw, toe = 0) {
+    const f = this.feet[i];
+    f.mode = S_STANCE; f.plant[0] = f.from[0] = f.landing[0] = f.x = f.ax = x; f.plant[1] = f.from[1] = f.landing[1] = f.z = f.az = z;
+    f.plantYaw = f.fromYaw = f.landYaw = f.yaw = yaw; f.toeOff = f.landToe = toe; f.pitch = 0; f.lift = 0; f.ay = FOOT.h;
+    f.hasHeel = f.hasBall = false; f.pivot = 0; f.pivotUsed = 0; f.strain = false; f.toeP = NaN; f.setA = null;
+  }
+  /** Slide a planted foot by (dx, dz) (the dash's brake skid: the only allowed plant slide). */
+  slide(i, dx, dz) {
+    const f = this.feet[i];
+    f.plant[0] += dx; f.plant[1] += dz; f.x += dx; f.z += dz; f.ax += dx; f.az += dz; f.landing[0] += dx; f.landing[1] += dz;
+    f.hasHeel = f.hasBall = false;
+  }
+  /** A forced idle step of foot i to n = [x, z, yaw, toe] over dur with lift (a lunge, a stumble); false if it can't step now. */
+  forceStep(i, n, dur, lift) {
+    const f = this.feet[i];
+    if (this.gait || f.mode !== S_STANCE) return false;
+    this._startStep(f, n, dur, 3, lift);
+    this.feet[1 - i].pivotUsed = 0; this.gap = 0;
+    return true;
+  }
   /** Is foot i on the ground (planted, not stepping or swinging)? */
   planted(i) { return this.feet[i].mode === S_STANCE; }
   /** The hip yaw a planted foot implies (its yaw less its toe-out). */
@@ -536,7 +578,8 @@ export class StepPlanner {
       yerr[i] = Math.abs(wrap(N[i][2] - f.plantYaw));
       if (yerr[i] > 10 * DEG || err[i] > 2.5) this.needTurn = true;
     }
-    if (busy || this.gap > 0) { F0.strain = F1.strain = false; return; }
+    // (I.hold: a full-body clip owns the feet for now, e.g. the dodge and its tail: no new idle step starts)
+    if (busy || this.gap > 0 || I.hold) { F0.strain = F1.strain = false; return; }
     if (I.turning) {
       // turn in place: the turning-side foot first, then the feet alternate (never the same foot twice running)
       if (!this.turnActive) { this.turnActive = true; this.turnNext = I.turnSide > 0 ? 1 : 0; }

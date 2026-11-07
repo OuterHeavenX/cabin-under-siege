@@ -1045,7 +1045,7 @@ function buildProps(q, B) {
   const steel = lin(COL.steel), worn = lin(COL.steelWorn), walnut = lin(COL.walnut);
   const add = (name, bone, parts) => { const p = merge(parts.map(([pp, m]) => [pp, m])); at(p); B.add(name, p, { bone, col: (x, y, z, m) => PCOL[m] || steel, surf: (x, y, z, m) => PSURF[m] || SURF.steel }); };
   const PCOL = { steel, worn, walnut, wood: lin('#5e3820'), stock: lin('#6a3f24'), pad: lin('#1c1c1e'), brass: lin(COL.brass), rwal: lin('#7a4a2a'), scope: lin('#1e1f23'), glass: lin('#1d2c3a'), spacer: lin('#d8d4cc'),
-    shell: lin(COL.shell), lens: lin('#fff6d8'), lensP: lin('#fff6d8'), lensS: lin('#fff6d8'), lensR: lin('#fff6d8'), hick: lin('#8a6a3e'), axehead: lin('#6e757c'), axeedge: lin('#c4cad1'), hamh: lin('#7a5a36'), hamhead: lin('#5a5e64'), plank: lin('#9a7a52'), kraft: lin('#b08a5a'), string: lin('#e8dcc0'), rod: lin('#5a4030'), mag: lin('#2e3036') };
+    shell: lin(COL.shell), lens: lin('#fff6d8'), lensP: lin('#fff6d8'), lensS: lin('#fff6d8'), lensR: lin('#fff6d8'), hick: lin('#8a6a3e'), axehead: lin('#6e757c'), axeedge: lin('#c4cad1'), hamh: lin('#a07a4c'), hamhead: lin('#9aa1a9'), plank: lin('#9a7a52'), kraft: lin('#b08a5a'), string: lin('#e8dcc0'), rod: lin('#5a4030'), mag: lin('#2e3036') };
   const PSURF = { walnut: SURF.wood, wood: SURF.wood, stock: SURF.wood, rwal: SURF.wood, pad: SURF.rubber, brass: SURF.brass, scope: SURF.rubber, glass: SURF.scope, spacer: SURF.rubber, shell: SURF.rubber,
     // (each gun's lens carries its id inside the lens band of the cloth channel z (≥ 0.985: 252/253/254 of 255), never in
     // the skin channel w, which tints the fill and the rim)
@@ -1091,8 +1091,14 @@ function buildProps(q, B) {
   add('shellHand', 'shellHand', [[cylX(-1.2, 1.0, 0.45, 0.45, q ? 4 : 6), 'shell'], [cylX(-1.4, -1.2, 0.5, 0.5, q ? 4 : 6, true, false), 'brass']]);
   add('roundHand', 'roundHand', [[cylX(-1.4, 1.2, 0.3, 0.18, q ? 4 : 6), 'brass']]);
   // ---- tools
-  add('axe', 'axe', [[cylX(-4, 18, 0.55, 0.5, 6), 'hick'], [boxPart(3.6, 5.2, 0.9, 0).xform(TR(18.5, 0.6, 0)), 'axehead'], ...(q ? [] : [[boxPart(0.7, 5.4, 0.6, 0).xform(TR(20.5, 0.6, 0)), 'axeedge']])]);
-  add('hammer', 'hammer', [[cylX(-3, 11, 0.5, 0.45, 6), 'hamh'], [boxPart(1.4, 4.2, 1.4, 0).xform(TR(11.3, 0.6, 0)), 'hamhead']]);
+  // (M4: the head's bit hangs off the handle's end toward −Y with the bright edge along it, so the edge faces the swing:
+  // the chop drives the axe's −Y into the tree)
+  // (§3.5 amended: a felling axe, handle −6..27 with the head at x 26: the spec's 22 u handle read as a hatchet; same
+  // triangle count)
+  add('axe', 'axe', [[cylX(-6, 27, 0.62, 0.55, 6), 'hick'], [boxPart(3.6, 7.5, 1.2, 0).xform(TR(26.0, -2.7, 0)), 'axehead'], ...(q ? [] : [[boxPart(4.0, 0.8, 0.7, 0).xform(TR(26.0, -6.8, 0)), 'axeedge']])]);
+  // (M4 fix: the head a little over-scaled and bright steel, the handle light ash, so the blow reads at the game camera
+  // against a dark door and his charcoal coat; the striking face stays at hammer-local y −1.5; same triangle count)
+  add('hammer', 'hammer', [[cylX(-3, 12, 0.55, 0.5, 6), 'hamh'], [boxPart(1.8, 5.2, 1.8, 0).xform(TR(11.3, 1.1, 0)), 'hamhead']]);
   add('plank', 'plank', [[boxPart(26, 4, 1, 0), 'plank']]);
   add('parcel', 'parcel', [[boxPart(10, 7, 7, 0), 'kraft']]);
   add('rod', 'rod', [[cylX(-6, 40, 0.5, 0.18, q ? 4 : 6), 'rod']]);

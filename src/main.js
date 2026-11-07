@@ -207,7 +207,11 @@ setVisitHooks({ buildMaps: () => buildMaps(), loadMap: (id, pos) => loadMap(id, 
 function updateTransition(dt) {
   const tr = G.transition;
   tr.t += dt;
-  if (tr.phase === 'hold') return; // e.g. defeat screen: wait for the player
+  if (tr.phase === 'hold') { // e.g. defeat screen: wait for the player
+    if (tr.fadeTo) tr.fade = Math.min(tr.fadeTo, (tr.fadeTo * tr.t) / 1.2);
+    if (tr.onHold) { if (!G.paused) tr.holdT += dt; if (tr.holdT >= tr.holdFor) { const fn = tr.onHold; tr.onHold = null; fn(); } }
+    return;
+  }
   if (tr.phase === 'out') {
     tr.fade = Math.min(1, tr.t / 0.5);
     if (tr.t >= 0.9) { tr.phase = 'in'; tr.t = 0; tr.mid && tr.mid(); }
