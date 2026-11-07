@@ -1381,12 +1381,20 @@ export function render(ctx) {
       if (p.dead) continue;
       const blink = p.invuln > 0 && p.dodgeT <= 0 && Math.floor(t * 20) % 2 === 0;
       if (blink) ctx.globalAlpha = 0.55;
+      // the fence vault: a hop over the rail (lifted and a touch bigger, his shadow left on the ground)
+      const vu = p.vaultT > 0 && p.vault ? 1 - p.vaultT / p.vault.T : -1, vh = vu >= 0 ? Math.sin(Math.PI * vu) : 0;
+      if (vu >= 0) {
+        ctx.fillStyle = 'rgba(0,0,0,0.28)';
+        ctx.beginPath(); ctx.ellipse(p.x, p.y + 3, 11 * (1 - 0.3 * vh), 6 * (1 - 0.3 * vh), 0, 0, Math.PI * 2); ctx.fill();
+        ctx.save(); ctx.translate(p.x, p.y - 16 * vh); ctx.scale(1 + 0.14 * vh, 1 + 0.14 * vh); ctx.translate(-p.x, -p.y);
+      }
       drawPerson(ctx, p, {
         angle: p.angle, r: 11, walk: p.walkPhase, body: '#6e4a30', skin: '#e0b18e', hair: '#2a2220', muzzle: p.muzzle,
         reach: p.reachT > 0 ? (p.reachT -= G.frameDt || 1 / 60, Math.sin(Math.max(0, 0.3 - p.reachT) / 0.3 * Math.PI)) : 0,
         hurt: G.hurtDir && G.hurtDir.t > 0.9 ? (G.hurtDir.t - 0.9) * 1.8 : 0, ringBack: true,
         weapon: p.chopAnim > 0 ? 'axe' : p.weapon === 'rifle' ? 'rifle' : p.weapon === 'shotgun' ? 'shotgun' : 'pistol', swing: p.chopAnim > 0 ? p.chopAnim * 4 : 0, ring: '#ffffff', ringW: 2.5,
       });
+      if (vu >= 0) ctx.restore();
       ctx.globalAlpha = 1;
       if (p.muzzle > 0) muzzleFlash(ctx, p.x + Math.cos(p.angle) * 24, p.y + Math.sin(p.angle) * 24, p.angle);
       if (p.reloadT > 0 && p.reloadMax > 0) {

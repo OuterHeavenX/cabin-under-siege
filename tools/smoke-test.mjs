@@ -2839,6 +2839,56 @@ if (want('3d')) {
         await sleep(600);
       }
     }
+    // The fence vault, for real: pushed into a fence on the cabin map (D held), DODGE (Space) carries him over it on the
+    // sim's path; the rig plays it on the full-body layer (frankDebug: full 'vault', and what the last vault did: the hips
+    // over the rail, the left hand planted on the fence top, the shoes kept above it) and he lands on the far side. Pushed
+    // into a wall, the same press is a plain dodge: no vault.
+    {
+      const frames = async (t = 0.3) => { const t0 = await C(() => window.__cus.G.time); for (let i = 0; i < 300 && (await C(() => window.__cus.G.time)) - t0 < t; i++) await sleep(60); };
+      const put = (kind) => C((kind) => {
+        const c = window.__cus, G = c.G, m = G.map, T = 32, p = G.player;
+        const open = (x, y) => m.inBounds(x, y) && !m.solid[m.idx(x, y)] && !m.blockerAt(x, y) && !m.buildingAt(x * T + 16, y * T + 16) && !m.trees.has(m.idx(x, y));
+        const want = kind === 'fence' ? 4 : 1;
+        let f = null;
+        for (let y = 2; y < m.h - 2 && !f; y++) for (let x = 3; x < m.w - 3 && !f; x++) {
+          const i = m.idx(x, y);
+          if (m.solid[i] !== want || m.blockerAt(x, y) || (m.hedge && m.hedge.has(i)) || !open(x - 1, y) || !open(x - 2, y)) continue;
+          if (kind === 'fence' && !(open(x + 1, y) && open(x + 2, y))) continue;
+          f = { x, y };
+        }
+        if (!f) return null;
+        c.dbg.closeAll(); G.modal = null; G.enemies = []; p.dodgeT = 0; p.vaultT = 0; p.vault = null; p.stamina = 100; p.lastCombat = 99; p.angle = 0; c.dbg.input.mouse.inside = false;
+        p.x = f.x * T - p.radius - 1; p.y = f.y * T + 16;
+        return { fx: f.x, fy: f.y, x0: p.x };
+      }, kind);
+      const press = async () => {
+        await page.keyboard.down('KeyD'); await frames(0.15);
+        await page.keyboard.down('Space'); await frames(0.05); await page.keyboard.up('Space');
+        let simSeen = false, rigSeen = null;
+        for (let i = 0; i < 300; i++) {
+          const o = await C(() => { const p = window.__cus.G.player; return { vt: p.vaultT, dt: p.dodgeT, x: p.x, y: p.y }; });
+          const f = await FR();
+          if (o.vt > 0) simSeen = true;
+          if (f.full === 'vault' && f.actions.vault && !rigSeen) rigSeen = { u: f.actions.vault.u, hand: f.actions.vault.hand };
+          if (i > 6 && o.vt <= 0 && f.full !== 'vault') break;
+          await sleep(40);
+        }
+        await page.keyboard.up('KeyD');
+        const f = await FR(), o = await C(() => { const p = window.__cus.G.player; return { x: p.x, y: p.y, vt: p.vaultT }; });
+        return { simSeen, rigSeen, last: f.vaultLast, resets: f.resets, ...o };
+      };
+      const sf = await put('fence');
+      await frames(0.6);
+      const rf = sf && await press();
+      check('3D Frank: DODGE pushed into a fence vaults it (the sim carries him over, the rig plays the vault: hips over the rail, left hand on the fence top, shoes above it)',
+        sf && rf && rf.simSeen && rf.rigSeen && rf.x > (sf.fx + 1) * 32 + 9 && Math.abs(rf.y - (sf.fy * 32 + 16)) < 16 && rf.last && rf.last.done && rf.last.peakY > 40 && rf.last.handW === 1 && rf.last.handMiss < 4 && rf.last.minClear >= -0.5 && rf.resets === 0,
+        JSON.stringify({ sf, rf }));
+      const sw = await put('wall');
+      await frames(0.6);
+      const rw = sw && await press();
+      check('3D Frank: the same press against a wall is no vault (he stays on his side)', sw && rw && !rw.simSeen && rw.x < sw.fx * 32 && rw.vt === 0, JSON.stringify({ sw, rw }));
+      await C((o) => { const p = window.__cus.G.player; p.x = o.x; p.y = o.y; }, home); await frames(0.4);
+    }
     // M5, life (§4.7, §4.18–§4.20) and the §7.3 quality/leak and NaN checks. Standing relaxed: a fidget (the gun check,
     // started through the harness hook) lifts the pistol in front of him and turns his head to it; a forced contrapposto
     // switch moves the hips across; fishing puts the rod in his hands and gives the gun back after.
@@ -3498,6 +3548,58 @@ if (want('frank')) {
         for (let i = 0; i < 20; i++) { G.time += h; G.frameDt = h; s.p.lastHurt += h; s.p.x += 125 * h; s.p.vx = 125; s.p.walkPhase += 10 * h; if (i === 15) { G.hurtDir = { angle: 1.2, t: 1.2 }; s.p.lastHurt = 0; s.p.hp -= 12; } F.poseFrank(s.r, s.p, { dk: 0, camera: null }); }
         res5.kind = s.r.st.hurt.kind;
       }
+      // The fence vault (node): the sim's own planner (game/vault.js) on a real map, and its path ticked like updatePlayer does
+      // (no collision over the rail). The planner only takes a plain fence directly ahead with open, in-bounds ground beyond
+      // (never a wall, a hedge, water or a rock beyond, a closed gate beyond, a fence out of reach or a push along it). The rig
+      // plays the vault on the full-body layer: the hips rise over the rail, the left hand plants on the fence top (on the
+      // post, within 3 u while planted), no leg vertex (shoes, shins, thighs: the skinned mesh) ever passes through the post
+      // or the rails, and he lands on the far side planted, back to no full-body state, without an IK failure or a reset.
+      const resV = {};
+      {
+        fs.copyFileSync(pth.join(SRC, 'game/vault.js'), pth.join(TMP, 'src/game/vault.js'));
+        const VL = await import(U('game/vault.js')), MP = await import(U('world/map.js')), SOv = MP.SO, T = 32, r0 = 10;
+        const mk = () => {
+          const m = new MP.GameMap('vt', 40, 40, 'vt');
+          for (let y = 14; y <= 26; y++) m.setSolid(20, y, SOv.FENCE); // a fence column (rails along it)
+          m.setSolid(20, 10, SOv.WALL); m.setSolid(20, 30, SOv.FENCE); m.setSolid(21, 30, SOv.ROCK); m.setSolid(20, 33, SOv.FENCE); m.setGround(21, 33, MP.GR.WATER); m.setSolid(21, 33, SOv.WATER);
+          m.setSolid(20, 36, SOv.FENCE); m.hedge = new Set([m.idx(20, 36)]); m.setSolid(39, 5, SOv.FENCE); m.setSolid(20, 12, SOv.FENCE);
+          m.blockers.set(m.idx(21, 12), { kind: 'door', blocksMove: () => true, blocksSight: () => true, onBullet: () => true });
+          return m;
+        };
+        const m = mk(), at = (cx, cy) => [cx * T - r0 - 1, cy * T + 16], plan = (cx, cy, dx, dy, back = 0) => { const [x, y] = at(cx, cy); return VL.planVault(m, x - back, y, r0, dx, dy); };
+        const v = plan(20, 20, 1, 0);
+        resV.plan = v && { x1: v.x1, y1: v.y1, ok: v.x1 - r0 >= 21 * T && v.y1 - r0 >= 20 * T && v.y1 + r0 <= 21 * T }; // (landed past the fence, in its row)
+        resV.no = { wall: plan(20, 10, 1, 0), rock: plan(20, 30, 1, 0), water: plan(20, 33, 1, 0), hedge: plan(20, 36, 1, 0), gate: plan(20, 12, 1, 0), far: plan(20, 20, 1, 0, 9), along: plan(20, 20, 0.3, 1), away: plan(20, 20, -1, 0), edge: VL.planVault(m, 39 * T - r0 - 1, 5 * T + 16, r0, 1, 0) };
+        resV.no = Object.fromEntries(Object.entries(resV.no).map(([k, o]) => [k, o === null]));
+        // the rig on the same map
+        const was = { map: G.map, time: G.s.time };
+        G.map = m; G.s.time = { day: 1, minute: 720 };
+        const s = rig('pistol'), dom = domOf(s.r), [x0, y0] = at(20, 20); s.p.x = x0; s.p.y = y0; s.p.lastCombat = 99;
+        run(s, 0.9);
+        const pv = VL.planVault(m, s.p.x, s.p.y, r0, 1, 0); s.p.vault = pv; s.p.vaultT = pv.T;
+        const isLeg = (b) => /^(foot|shin|thigh)[LR]$/.test(b), cur = [], full = new Set(), fl = 20 * T + 16;
+        let worst = 99, peak = 0, live = 0, o = { x: 0, y: 0 };
+        for (let i = 0; i < Math.round(1.1 / dt); i++) {
+          const p = s.p;
+          if (p.vaultT > 0) { p.vaultT = Math.max(0, p.vaultT - dt); VL.vaultPos(pv, 1 - p.vaultT / pv.T, o); p.vx = (o.x - p.x) / dt; p.vy = (o.y - p.y) / dt; p.x = o.x; p.y = o.y; if (p.vaultT <= 0) p.vault = null; } else { p.vx = p.vy = 0; }
+          tick(s);
+          const d = F.frankDebug(s.r); full.add(d.full); peak = Math.max(peak, d.pelvisY); if (d.full === 'vault') live++;
+          skinned(s.r, dom, isLeg, cur);
+          // over the post (6 × 6 at the cell centre, 30 tall) or a rail (3 wide along the fence, top at 26)
+          for (let k = 0; k < cur.length; k += 3) {
+            const al = Math.abs(cur[k] - fl), lat = Math.abs(cur[k + 2] - (20 * T + 16));
+            if (al < 3 && lat < 3) worst = Math.min(worst, cur[k + 1] - 30); else if (al < 1.5) worst = Math.min(worst, cur[k + 1] - 26);
+          }
+        }
+        run(s, 0.6);
+        const d = F.frankDebug(s.r);
+        resV.rig = { full: [...full], live, peak: +peak.toFixed(1), worst: +worst.toFixed(2), last: d.vaultLast, after: d.full, planted: d.planted, feetY: Math.max(...d.feet.map((f) => f[1])), x: +s.p.x.toFixed(1), ik: s.r.st.ikFails, resets: s.r.st.resets };
+        G.map = was.map; G.s.time = was.time;
+      }
+      const RV = resV.rig, okV = resV.plan && resV.plan.ok && Object.values(resV.no).every(Boolean) &&
+        RV.full.includes('vault') && RV.live >= 20 && RV.peak > 40 && RV.worst >= -0.5 && RV.last && RV.last.done && RV.last.handW === 1 && RV.last.handMiss < 3 && RV.last.minClear >= 0 &&
+        RV.after === 'none' && RV.planted.every(Boolean) && RV.feetY < 1.2 && RV.x > 21 * 32 + 10 && RV.ik === 0 && RV.resets === 0;
+      check('Frank fence vault (node): only a plain fence with open ground beyond is vaulted (not a wall, rock, water, hedge, gate, out of reach, along it or off the map); the rig rises over the rail, the left hand planted on the fence top, no leg vertex through the post or rails, landed planted on the far side', okV, JSON.stringify(resV));
     }
     const R5 = res5, ok5 = Object.values(R5.dodge).every((d) => d.lo >= -0.5 && d.pop <= 13 && d.slide <= CL.DODGE.dash.skid + 0.5 && d.ankLo >= 3.1 && d.planted.every(Boolean) && d.resets === 0) &&
       Object.values(R5.death).every((d) => Object.values(d.part).every((y) => y <= 3) && d.coat >= -0.5 && d.slung >= -0.5 && d.jump <= 15 && d.gunDist < 60 && d.rest && d.resets === 0) &&

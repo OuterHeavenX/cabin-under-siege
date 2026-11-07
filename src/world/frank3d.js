@@ -18,7 +18,7 @@ import * as THREE from '../vendor/three.module.min.js';
 import { G } from '../game/state.js';
 import { derived } from '../game/progression.js';
 import { TUNE, SOCKETS, STANCES, IDLE, AIM, RELAXED, GUN_POSES, HAND_ON, ACTIONS, RECOIL, SWAP, CASING, reloadKeys, breathCurve, gaitAt, makePlannerInput, gaitInputs,
-  MELEE, TAKEDOWN, DODGE, FLINCH, REVIVE, DEATH, REPAIR, CHOP, PICK, FIDGETS, LIFE } from './frank3d-clips.js';
+  MELEE, TAKEDOWN, DODGE, VAULT, FLINCH, REVIVE, DEATH, REPAIR, CHOP, PICK, FIDGETS, LIFE } from './frank3d-clips.js';
 import {
   DEG, clamp, lerp, smoothstep as ss, wrap, angleDiff, makeSpring, resetSpring, springTo, springAngle, springPend, solveTwoBone, makeIKOut,
   StepPlanner, PK, makePose, poseRest, makeFade, fadeStart, fadeApply, poseBlend, reachDrop, twistAngle, noise1, SPRING_H, FOOT,
@@ -101,11 +101,13 @@ function freshState() {
     // catch-up clocks (cT, real seconds) and latches; the hit and the revive; the death template, its ground lift and the
     // dropped gun; the dust puff; the tool in hand and the gun's draw back; neutral-spot offsets for forced steps; the
     // arms' last local rotations (death blends out of the IK'd aim from them)
-    prevMeleeAnim: 0, prevChopAnim: 0, prevDodgeT: 0, prevHp: null,
+    prevMeleeAnim: 0, prevChopAnim: 0, prevDodgeT: 0, prevVaultT: 0, prevHp: null,
     mel: { ph: 0, conn: false, long: false, u: 0, tailT: 0, cT: 9 },
     td: { ph: 0, yaw: 0, long: false, u: 0, tailT: 0, cT: 9 },
     dg: { ph: 0, hop: false, dir: 0, rel: 0, lead: 0, u: 0, tailT: 0, placed: false, landed: false, skid: 0, skidT: 9, frozen: false, trailPlaced: false, noPush: false, lift: 0, need: [0, 0] },
     ch: { ph: 0, pick: false, yaw: 0, dist: 28, u: 0, tailT: 0, holdT: 0, cT: 9, chain: false },
+    // the fence vault: its clock, the travel's yaw and axis, the fence line, where he lands, the left hand's plant (world)
+    vt: { ph: 0, u: 0, tailT: 0, dir: 0, ax: 1, az: 0, fx: 0, fz: 0, ex: 0, ez: 0, hand: [0, 0, 0], frozen: false, placed: [false, false], lift: 0, need: [0, 0], minClear: 99 },
     rp: { on: false, w: 0, kind: 'door', tx: 0, ty: 0, dist: 20, t: 0 },
     tool: null, drawStart: false, stowed: false, slingLow: 0,
     hurt: { t: 9, ang: 0, A: 0, kind: 'bullet', zone: 'front', s: 1 }, rev: 9, revFree: false, sinceRevive: 99, drawT: 0.25,
@@ -278,12 +280,14 @@ function update(r, p, ctx) {
   if (st.stateF === 'dodge') dodgePlace(r, p); // (the dash's touchdowns; legs() clamps the FK feet above the ground)
   // 11: pelvis reach fix and leg IK onto the planner's feet; arm IK onto the gun
   legs(r, p); // (legs() updates the chains it changes)
+  if (st.stateF === 'vault') vaultClear(r);
   if (st.stateF === 'death') { deathClamp(r); deathHands(r); }
   // (M5) the right hand's life targets (the holster and the pockets, the knees): before the gun, which rides the hand
   lifeArms(r, p);
   // 11–12: the gun first (aim, relaxed, reload, swap), then the hands onto it, then the props (weapons() updates the
   // chains it moves)
   weapons(r, p);
+  if (st.stateF === 'vault' && st.vt.ph === 1 && st.vtLast) vaultRecord(r);
   lifeProps(r, p);
   // (§6 chain-only matrix updates: the IK already updated the chains it moved; the props were only placed)
   for (let i = 0; i < PROP_NAMES.length; i++) B[PROP_NAMES[i]].updateMatrixWorld(true);
@@ -330,7 +334,7 @@ function update(r, p, ctx) {
   if (S.simDt > 0) st.lastSimDt = S.simDt;
   st.prevPhase = p.walkPhase || 0; st.deadPrev = !!p.dead; st.prevMuzzle = p.muzzle || 0;
   st.prevReloadT = p.reloadT || 0; st.prevSwapT = p.swapT || 0; st.prevFireCd = p.fireCd || 0; st.prevWeapon = S.weapon;
-  st.prevMeleeAnim = p.meleeAnim || 0; st.prevChopAnim = p.chopAnim || 0; st.prevDodgeT = p.dodgeT || 0; st.prevHp = Number.isFinite(p.hp) ? p.hp : st.prevHp;
+  st.prevMeleeAnim = p.meleeAnim || 0; st.prevChopAnim = p.chopAnim || 0; st.prevDodgeT = p.dodgeT || 0; st.prevVaultT = p.vaultT || 0; st.prevHp = Number.isFinite(p.hp) ? p.hp : st.prevHp;
 }
 
 /** Teleports, recoveries, a new player, NaN: springs, planner, coat, velocity and hip yaw start over at the sim's pose. */
@@ -352,7 +356,7 @@ function hardReset(r, p) {
 function resetWeaponClips(st) {
   st.rl.on = false; st.sw.on = false; st.act = null; st.gunLOk = false;
   // (and the M4 actions: a recovery is a hard reset to idle; the dropped gun is picked up)
-  st.mel.ph = st.td.ph = st.dg.ph = st.ch.ph = 0; st.mel.cT = st.td.cT = st.ch.cT = 9; st.rp.w = 0; st.rp.on = false;
+  st.mel.ph = st.td.ph = st.dg.ph = st.ch.ph = st.vt.ph = 0; st.mel.cT = st.td.cT = st.ch.cT = 9; st.rp.w = 0; st.rp.on = false;
   st.tool = null; st.drawStart = false; st.stowed = false; st.hurt.t = 9; st.rev = 9; st.dth.lift = 0; st.dth.gun.on = false; st.dth.relOk = false; st.dth.tool = null;
   st.nOffT = 0; st.dust.t = 9;
 }
@@ -400,7 +404,7 @@ function signals(r, p) {
   const dtE = simDt > 0 ? simDt : Number.isFinite(lh) && lh < st.prevLastHurt - 1e-6 ? st.lastSimDt : 0;
   const vmax = Math.max(st.speed, Math.hypot(p.vx || 0, p.vy || 0)), excess = S.jump - vmax * dtE;
   S.excess = S.teleport ? 0 : Math.max(0, excess);
-  S.shove = !S.teleport && !p.dead && !((p.dodgeT || 0) > 0) && excess > 4;
+  S.shove = !S.teleport && !p.dead && !((p.dodgeT || 0) > 0) && !((p.vaultT || 0) > 0) && excess > 4;
   S.shoveDrag = S.shove ? Math.max(0, excess - 5) / S.jump : 0;
   if (S.shove) st.shoves++;
   // max HP and stamina (derived() builds an object: refresh it twice a second, not every frame)
@@ -545,6 +549,7 @@ function states(r, p) {
   const st = r.st, D = st.dg, C = st.ch;
   let f = null;
   if (p.dead) f = 'death';
+  else if (st.vt.ph === 1 || st.vt.ph === 2) f = 'vault';
   else if (D.ph === 1 || D.ph === 2) f = 'dodge';
   else if (st.td.ph === 1 || st.td.ph === 2) f = 'takedown';
   else if (st.rp.w > 0) f = 'repair';
@@ -639,6 +644,7 @@ function actionEdges(r, p) {
   else if (D.ph === 2) { D.tailT += adt; if (D.tailT >= DODGE.tail) D.ph = 0; }
   if (D.ph === 2 && S.shot) D.ph = 0; // a shot cancels the tail at once
   if (p.dead) D.ph = 0;
+  vaultEdges(r, p, live, adt);
   // ---- chop (axe) / pick: the knock is on the trigger frame
   const C = st.ch;
   if (live && cA > st.prevChopAnim + 0.01) {
@@ -700,6 +706,44 @@ function actionEdges(r, p) {
   st.stowed = !!st.tool || (st.rp.w >= 0.5 && st.rp.on);
   meleeValues(st);
   takedownValues(st);
+}
+/**
+ * The fence vault's edge, clock and tail (u = 1 − vaultT / T: the sim carries him over on a fixed path, game/vault.js),
+ * and what it latches on the edge: the travel's axis, the fence line, where he lands, and the left hand's plant on the
+ * fence top (the post top if it is near his left, else the top rail on that side, else the post).
+ */
+function vaultEdges(r, p, live, adt) {
+  const st = r.st, V = st.vt, vT = p.vaultT || 0, pv = p.vault, K = VAULT;
+  if (live && vT > st.prevVaultT + 0.01 && pv) {
+    if (V.ph !== 0) { fadeStart(st.fadeF, st.lastF, 0.06); st.fadeFreal = false; } // (a vault straight out of the last one's tail)
+    st.dg.ph = 0; // (the sim never runs both; a dodge's render tail gives way)
+    V.ph = 1; V.T = pv.T || 0.45; V.ax = pv.dx || 0; V.az = pv.dy || 0; V.dir = Math.atan2(V.az, V.ax);
+    V.fx = pv.fx; V.fz = pv.fy; V.ex = pv.x1; V.ez = pv.y1; V.u = 0; V.tailT = 0; V.frozen = false; V.placed[0] = V.placed[1] = false; V.minClear = 99;
+    // his right is (−az, ax); the plant is hand.lat (negative: his left) off the line he lands on, at the fence line
+    const H = K.hand, rx = -V.az, rz = V.ax;
+    let hx = V.ax ? V.fx : V.ex + H.lat * rx, hz = V.az ? V.fz : V.ez + H.lat * rz;
+    const off = V.ax ? hz - V.fz : hx - V.fx, m = G.map;
+    let top = K.postTop;
+    if (Math.abs(off) > H.post) {
+      // a rail on that side? (the neighbouring cell along the fence is fence too)
+      const cx = Math.floor(V.fx / 32) + (V.ax ? 0 : Math.sign(off)), cy = Math.floor(V.fz / 32) + (V.ax ? Math.sign(off) : 0);
+      const rail = m && m.inBounds(cx, cy) && m.solid[m.idx(cx, cy)] === SO.FENCE && !(m.hedge && m.hedge.has(m.idx(cx, cy)));
+      if (rail) top = K.railTop;
+      else { const o2 = Math.sign(off) * 2; if (V.ax) hz = V.fz + o2; else hx = V.fx + o2; }
+    } else { const o2 = clamp(off, -2, 2); if (V.ax) hz = V.fz + o2; else hx = V.fx + o2; }
+    V.hand[0] = hx; V.hand[1] = top + K.palm; V.hand[2] = hz;
+    st.vtLast = { frames: 0, peakY: 0, minClear: 99, handMiss: 0, handW: 0, hand: V.hand.slice(), done: false };
+  }
+  if (V.ph === 1) { V.u = clamp(1 - vT / (V.T || 0.45), 0, 1); if (vT <= 0) { V.ph = 2; V.tailT = 0; V.u = 1; } }
+  else if (V.ph === 2) { V.tailT += adt; if (V.tailT >= K.tail) V.ph = 0; }
+  if (V.ph === 2 && S.shot) V.ph = 0; // a shot cancels the tail at once
+  if (p.dead || (S.teleport && !S.first && V.ph === 2)) V.ph = 0;
+}
+/** How much of the left arm and the gun the vault owns (the tuck, the plant): in over u 0–.14, out over the tail. */
+function vaultArmW(st) {
+  const V = st.vt;
+  if (st.stateF !== 'vault' || !V.ph) return 0;
+  return V.ph === 1 ? ss(0, 0.14, V.u) : 1 - ES(clamp(V.tailT / VAULT.tail, 0, 1));
 }
 /** The melee strike's values this frame (§4.12): the keys (connected: contact on frame 0 after the catch-up; whiff: mid-swing), the tail. */
 function meleeValues(st) {
@@ -800,7 +844,8 @@ function faceTarget(r, p) {
   const st = r.st, aim = p.angle || 0, SPR = TUNE.springs;
   FACE.yaw = aim; FACE.omega = SPR.face;
   const D = st.dg, sf = st.stateF;
-  if (sf === 'dodge' && !D.hop && D.ph === 1) {
+  if (sf === 'vault' && st.vt.ph === 1) { FACE.yaw = st.vt.dir; FACE.omega = VAULT.faceOmega; }
+  else if (sf === 'dodge' && !D.hop && D.ph === 1) {
     // the dash: the face snaps to the dash direction; a side dash keeps half of it toward the aim
     const k = DODGE.dash.chestSide * ss(30, 70, Math.abs(D.rel) / DEG);
     FACE.yaw = D.dir + k * wrap(aim - D.dir); FACE.omega = DODGE.faceOmega;
@@ -855,6 +900,11 @@ function facing(r, p) {
     const aim = p.angle || 0, cap = DODGE.dash.hipCap * DEG;
     springAngle(st.hip, aim + clamp(wrap(st.dg.dir - aim), -cap, cap), DODGE.hipOmega, adt);
     st.hipIdleT = st.hip.x; st.turning = false; st.turnT = 0;
+  } else if (st.stateF === 'vault' && st.vt.ph === 1) {
+    // the vault: the hips square up to the travel (the clip turns them on from there); no planted foot holds them
+    st.backpedal = false; mode = 'vault';
+    springAngle(st.hip, st.vt.dir, VAULT.hipOmega, adt);
+    st.hipIdleT = st.hip.x; st.turning = false; st.turnT = 0;
   } else {
     st.backpedal = false;
     // turn in place: the hips hold their stance until the aim has turned far enough off it, then the feet step round
@@ -871,7 +921,7 @@ function facing(r, p) {
     // (a turn in place whips the hips round faster than the idle stance follows small aim changes)
     springAngle(st.hip, st.hipIdleT, st.turning ? SPR.hipTurn : SPR.hipIdle, S.adt);
   }
-  const live = !p.dead && !S.teleport && S.adt > 0 && mode !== 'dash', lim = moving ? LO.hipHoldMove : LO.hipHoldIdle;
+  const live = !p.dead && !S.teleport && S.adt > 0 && mode !== 'dash' && mode !== 'vault', lim = moving ? LO.hipHoldMove : LO.hipHoldIdle;
   if (live) holdHips(st, lim, S.adt);
   // the twist budget (spine1 ±35°, spine2 ±45°: 80° in all): the hips are dragged round as far as the feet allow, and
   // beyond that the chest waits for the feet (the head still leads: neck and head take up to 75° more, see writeFK)
@@ -938,7 +988,7 @@ function gaitStart(st, simPhi) {
 function locomotion(r, p) {
   const st = r.st;
   const simPhi = ((((p.walkPhase || 0) / (2 * Math.PI)) % 1) + 1) % 1;
-  const gaitHeld = st.stateF === 'dodge' && st.dg.ph === 2 && st.dg.tailT < 0.08;
+  const gaitHeld = (st.stateF === 'dodge' && st.dg.ph === 2 && st.dg.tailT < 0.08) || (st.stateF === 'vault' && st.vt.ph === 2 && st.vt.tailT < 0.08);
   if (S.gaitOn && !gaitHeld && !st.planner.gait && !p.dead) gaitStart(st, simPhi);
   if (S.gaitOn) {
     st.startT += S.animDt;
@@ -976,7 +1026,7 @@ function locomotion(r, p) {
   I.dt = S.animDt; I.gait = S.gaitOn; I.phi = S.phi; I.rate = st.phaseRate;
   // (the dodge's tail holds the gait off for its first 0.08 s: with the move key held the gait lifted the planted lead
   // foot on the tail's first frame and the skid never played)
-  if (st.stateF === 'dodge' && st.dg.ph === 2 && st.dg.tailT < 0.08) I.gait = false;
+  if (gaitHeld) I.gait = false;
   I.vx = S.wall ? 0 : st.vf[0]; I.vz = S.wall ? 0 : st.vf[1]; I.rx = p.x; I.rz = p.y; I.hipYaw = S.hipYaw;
   I.turning = st.turning; I.turnSide = st.turnSide; I.still = st.stillT; I.stanceChanged = st.stanceT > 0; I.settleT = LO.stillSettle;
   I.hipY = 37.5 + IDLE.pelvisDy * (1 - S.amp) + st.height.x * S.amp;
@@ -991,7 +1041,7 @@ function locomotion(r, p) {
   // a forced step (melee lunge, takedown, repair) keeps its foot there while the action runs (the settle brings it back)
   if (st.nOffT > 0) { for (let i = 0; i < 2; i++) { PI.neutral[i][0] += st.nOff[i][0]; PI.neutral[i][1] += st.nOff[i][1]; } st.nOffT -= S.adt; }
   // the dodge and its tail own the feet (no idle step starts; it hands them back placed, frank3d dodgeFeet)
-  I.hold = st.stateF === 'dodge';
+  I.hold = st.stateF === 'dodge' || st.stateF === 'vault';
   if (I.hold) st.stillT = 0;
   // a dodge skids the feet along with the body (M4 brings the dash and back-hop clips); a shove skids all but 5 u of
   // its push and asks for a corrective step
@@ -1004,6 +1054,7 @@ function locomotion(r, p) {
   }
   if (!p.dead) { contraSteps(st); st.planner.update(I); }
   if (st.stateF === 'dodge') dodgeFeet(r, p);
+  else if (st.stateF === 'vault') vaultFeet(r, p);
   I.startLead = -1;
   for (let i = 0; i < 2; i++) st.planted[i] = !p.dead && st.planner.planted(i);
   st.contacts = st.planner.contacts;
@@ -1165,6 +1216,7 @@ function layerF(r, p) {
   F.set(PB);
   FOOTW[0] = FOOTW[1] = 1;
   if (s === 'death') deathPose(r, p, F);
+  else if (s === 'vault') vaultPose(r, p, F);
   else if (s === 'dodge') dodgePose(r, p, F);
   else if (s === 'takedown') takedownPose(r, p, F);
   else if (s === 'repair') repairPose(r, p, F);
@@ -1297,6 +1349,87 @@ function dodgePlace(r, p) {
   }
 }
 function startDust(st, x, z, dir, K = DODGE.dust, y = 1.2) { const d = st.dust; d.t = 0; d.x = x; d.z = z; d.dir = dir; d.K = K; d.y = y; }
+const _v4b = [0, 0, 0, 0];
+/** The fence vault (VAULT in frank3d-clips.js): the gather and the plant, up and over with the legs swung through on the
+ *  right of the planted left hand, the landing and the step out. The feet: IK'd planted at the start, FK in the air, IK'd
+ *  onto their landing spots (vaultFeet); legs() holds every FK shoe above the fence while it is over it. */
+function vaultPose(r, p, F) {
+  const st = r.st, V = st.vt, K = VAULT, live = V.ph === 1, u = live ? V.u : 1, tt = V.ph === 2 ? V.tailT : 0;
+  const wi = ss(0, 0.08, u);
+  const wH = live ? wi : 1 - ES(clamp(tt / (0.5 * K.tail), 0, 1)), wC = live ? wi : 1 - ES(clamp(tt / (0.75 * K.tail), 0, 1)), wP = live ? wi : 1 - ES(clamp(tt / K.tail, 0, 1));
+  F[PK.footIKW] = 1;
+  const pp = sample(K.pelvisPitch, u), py = sample(K.pelvisYaw, u), pr = sample(K.pelvisRoll, u), sr = sample(K.spineRoll, u), sy = sample(K.spineYaw, u);
+  mixCh(F, PK.pel, 0, wP); mixCh(F, PK.pel + 1, sample(K.pelvisY, u) - 37.5, wP); mixCh(F, PK.pel + 2, 0, wP);
+  mixCh(F, PK.pelRot, pp, wP); mixCh(F, PK.pelRot + 1, py, wP); mixCh(F, PK.pelRot + 2, pr, wP);
+  const s1 = sample(K.spine1, u), s2 = sample(K.spine2, u);
+  mixCh(F, PK.s1, IDLE.lean * 0.3 + s1, wC); mixCh(F, PK.s1 + 1, 0.45 * sy, wC); mixCh(F, PK.s1 + 2, 0.45 * sr, wC);
+  mixCh(F, PK.s2, IDLE.lean * 0.4 + s2, wC); mixCh(F, PK.s2 + 1, 0.55 * sy, wC); mixCh(F, PK.s2 + 2, 0.55 * sr, wC);
+  // the eyes stay on the landing: the head takes out most of the lean, the turn and the roll
+  const lean = pp + s1 + s2;
+  mixCh(F, PK.neck, IDLE.neckPitch - 0.3 * lean, wH); mixCh(F, PK.neck + 2, -0.3 * (pr + sr), wH);
+  mixCh(F, PK.head, -0.45 * lean + sample(K.headPitch, u), wH); mixCh(F, PK.head + 1, -0.8 * (py + sy), wH); mixCh(F, PK.head + 2, -0.4 * (pr + sr), wH);
+  // the FK legs (the IK weights per foot: the right is first off and first down, the left pushes off and steps out)
+  for (let i = 0; i < 2; i++) {
+    const o = i ? PK.legR : PK.legL;
+    sampleV(i ? K.legR : K.legL, u, _v4b);
+    F[o] = _v4b[0]; F[o + 1] = _v4b[1]; F[o + 2] = 0; F[o + 3] = _v4b[2]; F[o + 4] = _v4b[3];
+  }
+  const v = live ? u : 1 + tt / (V.T || 0.45), R = K.footR, L = K.footL;
+  FOOTW[1] = V.ph ? 1 - ss(R.off[0], R.off[1], v) * (1 - ss(R.on, R.in, v)) : 1;
+  FOOTW[0] = V.ph ? 1 - ss(L.off[0], L.off[1], v) * (1 - ss(L.on, L.in, v)) : 1;
+  // the free left arm (FK under the plant's IK): reaching for the fence top, then flung out for balance once it lets go
+  const H = K.hand, wA = vaultArmW(st), kOut = live ? ss(H.off[0], H.off[1], u) : 1;
+  for (let j = 0; j < 3; j++) {
+    const val = lerp(K.armReach[j], K.armOut[j], kOut), o = PK.armL + (j === 2 ? 3 : j);
+    mixCh(F, o, val, wA);
+  }
+  F[PK.crouch] = 0;
+}
+/** The vault's feet in the planner: the edge holds both where they are (the push-off stays put, never dragged); each
+ *  lands on its spot by where the body comes down (the path's end, which the sim fixed on the edge). */
+function vaultFeet(r, p) {
+  const st = r.st, V = st.vt, PL = st.planner, K = VAULT;
+  if (V.ph === 1 && !V.frozen) {
+    V.frozen = true;
+    for (let i = 0; i < 2; i++) { const f = PL.feet[i]; if (!PL.planted(i)) PL.place(i, f.x, f.z, f.yaw, f.toeOff); }
+  }
+  const v = V.ph === 1 ? V.u : 1 + V.tailT / (V.T || 0.45), c = V.ax, s = V.az;
+  // the push-off: the left foot rolls up onto its ball before it leaves the ground
+  if (V.ph === 1 && PL.planted(0) && v < K.footL.off[1]) PL._ankle(PL.feet[0], -0.3 * ss(0.04, K.footL.off[1], v), 1);
+  for (let i = 0; i < 2; i++) {
+    const Fk = i ? K.footR : K.footL;
+    if (V.placed[i] || !(v >= Fk.on || V.ph === 2)) continue;
+    V.placed[i] = true;
+    const sd = i ? 1 : -1, al = Fk.along, sl = sd * Fk.side;
+    PL.place(i, V.ex + c * al - s * sl, V.ez + s * al + c * sl, V.dir + sd * 8 * DEG, sd * 8 * DEG);
+    if (i === 1) startDust(st, V.ex + c * al - s * sl, V.ez + s * al + c * sl, V.dir);
+  }
+}
+/** The vault's floor under a shoe point: over the fence's footprint, the post top plus clearance; elsewhere the ground. */
+function vaultFloor(V, pt) {
+  const along = (pt.x - V.fx) * V.ax + (pt.z - V.fz) * V.az;
+  return Math.abs(along) < VAULT.band ? VAULT.postTop + VAULT.clear : 1.6;
+}
+/** (debug) what the last vault did: frames, the highest the hips went, the lowest shoe over the fence (vs the post top),
+ *  the left hand's worst miss of its plant while fully planted. */
+function vaultRecord(r) {
+  const st = r.st, V = st.vt, R = st.vtLast, H = VAULT.hand;
+  R.frames++; R.peakY = Math.max(R.peakY, _v1.setFromMatrixPosition(r.bones.pelvis.matrixWorld).y); R.minClear = V.minClear;
+  if (V.u >= H.on[1] && V.u <= H.off[0]) { R.handMiss = Math.max(R.handMiss, st.reach[1]); R.handW = 1; }
+  if (V.u >= 0.9) R.done = true;
+}
+/** (debug) the lowest shoe point over the fence's footprint, relative to the post top, this vault. */
+function vaultClear(r) {
+  const V = r.st.vt, B = r.bones;
+  for (let i = 0; i < 2; i++) {
+    const foot = B[FEET[i]];
+    for (const q of FOOT_PTS) {
+      _v1.set(q[0], q[1], q[2]).applyMatrix4(foot.matrixWorld);
+      const al = (_v1.x - V.fx) * V.ax + (_v1.z - V.fz) * V.az;
+      if (Math.abs(al) < VAULT.band - 1 && _v1.y - VAULT.postTop < V.minClear) { V.minClear = _v1.y - VAULT.postTop; V.minAt = [+V.u.toFixed(2), i, FOOT_PTS.indexOf(q), +al.toFixed(2), +V.need[i].toFixed(2), +FOOTW[i].toFixed(2)]; }
+    }
+  }
+}
 /** The takedown (§4.13): he drops onto the blow (the hips down, the chest and head over the victim). */
 function takedownPose(r, p, F) {
   const w = TC.w, b = TC.body;
@@ -2166,7 +2299,7 @@ const ANKLE_DORSI_PLANTED = 56;
 const _qL2 = new THREE.Quaternion(), _ftW = [new THREE.Quaternion(), new THREE.Quaternion()], _thQ = [new THREE.Quaternion(), new THREE.Quaternion()], _shQ = [new THREE.Quaternion(), new THREE.Quaternion()], _ftQ = [new THREE.Quaternion(), new THREE.Quaternion()];
 function legs(r, p) {
   const st = r.st, B = r.bones, PL = st.planner, crouch = DBG.pose === 'crouch' || DBG.pose === 'deepFlex';
-  const ikw = clamp(PB[PK.footIKW], 0, 1), dying = st.stateF === 'death', dodge = st.stateF === 'dodge';
+  const ikw = clamp(PB[PK.footIKW], 0, 1), dying = st.stateF === 'death', vaulting = st.stateF === 'vault', dodge = st.stateF === 'dodge' || vaulting;
   if (ikw * Math.max(FOOTW[0], FOOTW[1]) <= 0 && !dying && !dodge) { st.planted[0] = st.planted[1] = false; return; }
   // dead (§4.16): the legs are always solved, from the planted feet (the crumple) to the fall's FK legs (their ankles and
   // knees as writeFK left them), with every ankle held above the ground: the FK keys never drive a foot through it
@@ -2185,12 +2318,15 @@ function legs(r, p) {
     // the dodge blends FK ↔ IK the same way, as an ankle TARGET from the FK ankle (held above the ground) to the planted
     // spot, solved in full: slerping the joint rotations between the two poses sank the foot through the ground mid-blend
     // (the FK target is raised until the FK shoe's lowest point, heel, sole or toe, is at y 0.5: no FK foot under the ground)
-    const D = st.dg; D.lift = 0;
+    // (the vault: over the fence's footprint the floor is the post top plus clearance, vaultFloor)
+    const D = vaulting ? st.vt : st.dg; D.lift = 0;
     for (let i = 0; i < 2; i++) {
       const foot = B[FEET[i]];
       _dA[i].setFromMatrixPosition(foot.matrixWorld); _dK[i].setFromMatrixPosition(B[SHINS[i]].matrixWorld);
-      let lo = Infinity; for (const q of FOOT_PTS) { _v1.set(q[0], q[1], q[2]).applyMatrix4(foot.matrixWorld); if (_v1.y < lo) lo = _v1.y; }
-      const up = Math.max(0, 1.6 - lo); _dA[i].y += up; D.need[i] = up; D.lift = Math.max(D.lift, up);
+      let up = 0; for (const q of FOOT_PTS) { _v1.set(q[0], q[1], q[2]).applyMatrix4(foot.matrixWorld); const fl = vaulting ? vaultFloor(st.vt, _v1) : 1.6; if (fl - _v1.y > up) up = fl - _v1.y; }
+      // (and the lower shin over the fence: raising the ankle lifts a point at fraction k down the shin by about k of it)
+      if (vaulting) for (const k of SHIN_K) { _v1.lerpVectors(_dK[i], _dA[i], k); const fl = vaultFloor(st.vt, _v1) + 1; if (fl > 3 && (fl - _v1.y) / k > up) up = (fl - _v1.y) / k; }
+      _dA[i].y += up; D.need[i] = up; D.lift = Math.max(D.lift, up);
       worldQuat(foot, _ftW[i]); // (and the foot turns from its FK world rotation to the planted one: a world slerp)
     }
   }
@@ -2216,10 +2352,14 @@ function legs(r, p) {
     need = Math.max(need, nd);
   }
   need = Math.min(need, SPR.dropMax);
+  // (the vault: no squat for the push-off foot left behind or the flight; the hips come back up fast, then the landing's
+  // feet may draw them down again)
+  const vFly = vaulting && st.vt.ph === 1 && st.vt.u > 0.12 && st.vt.u < 0.76;
+  if (vFly) need = 0;
   // down: straight to the need (a planted foot must reach it this frame, or it slides), but never faster than dropRate;
   // up: the slow spring
   if (need > st.drop.x) { st.drop.x = Math.min(need, st.drop.x + SPR.dropRate * S.adt); st.drop.v = 0; }
-  else springTo(st.drop, need, SPR.pelvisDropSlow, S.adt);
+  else springTo(st.drop, need, vFly ? SPR.pelvisDropFast : SPR.pelvisDropSlow, S.adt);
   if (dying) st.drop.x = st.drop.v = 0;
   if (st.drop.x > 1e-4) { B.pelvis.position.y -= st.drop.x; B.pelvis.updateMatrixWorld(true); }
   worldQuat(B.pelvis, _q3);
@@ -2289,6 +2429,7 @@ function legs(r, p) {
   }
 }
 const _dA = [new THREE.Vector3(), new THREE.Vector3()], _dK = [new THREE.Vector3(), new THREE.Vector3()];
+const SHIN_K = [0.55, 0.8];
 // a shoe's extreme points (foot-local: the sole's heel, ball and toe, the shoe's top at the toe and the heel)
 const FOOT_PTS = [[-3.4, -3.7, 0], [8.4, -3.5, 0], [3, -3.8, 0], [8.0, -1.2, 0], [-3.2, 1.5, 0]];
 
@@ -2996,7 +3137,11 @@ function actionGun(r, p, held) {
   // the repair's in-blend: the gun goes where the hammer will be (it changes hands at the midpoint)
   if (st.rp.on && st.rp.w > 0 && st.rp.kind !== 'phone') { hammerFrames(r, p, (st.rp.t * REPAIR.rate) % 1, GT); blendPose(GN, GT, ES(clamp(st.rp.w / 0.5, 0, 1)), GN); }
   const D = st.dg;
-  if (st.stateF === 'dodge' && !D.hop) {
+  if (st.stateF === 'vault') {
+    // the vault: the gun tucked in the right hand (the left goes to the fence), like the dash's
+    const wt = vaultArmW(st);
+    if (wt > 0) { tuckGun(r, w, GT); blendPose(GN, GT, wt, GN); }
+  } else if (st.stateF === 'dodge' && !D.hop) {
     const live = D.ph === 1, u = live ? D.u : 1, wt = live ? ss(0, 0.14, u) : 1 - ES(clamp(D.tailT / DODGE.tail, 0, 1));
     if (wt > 0) { tuckGun(r, w, GT); blendPose(GN, GT, wt, GN); }
   } else if (st.stateF === 'dodge' && D.hop) {
@@ -3014,7 +3159,7 @@ function actionGun(r, p, held) {
 }
 /** The left hand's override this frame (melee guard, takedown collar grab, dash support, fire shield, the pick's reach), or w 0. */
 const AL = { w: 0, p: V(), q: new THREE.Quaternion(), pole: [0, -1, -0.6] };
-const POLE_GUARD = [0.2, -1, -0.5], POLE_REACH = [0.3, -0.4, -1];
+const POLE_GUARD = [0.2, -1, -0.5], POLE_REACH = [0.3, -0.4, -1], POLE_PLANT = [-0.7, 0.1, -0.7];
 /** One left-hand override candidate at weight w (frame A: origin o, yaw); kept if it outweighs the current one. */
 function setAL(yaw, o, w, f, u, rt, fing, palm, pole) {
   if (w <= AL.w) return;
@@ -3029,6 +3174,15 @@ function leftOverride(r, p, held) {
   if (MC.guardW > 0) { const g = MELEE.guardL; setAL(yaw, o, MC.guardW, g[0], g[1], g[2], FING_GUARD, PALM_GUARD, POLE_GUARD); }
   if (TC.collarW > 0) { const g = TC.collar; setAL(yaw, o, TC.collarW, g[0], g[1], g[2], FING_COLLAR, PALM_COLLAR, POLE_REACH); }
   if (FLX.shieldW > 0) { const g = FLINCH.fire.shieldL; setAL(yaw, o, FLX.shieldW, g[0], g[1], g[2], FING_SHIELD, PALM_SHIELD, POLE_GUARD); }
+  if (st.stateF === 'vault' && st.vt.ph === 1) {
+    // the vault's plant: the palm flat on the fence top, world-locked, fingers forward and a little out
+    const V = st.vt, H = VAULT.hand, w = ss(H.on[0], H.on[1], V.u) * (1 - ss(H.off[0], H.off[1], V.u));
+    if (w > AL.w) {
+      AL.w = w; AL.p.set(V.hand[0], V.hand[1], V.hand[2]);
+      handQW(workV(V.dir, 1, -0.15, -0.3, _hX), _hZ.set(0, -1, 0), false, AL.q);
+      AL.p.sub(_tw2.set(GRIPL[0], GRIPL[1], GRIPL[2]).applyQuaternion(AL.q)); AL.pole = POLE_PLANT;
+    }
+  }
   if (st.stateF === 'pick') {
     const C = st.ch, u = C.ph === 1 ? C.u : 1, w = (C.ph === 1 ? ss(0.05, 0.5, u) : 1 - ES(clamp(C.tailT / PICK.rise, 0, 1)));
     if (w > AL.w) {
@@ -3234,7 +3388,7 @@ function weapons(r, p) {
   LV.chkW = !LONG[w] && held === w ? LV.chk * (1 - S.aimW) : 0;
   if (held === 'pistol' && LV.hol >= LIFE.stroll.holHide && S.aimW < 0.05 && !GC.sw && !GC.rl) held = null;
   st.inHand = held;
-  const acting = MC.w > 0.5 || TC.w > 0.5 || (st.stateF === 'dodge' && !st.dg.hop);
+  const acting = MC.w > 0.5 || TC.w > 0.5 || (st.stateF === 'dodge' && !st.dg.hop) || vaultArmW(st) > 0.5;
   st.gunDriver = !held ? (st.tool ? 'tool' : LV.hol >= LIFE.stroll.holHide ? 'holster' : 'none') : GC.sw ? 'swap' : acting ? 'action' : S.aimW > 0.5 ? 'aim' : LONG[w] ? 'chest' : 'hand';
   if (held) {
     const gb = B[held];
@@ -3333,6 +3487,8 @@ function handsOnGun(r, p, held) {
   // (M4) the dash: the pistol is tucked one-handed and the free arm thrown back (its FK, dodgePose); a ram's stumble
   // throws the left arm out (its FK)
   if (held === 'pistol' && st.stateF === 'dodge' && !st.dg.hop) lw *= 1 - (st.dg.ph === 1 ? ss(0, 0.2, st.dg.u) : 1 - ES(clamp(st.dg.tailT / DODGE.tail, 0, 1)));
+  // (the vault: the left hand leaves any gun for the fence top, and comes back to it over the tail)
+  if (held) lw *= 1 - vaultArmW(st);
   if (FLX.abdL > 0) lw *= 1 - 0.8 * FLX.abdL / FLINCH.ram.abdL;
   const ALo = leftOverride(r, p, held);
   if (lw > 0 || GC.rl > 0 || GC.sw || ALo.w > 0) {
@@ -3655,8 +3811,8 @@ function coatSim(r, p) {
   const vx = st.vf[0], vz = st.vf[1], spd = st.speed, vhx = spd > 1 ? vx / spd : 0, vhz = spd > 1 ? vz / spd : 0;
   const ax = st.acc[0], az = st.acc[1];
   // (the dash's hip whip to the dash direction is not a turn the coat should bell out for: its fling is capped)
-  const dashing = st.stateF === 'dodge' && !st.dg.hop;
-  const rest = C.rest * DEG, fling = Math.min((dashing ? 10 : C.flingMax) * DEG, Math.atan(C.fling * st.yawRate * st.yawRate));
+  const dashing = st.stateF === 'dodge' && !st.dg.hop, vaulting = st.stateF === 'vault' && st.vt.ph > 0;
+  const rest = C.rest * DEG, fling = Math.min((dashing || vaulting ? 10 : C.flingMax) * DEG, Math.atan(C.fling * st.yawRate * st.yawRate));
   const t = S.now, rain = G.rainLevel || 0;
   const flutter = st.sprintW > 0 ? C.flutter * (Math.sin(2 * Math.PI * 6 * t) + 0.5 * Math.sin(2 * Math.PI * 11 * t)) * clamp((spd - 130) / 50, 0, 1) * st.sprintW : 0;
   const twistK = 0.5 * C.twist * DEG * Math.pow(Math.min(1, spd / 185), 1.2);
@@ -3666,7 +3822,14 @@ function coatSim(r, p) {
   const Dg = st.dg, KD = DODGE.dash, dashOn = st.stateF === 'dodge' && !Dg.hop;
   const dashSide = dashOn ? Math.max(ss(30, 60, Math.abs(Dg.rel) / DEG), ss(0.3, 0.7, Math.sin(Dg.dir))) : 0;
   const dash = dashOn ? lerp(KD.flare, KD.flareSide, dashSide) * (Dg.ph === 1 ? ss(0, 0.25, Dg.u) : 1 - ES(clamp(Dg.tailT / DODGE.tail, 0, 1))) : 0;
-  const flareCap = dashOn ? lerp(AHI_DEG, KD.flareCap, dashSide) * DEG : 9;
+  let flareCap = dashOn ? lerp(AHI_DEG, KD.flareCap, dashSide) * DEG : 9;
+  // the vault: the skirt flares as he goes up and over (the trailing panels, and the right side as the legs swing out
+  // there), settles on the landing; a ripple runs round the hem
+  const Vt = st.vt, KV = VAULT;
+  const vfl = vaulting ? (Vt.ph === 1 ? ss(0.12, 0.38, Vt.u) * (1 - 0.6 * ss(0.78, 1, Vt.u)) : 0.4 * (1 - ES(clamp(Vt.tailT / KV.tail, 0, 1)))) : 0;
+  const vrx = -Vt.az, vrz = Vt.ax;
+  // (toward the camera, south, the skirt belled into a dome over the legs: capped lower there, as the dash's)
+  if (vaulting) flareCap = lerp(KV.flareCap, KV.flareCapCam, ss(0.3, 0.7, Vt.az)) * DEG;
   for (let k = 0; k < n; k++) {
     const a = th[k] * DEG;
     _cN.set(Math.cos(a), 0, Math.sin(a)).applyQuaternion(_cQ); _cT.set(-Math.sin(a), 0, Math.cos(a)).applyQuaternion(_cQ);
@@ -3678,7 +3841,8 @@ function coatSim(r, p) {
     const drag = clamp(-(vx * CNX[k] + vz * CNZ[k]) / 185 * C.drag, C.dragFront, front ? C.dragBackFront : C.drag);
     const storm = rain > 0.7 ? C.storm * noise1(1.3 * t + k * 7.1) : 0;
     // (the dash's flare is mostly on the trailing panels: the whole skirt at +20° read as a round cape from above)
-    const dk = dash ? dash * (0.3 + 0.7 * Math.max(0, -(vhx * CNX[k] + vhz * CNZ[k]))) + KD.ripple * (dash / KD.flare) * Math.sin(2 * Math.PI * (KD.rippleHz * t - k / n)) : 0;
+    let dk = dash ? dash * (0.3 + 0.7 * Math.max(0, -(vhx * CNX[k] + vhz * CNZ[k]))) + KD.ripple * (dash / KD.flare) * Math.sin(2 * Math.PI * (KD.rippleHz * t - k / n)) : 0;
+    if (vfl > 0) dk += vfl * (KV.flare * (0.3 + 0.7 * Math.max(0, -(Vt.ax * CNX[k] + Vt.az * CNZ[k]))) + KV.flareSide * Math.max(0, vrx * CNX[k] + vrz * CNZ[k]) + KV.ripple * Math.sin(2 * Math.PI * (KV.rippleHz * t - k / n)));
     cs.aT[k] = p.dead ? 0 : Math.min(flareCap, rest + (drag + flutter + storm + dk) * DEG + fling);
     // β: the side panels trail the motion. (Sign note: the spec writes β* ∝ dot(t_k, −v̂), −accGain·dot(a, t_k) and
     // −yawAccGain·ψ''; with its own convention, +β moves the hem toward −t_k, and +yaw moves n_k toward +t_k, so the signs
@@ -3720,6 +3884,8 @@ function coatSim(r, p) {
     if (k === 0 || k === n - 1) loG = Math.min(loG, C.loGFront * DEG);
     // the ground: the hem (about 20 below the pivot) never dips under y 0.8
     if (_cP.y < 20.8) lo = Math.max(lo, Math.acos(clamp((_cP.y - 0.8) / 20, -1, 1)));
+    // (the vault: over the fence the hem stays above the post top, flared out over it)
+    if (vaulting && Math.abs((_cP.x - Vt.fx) * Vt.ax + (_cP.z - Vt.fz) * Vt.az) < KV.band + 4 && _cP.y < 21 + KV.postTop) lo = Math.max(lo, Math.acos(clamp((_cP.y - KV.postTop - 1) / 20, -1, 1)));
     cs.lo[k] = lo; cs.loG[k] = loG;
   }
   for (let k = 0; k < n; k++) if (cs.xs[k] > 0) cs.lo[k] = Math.max(cs.lo[k], cs.xs[k]);
@@ -3905,7 +4071,7 @@ function forelocks(r, p) {
   // the acceleration in the head's frame
   _v2.set(st.headA[0], st.headA[1], st.headA[2]).applyQuaternion(_q1.copy(_hq).invert());
   // (the dash streams them back, §4.14)
-  const Dg = st.dg, stream = st.stateF === 'dodge' && !Dg.hop ? (Dg.ph === 1 ? ss(0, 0.3, Dg.u) : 1 - ES(clamp(Dg.tailT / DODGE.tail, 0, 1))) : 0;
+  const Dg = st.dg, stream = st.stateF === 'dodge' && !Dg.hop ? (Dg.ph === 1 ? ss(0, 0.3, Dg.u) : 1 - ES(clamp(Dg.tailT / DODGE.tail, 0, 1))) : st.stateF === 'vault' ? 0.7 * vaultArmW(st) : 0;
   const lim = FL.max * DEG, tgtP = -FL.hang * pitchW - 35 * DEG * stream;
   const ns = dt > 0 ? Math.min(8, Math.ceil(dt / SPRING_H - 1e-9)) : 0, h = ns ? dt / ns : 0;
   for (let i = 0; i < 2; i++) {
@@ -3942,7 +4108,7 @@ function updateDecal(r, p, ctx) {
   const dead = !!p.dead, a = p.angle || 0, ca = Math.cos(a), sa = Math.sin(a);
   // blob: offset along the sun-shadow direction (Low: longer and stronger)
   // (the back-hop: the blob shrinks as he rises, so the shadow visibly leaves him)
-  const rise = r.st.stateF === 'dodge' && r.st.dg.hop ? ss(0, 6, (PB[PK.pel + 1] || 0)) : 0;
+  const rise = r.st.stateF === 'dodge' && r.st.dg.hop ? ss(0, 6, (PB[PK.pel + 1] || 0)) : r.st.stateF === 'vault' ? ss(0, 12, (PB[PK.pel + 1] || 0)) : 0;
   const cr = clamp(PB[PK.crouch] || 0, 0, 1), off = q ? 8 : 3, stretch = q ? 1.4 : 1, wide = dead ? 1.3 : (1 - 0.2 * cr) * lerp(1, DODGE.hop.blobMin, rise), bA = (q ? 0.5 : 0.35) * (1 + 0.3 * cr) * lerp(1, 0.7, rise);
   for (let i = 0; i <= DECAL.blobSeg; i++) {
     if (i === 0) { pos.setXYZ(Lo.blob0, SHADOW_DIR[0] * off, 0.5, SHADOW_DIR[1] * off); col.setW(Lo.blob0, bA); continue; }
@@ -4153,7 +4319,9 @@ export function frankDebug(r) {
     swap: st.sw.on ? { from: st.sw.from, to: st.sw.to, f: round2(GC.swF) } : null, boreMiss: r.fx.valid ? round2(st.boreMissRest || 0) : null, boreMissLive: boreMiss(r, p, weapon), handErr: handErr(r, weapon),
     recoil: { pitch: round2(GC.rPitch), back: round2(GC.rBack), slide: round2(GC.slideX) }, sub: subState(r), lProp: GC.lProp,
     // M4: the actions
-    actions: { dodge: st.dg.ph ? { variant: st.dg.hop ? 'hop' : 'dash', u: round2(st.dg.u), tail: st.dg.ph === 2 ? round2(st.dg.tailT) : null, lead: st.dg.lead } : null,
+    vaultLast: st.vtLast ? { frames: st.vtLast.frames, peakY: round2(st.vtLast.peakY), minClear: round2(st.vtLast.minClear), handMiss: round2(st.vtLast.handMiss), handW: st.vtLast.handW, hand: st.vtLast.hand.map(round2), done: st.vtLast.done } : null,
+    actions: { vault: st.vt.ph ? { u: round2(st.vt.u), tail: st.vt.ph === 2 ? round2(st.vt.tailT) : null, minClear: round2(st.vt.minClear), minAt: st.vt.minAt, lift: round2(st.vt.lift), hand: st.vt.hand.map(round2), footW: [round2(FOOTW[0]), round2(FOOTW[1])] } : null,
+      dodge: st.dg.ph ? { variant: st.dg.hop ? 'hop' : 'dash', u: round2(st.dg.u), tail: st.dg.ph === 2 ? round2(st.dg.tailT) : null, lead: st.dg.lead } : null,
       melee: st.mel.ph ? { conn: st.mel.conn, u: round2(st.mel.u), cu: round2(MC.cu), w: round2(MC.w) } : null, takedown: st.td.ph ? { u: round2(st.td.u), cu: round2(TC.cu) } : null,
       chop: st.ch.ph ? { pick: st.ch.pick, ph: st.ch.ph, u: round2(st.ch.u) } : null, repair: st.rp.w > 0 ? { kind: st.rp.kind, w: round2(st.rp.w), dist: round2(st.rp.dist) } : null,
       tool: st.tool, stowed: st.stowed, draw: st.sw.on && st.sw.render ? round2(GC.swF) : null, hurt: st.hurt.t < 1 ? { zone: st.hurt.zone, kind: st.hurt.kind, s: st.hurt.s, A: round2(st.hurt.A), t: round2(st.hurt.t) } : null,

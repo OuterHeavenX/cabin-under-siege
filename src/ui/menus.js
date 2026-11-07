@@ -773,13 +773,13 @@ export function openHelp() {
         <li><kbd>R</kbd> Reload · <kbd>E</kbd> Interact / talk / open doors</li>
         <li><kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd>, <kbd>Tab</kbd> or <kbd>Mouse wheel</kbd> Switch weapon</li>
         <li><kbd>F</kbd> or <kbd>Right click</kbd> Melee shove</li>
-        <li><kbd>Space</kbd> Dodge roll · <kbd>Q</kbd> Use quick item · <kbd>G</kbd> Ability (Tier-2 skills) · <kbd>O</kbd> Orders for Ruth and Duke (during an attack)</li>
+        <li><kbd>Space</kbd> Dodge roll (moving into a fence: vault it) · <kbd>Q</kbd> Use quick item · <kbd>G</kbd> Ability (Tier-2 skills) · <kbd>O</kbd> Orders for Ruth and Duke (during an attack)</li>
         <li><kbd>Esc</kbd>/<kbd>P</kbd> Pause menu · <kbd>I</kbd> Items · <kbd>C</kbd> Character · <kbd>K</kbd> Skills · <kbd>V</kbd> Home · <kbd>M</kbd> Map · <kbd>J</kbd> Journal · <kbd>H</kbd> Help</li>
       </ul></div>
       <div><h3>Controller / Steam Deck</h3><ul>
         <li><kbd>L stick</kbd> Move (full tilt or <kbd>LT</kbd> / <kbd>L3</kbd> sprints) · <kbd>R stick</kbd> Aim</li>
         <li><kbd>RT</kbd> Fire · <kbd>X</kbd> Reload · <kbd>Y</kbd> Switch weapon</li>
-        <li><kbd>A</kbd> Interact / talk / continue · <kbd>B</kbd> Dodge roll</li>
+        <li><kbd>A</kbd> Interact / talk / continue · <kbd>B</kbd> Dodge roll (moving into a fence: vault it)</li>
         <li><kbd>RB</kbd> Melee shove · <kbd>LB</kbd> Use quick item · <kbd>R3</kbd> (click the right stick) Ability · walk up to Ruth or Duke in an attack and press <kbd>A</kbd> for orders</li>
         <li>Left stick or D-pad: move · <kbd>☰ Menu</kbd> Pause (Map, Items, Home, Character are tabs there — <kbd>LB</kbd>/<kbd>RB</kbd>) · <kbd>⧉ View</kbd> Journal</li>
         <li>In menus: D-pad / stick to move, <kbd>A</kbd> select, <kbd>B</kbd> back, <kbd>LB</kbd>/<kbd>RB</kbd> tabs, <kbd>R stick</kbd> scroll</li>
@@ -789,7 +789,7 @@ export function openHelp() {
         <li>Right stick: aim — push it far to fire</li>
         <li><b>FIRE</b>: shoots where you aim (aim assist picks a target)</li>
         <li><b>ACT</b>: talk, open doors, chop, repair — label shows the action</li>
-        <li><b>RELOAD</b>, <b>MELEE</b>, <b>DODGE</b>, <b>USE</b> (quick item), <b>SWAP</b> (next weapon), a purple ability button once you learn a Tier-2 ability, and a green <b>ORDERS</b> button during attacks when Ruth or Duke is fighting beside you</li>
+        <li><b>RELOAD</b>, <b>MELEE</b>, <b>DODGE</b> (moving into a fence: vault it), <b>USE</b> (quick item), <b>SWAP</b> (next weapon), a purple ability button once you learn a Tier-2 ability, and a green <b>ORDERS</b> button during attacks when Ruth or Duke is fighting beside you</li>
         <li>☰ top-right: pause menu</li>
       </ul></div>`}
     </div>

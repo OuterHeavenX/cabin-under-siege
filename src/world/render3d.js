@@ -384,7 +384,9 @@ function tuftGeometry() {
   for (let k = 0; k < 6; k++) {
     const a = (k / 6) * Math.PI * 2 + k * 0.7, lean = 0.25 + (k % 3) * 0.12, h = 7 + (k % 3) * 2.5, w = 1.6;
     const bx = Math.cos(a) * 1.6, bz = Math.sin(a) * 1.6, px = Math.cos(a + Math.PI / 2) * w, pz = Math.sin(a + Math.PI / 2) * w;
-    pos.push(bx - px, 0, bz - pz, bx + px, 0, bz + pz, bx + Math.cos(a) * h * lean, h, bz + Math.sin(a) * h * lean);
+    const tx = bx + Math.cos(a) * h * lean, tz = bz + Math.sin(a) * h * lean;
+    // both faces as real triangles (front-face only), each lit from above: no dark back sides
+    pos.push(bx - px, 0, bz - pz, bx + px, 0, bz + pz, tx, h, tz, bx + px, 0, bz + pz, bx - px, 0, bz - pz, tx, h, tz);
   }
   const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals();
   // Grass normals point up so the blades take the sky light like the ground they grow from.
@@ -405,7 +407,7 @@ function buildVegetation(m, group) {
     if (!lq && hash2(cx * 13 + 1, cy * 17 + 2) < 0.022) bushes.push([cx * TILE + 16, cy * TILE + 16, hash2(cx * 19, cy * 23)]);
   }
   if (!tuftGeo) tuftGeo = tuftGeometry();
-  const tuftMat = new THREE.MeshLambertMaterial({ side: THREE.DoubleSide });
+  const tuftMat = new THREE.MeshLambertMaterial();
   tuftMat.userData.own = true;
   tuftMat.onBeforeCompile = (sh) => {
     sh.uniforms.uTime = GRASS_U.uTime;

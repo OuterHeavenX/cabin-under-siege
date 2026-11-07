@@ -592,6 +592,41 @@ export const DODGE = {
   },
   dust: { n: 8, T: 0.35, r: 11, rise: 5, size: 16 }, // (the spec's size 7 vanished against the leaf litter at the game's zoom)
 };
+// The fence vault (a speed vault), keyed on u = 1 − p.vaultT / p.vault.T (the sim moves him over the fence on a fixed path,
+// game/vault.js): the gather and the LEFT hand's plant on the fence top, the take-off, the body up and over with the legs
+// tucked and swung through on the right of the hand, the right foot's landing, the left's step-out into the run. The
+// fence is render3d's: posts 30 tall at the cell centre, rails at 12–16 and 22–26. The legs are FK in the air, and any
+// shoe point over the fence's footprint (band either side of its line) is held `clear` above the post top.
+export const VAULT = {
+  tail: 0.2, faceOmega: 40, hipOmega: 40, postTop: 30, railTop: 26, clear: 2.5, band: 4.5, palm: 1.6,
+  // the pelvis (absolute height): a dip to gather, up over the rail, the landing sinks and rises into the run
+  pelvisY: [[0, 37.3], [0.1, 35, 'S'], [0.2, 40, 'S'], [0.3, 48, 'O'], [0.42, 51, 'S'], [0.52, 50, 'S'], [0.62, 45, 'S'], [0.72, 39, 'S'], [0.82, 33.5, 'S'], [0.92, 31.5, 'O'], [1, 34.5, 'S']],
+  // the hips: pitched in to gather, then rolled (the right hip up) and turned a little right as the legs swing out there;
+  // the torso leans in over the planted arm (pitch, and the chest rolled back left against the hips' roll)
+  pelvisPitch: [[0, 0], [0.14, 16, 'S'], [0.3, 24, 'S'], [0.45, 22, 'S'], [0.6, 10, 'S'], [0.82, 12, 'S'], [0.94, 18, 'S'], [1, 12, 'S']],
+  pelvisYaw: [[0, 0], [0.2, 2, 'S'], [0.45, 12, 'S'], [0.66, 8, 'S'], [0.84, 0, 'S'], [1, 0, 'S']],
+  pelvisRoll: [[0, 0], [0.2, 0, 'S'], [0.42, -10, 'S'], [0.6, -8, 'S'], [0.8, -2, 'S'], [1, 0, 'S']],
+  spine1: [[0, 0], [0.14, 10, 'S'], [0.32, 16, 'S'], [0.5, 14, 'S'], [0.66, 6, 'S'], [0.84, 10, 'S'], [0.95, 14, 'S'], [1, 6, 'S']],
+  spine2: [[0, 0], [0.14, 14, 'S'], [0.32, 24, 'S'], [0.5, 18, 'S'], [0.66, 8, 'S'], [0.84, 12, 'S'], [0.95, 16, 'S'], [1, 6, 'S']],
+  spineRoll: [[0, 0], [0.2, -8, 'S'], [0.36, -16, 'S'], [0.55, -8, 'S'], [0.7, -2, 'S'], [0.84, 0, 'S']],
+  spineYaw: [[0, 0], [0.2, -4, 'S'], [0.45, -18, 'S'], [0.66, -12, 'S'], [0.84, -2, 'S'], [1, 0, 'S']],
+  headPitch: [[0, 0], [0.14, -6, 'S'], [0.45, 2, 'S'], [0.8, -6, 'S'], [1, -4, 'S']],
+  // FK legs [thigh flex, abd (+ out), knee, ankle (+ toe up)]. R: the outside leg, first up and over (out to the right)
+  // and first down; L: the push-off leg, tucked tight under him over the fence, then stepping out
+  legR: [[0, [0, 4, 8, 0]], [0.1, [-8, 4, 18, -18], 'S'], [0.26, [62, 26, 112, -8], 'O'], [0.46, [88, 30, 100, 0], 'S'], [0.62, [62, 20, 62, 6], 'S'], [0.78, [26, 8, 22, 10], 'S'], [0.9, [24, 6, 42, 0], 'S'], [1, [18, 5, 32, 0], 'S']],
+  legL: [[0, [0, 4, 8, 0]], [0.16, [-16, 2, 14, -30], 'S'], [0.28, [12, -2, 120, -25], 'S'], [0.36, [40, -4, 135, -20], 'S'], [0.44, [80, -2, 135, -12], 'S'], [0.52, [98, 2, 130, -10], 'S'], [0.66, [74, 0, 98, 0], 'S'], [0.84, [52, 2, 62, 8], 'S'], [0.95, [38, 4, 40, 6], 'S'], [1, [30, 4, 34, 0], 'S']],
+  // the feet's IK weights: [off from, off by] and [plant at, in by]; the touchdown spot relative to where the body lands
+  // (along the travel, out to the foot's own side)
+  footR: { off: [0.08, 0.16], on: 0.8, in: 0.9, along: -3, side: 4.6 },
+  footL: { off: [0.18, 0.27], on: 0.92, in: 1.04, along: 8, side: 4.4 },
+  // the left hand: reaching for the fence top as he gathers, planted (world-locked) from `on`, off again from `off`; it
+  // plants `lat` u to his left of his line, on the post top if the post is within `post` of that, else the top rail
+  hand: { on: [0.04, 0.2], off: [0.37, 0.5], lat: -6, post: 6 },
+  // the free left arm (FK) before the plant (reaching) and after it (flung out for balance): [flex, abd, elbow]
+  armReach: [62, 8, 20], armOut: [-14, 48, 36],
+  // the dust on the landing, the coat's flare (mostly the trailing panels and the right side as the legs swing out)
+  flare: 18, flareSide: 10, flareCap: 48, flareCapCam: 34, ripple: 7, rippleHz: 6,
+};
 // Flinch (additive), by direction and kind; revive stagger
 export const FLINCH = {
   // gain: on every channel below (the spec's angles at a typical bullet's A of 0.35–0.5 moved the chest 5–7° and the head
@@ -825,7 +860,7 @@ export function allTracks() {
     if (o && typeof o === 'object' && !Array.isArray(o)) for (const k of Object.keys(o)) walk(o[k], path + '.' + k);
   };
   walk(RECOIL, 'RECOIL'); walk(FIDGETS, 'FIDGETS'); walk(ACTIONS, 'ACTIONS'); walk(SWAP, 'SWAP'); walk(GUN_POSES, 'GUN_POSES');
-  walk(MELEE, 'MELEE'); walk(TAKEDOWN, 'TAKEDOWN'); walk(DODGE, 'DODGE'); walk(REVIVE, 'REVIVE'); walk(DEATH, 'DEATH'); walk(REPAIR, 'REPAIR'); walk(PICK, 'PICK');
+  walk(MELEE, 'MELEE'); walk(TAKEDOWN, 'TAKEDOWN'); walk(DODGE, 'DODGE'); walk(VAULT, 'VAULT'); walk(REVIVE, 'REVIVE'); walk(DEATH, 'DEATH'); walk(REPAIR, 'REPAIR'); walk(PICK, 'PICK');
   walk(LIFE, 'LIFE');
   return out;
 }

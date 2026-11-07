@@ -18,6 +18,7 @@ import { witnessTakedown } from './enemies.js';
 import { assaultRevive } from './assault.js';
 import { runMods } from './longnight.js';
 import { groundSpeed, addTrack } from './seasons.js';
+import { planVault, vaultPos, VAULT } from './vault.js';
 
 const SURFACE = { 0: 'grass', 1: 'dirt', 2: 'hard', 3: 'wood', 4: 'wood', 5: 'grass', 6: 'gravel', 7: 'hard', 8: 'dirt', 9: 'hard', 10: 'hard' };
 function surfaceAt(map, x, y) {
@@ -35,7 +36,7 @@ export function createPlayer() {
     angle: sp.facing ?? -Math.PI / 2,
     vx: 0, vy: 0,
     fireCd: 0, reloadT: 0, meleeCd: 0, meleeAnim: 0,
-    invuln: 0, dodgeT: 0, dodgeDx: 0, dodgeDy: 0,
+    invuln: 0, dodgeT: 0, dodgeDx: 0, dodgeDy: 0, vaultT: 0, vault: null,
     flinch: 0, muzzle: 0, lastHurt: 99, lastCombat: 99, regenBuff: 0, wellFed: 0,
     walkPhase: 0, inCover: false, chopAnim: 0,
     dead: false,
@@ -84,7 +85,9 @@ export function updatePlayer(dt) {
   if (moving && (input.held.sprint || ((input.touchMode || input.padMode) && G.settings.autoSprint && mvMag > 0.97)) && p.stamina > 5) sprint = true;
   if (G.repairHold) sprint = false;
 
-  if (p.dodgeT > 0) {
+  if (p.vaultT > 0) {
+    stepVault(p, dt);
+  } else if (p.dodgeT > 0) {
     p.dodgeT -= dt;
     map.moveCircle(p, p.dodgeDx * d.dodgeSpeed * dt, p.dodgeDy * d.dodgeSpeed * dt, 'player');
   } else if (!G.repairHold) {
@@ -137,7 +140,7 @@ export function updatePlayer(dt) {
   const firing = input.held.fire || consume('fireClick');
   // Shell-by-shell reloads can be interrupted by firing.
   if (firing && p.reloadT > 0 && w.perRound && p.mag > 0) { p.reloadT = 0; }
-  if (firing && p.reloadT <= 0 && p.fireCd <= 0 && p.dodgeT <= 0 && p.swapT <= 0 && !G.repairHold) {
+  if (firing && p.reloadT <= 0 && p.fireCd <= 0 && p.dodgeT <= 0 && !(p.vaultT > 0) && p.swapT <= 0 && !G.repairHold) {
     // FIRE button without stick aim: aim assist picks a target in a wide cone.
     if ((input.touchMode || input.padMode) && !(input.aim.active) && G.settings.aimAssist) {
       const t = assistTarget(p, 1.2);
@@ -294,7 +297,7 @@ export function takedown(e) {
 }
 
 function melee(p, d) {
-  if (p.meleeCd > 0 || p.dodgeT > 0) return;
+  if (p.meleeCd > 0 || p.dodgeT > 0 || p.vaultT > 0) return;
   // From behind an attacker who hasn't seen you: a silent takedown instead of a shove.
   const quiet = G.enemies.find((e) => canTakedown(e) && Math.abs(angleDiff(p.angle, angleTo(p.x, p.y, e.x, e.y))) < 1.2);
   if (quiet && takedown(quiet)) return;
@@ -320,6 +323,21 @@ function melee(p, d) {
 }
 
 function dodge(p, d, mv) {
+  if (p.vaultT > 0) return;
+  // DODGE while pushing into a fence vaults it (a standing DODGE stays the back-hop: the vault needs the push)
+  if (p.dodgeT <= 0 && !G.repairHold && Math.hypot(mv.x, mv.y) > 0.3) {
+    const v = planVault(G.map, p.x, p.y, p.radius, mv.x, mv.y);
+    if (v) {
+      const cost = VAULT.cost * d.staminaMult;
+      if (p.stamina < cost) { toast('Too tired to vault.', 'warn', 1.2); return; }
+      p.stamina -= cost;
+      v.map = G.map; v.lx = p.x; v.ly = p.y;
+      p.vault = v; p.vaultT = v.T;
+      p.angle = Math.atan2(v.dy, v.dx);
+      sfx('dodge', { surface: surfaceAt(G.map, p.x, p.y), vol: 0.7 });
+      return;
+    }
+  }
   if (p.dodgeT > 0 || p.stamina < d.dodgeCost) {
     if (p.stamina < d.dodgeCost) toast('Not enough stamina to dodge.', 'warn', 1.2);
     return;
@@ -334,6 +352,27 @@ function dodge(p, d, mv) {
   sfx('dodge', { surface: surfaceAt(G.map, p.x, p.y) });
   onDodge();
   if (inCombat()) addJP('shadow', 1, 'dodge', 6);
+}
+
+const _vp = { x: 0, y: 0 };
+/**
+ * One step over the fence: the path owns his position (no collision: he is over the rail), velocity follows it. A map
+ * change, a teleport (anything that moved him far off the path), or death cancels it, with the collision pushing him clear.
+ */
+function stepVault(p, dt) {
+  const v = p.vault, map = G.map;
+  if (!v || v.map !== map || p.dead || Math.hypot(p.x - v.lx, p.y - v.ly) > 30) {
+    p.vaultT = 0; p.vault = null; map.pushOut(p, p.radius, 'player'); return;
+  }
+  p.vaultT = Math.max(0, p.vaultT - dt);
+  vaultPos(v, 1 - p.vaultT / v.T, _vp);
+  if (dt > 0) { p.vx = (_vp.x - p.x) / dt; p.vy = (_vp.y - p.y) / dt; }
+  p.x = _vp.x; p.y = _vp.y; v.lx = p.x; v.ly = p.y;
+  if (p.vaultT <= 0) {
+    p.vault = null;
+    map.pushOut(p, p.radius, 'player');
+    sfx('step', { vol: 1, surface: surfaceAt(map, p.x, p.y) });
+  }
 }
 
 /** Apply damage to the player from a source point. Returns true if damage landed. */

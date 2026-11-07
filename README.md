@@ -70,6 +70,9 @@ In the 3D view Frank is no longer a stick figure: he's a real articulated charac
   eats, kneels to dress a wound, carries parcels, strolls with his hands in his pockets when it's quiet, crouches
   in cover and pops up to shoot, prowls with the gun low, limps and holds his side at low health, stops with his
   hands on his knees when winded, and hunches with a darker, wet coat in the rain.
+- **Fence vault (v0.22.3):** move into a fence and press Dodge: Frank plants a hand on the post and swings his
+  legs over (enemies can't follow). Hedges, walls, gates and doors don't vault.
+- **Grass (v0.22.3):** the 3D view now has its own grass tufts swaying in the wind, wildflowers and bushes.
 - **Cost:** about 0.03–0.11 ms of CPU per frame, measured in the browser; Low graphics uses a lighter version.
 
 NPCs and attackers still use the old figures for now. The classic 2D view is unchanged.
