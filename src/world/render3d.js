@@ -73,7 +73,7 @@ function init() {
   flash.shadow.mapSize.set(512, 512);
   scene.add(flash); scene.add(flash.target);
   for (let i = 0; i < 8; i++) { const l = new THREE.PointLight(0xffc27a, 0, 300, 1.4); l.position.set(0, -999, 0); scene.add(l); pool.push(l); }
-  scene.fog = new THREE.FogExp2(0x9fb3c4, 0.00018);
+  scene.fog = new THREE.Fog(0x9fb3c4, 1000, 3000); // linear, measured from the camera: see updateLights
   R.shadowMap.enabled = !lowQuality(); // (compile the variants the first frame will use)
   prewarmFrank(R, scene, camera, !!lowQuality());
   return true;
@@ -748,6 +748,7 @@ function placeFrankFx(dk) {
 
 /* ---------------- lights, camera, frame ---------------- */
 const skyDay = new THREE.Color(0xcfe3ff), skyNight = new THREE.Color(0x4a5e94), fogDay = new THREE.Color(0xa9bccb), fogNight = new THREE.Color(0x0b1220);
+let camDist = 1000;
 function updateLights(tx, tz, dk) {
   const h = G.s ? G.s.time.minute / 60 : 12;
   const warm = Math.max(0, 1 - Math.abs(h - 12.5) / 6.5); // midday → 1, dawn/dusk → 0
@@ -765,7 +766,11 @@ function updateLights(tx, tz, dk) {
   hemi.color.copy(skyDay).lerp(skyNight, dk);
   const rain = G.rainLevel || 0, fog = G.fogLevel || 0, snow = G.snowLevel || 0;
   scene.fog.color.copy(fogDay).lerp(fogNight, dk);
-  scene.fog.density = 0.00012 + fog * 0.0011 + rain * 0.00025 + snow * 0.0003 + dk * 0.00025;
+  // The camera sits ~camDist from Frank, so fog starts just past him: the play area around him stays clear and
+  // weather and night only thicken the far part of the view (the top of the screen), never the middle.
+  const thick = Math.min(1, fog + rain * 0.35 + snow * 0.45 + dk * 0.25);
+  scene.fog.near = camDist * (1.02 - 0.08 * thick);
+  scene.fog.far = camDist * (3.2 - 1.55 * thick);
   sun.intensity *= 1 - Math.min(0.6, rain * 0.5 + fog * 0.4);
   R.setClearColor(scene.fog.color);
   // Frank's flashlight at night.
@@ -828,6 +833,7 @@ export function render3d() {
   const tx = cam.x + (cam.shakeX || 0), tz = cam.y + (cam.shakeY || 0);
   const z = cam.zoom || 1;
   const d = (h / z) / (2 * Math.tan(FOV * Math.PI / 360)) * 1.12;
+  camDist = d;
   camera.aspect = w / h; camera.updateProjectionMatrix();
   camera.position.set(tx, Math.sin(PITCH) * d, tz + Math.cos(PITCH) * d);
   camera.lookAt(tx, 0, tz);
