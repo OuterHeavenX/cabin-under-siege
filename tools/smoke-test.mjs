@@ -3661,6 +3661,35 @@ if (want('frank')) {
       T5.limp.v70 <= 0.6 && T5.limp.v125 <= 1.2 && T5.takedownReach < 0.05 &&
       T5.items.heal === null && T5.items.food === 'eat' && T5.items.med === 'bandage';
     check('Frank life (node), transitions: a shot from every life state (and just after a modal) is on the aim line that frame; the modal in/out, the stroll draw and the gun check never jump a hand > 12 u a frame, the modal exit keeps the hand below the shoulder; the gun check never points the muzzle at his head; the limp is smooth; a takedown through interact keeps its collar grab; items come off the inventory', okT, JSON.stringify(T5));
+    // (final review) recoveries and edges: the sim is frozen through a defeat (no timer moves: tickF), so the fatal hit's
+    // lastCombat 0 must not wake him in the aim (nor raise it once the sim runs on after the dialogue); a reload running at
+    // death resumes its clip; a prequel respawn (invuln 2) blinks for its whole second second; a cooldown left from the last game is no gesture; a long gun swapped in
+    // mid-delivery is no hand-over; a 25 s render gap (the 2D gallery) is no sprint; a long gun's shot after a 160° flick
+    // has its bore on the bullet line
+    const resR = {};
+    {
+      G.modal = null; G.tail = null; G.abilityCd = {}; G.enemies = []; G.s.job = null; G.map = { getSolid: () => 0, blockerAt: () => null };
+      const tickF = ({ p, r }) => { G.time += dt; G.frameDt = 0; F.poseFrank(r, p, { dk: 0, camera: null }); };
+      const die = (s) => { G.hurtDir = { angle: 0.3, t: 1.2 }; s.p.lastHurt = 0; s.p.lastCombat = 0; s.p.hp = 0; s.p.dead = true; s.p.invuln = 0.55; tick(s); for (let i = 0; i < 110; i++) tickF(s); };
+      { const s = rig('pistol'); run(s, 0.6); die(s); s.p.dead = false; s.p.hp = 60; G.modal = 'dialogue'; let aim = 0; for (let i = 0; i < 90; i++) { tickF(s); aim = Math.max(aim, s.r.st.aimW); } G.modal = null;
+        run(s, 1.0, () => { s.p.lastCombat += dt; aim = Math.max(aim, s.r.st.aimW); }); resR.wakeAim = +aim.toFixed(2); }
+      { const s = rig('shotgun', 2); run(s, 0.6); s.p.reloadT = s.p.reloadMax = 0.5; run(s, 0.2); die(s); s.p.dead = false; s.p.hp = 60; tickF(s); resR.reloadResumed = s.r.st.rl.on; s.p.reloadT = 0; }
+      { const s = rig('pistol'); run(s, 0.6); die(s); s.p.dead = false; s.p.hp = 100; s.p.invuln = 2; let late = 0;
+        run(s, 2.0, (i) => { s.p.invuln -= dt; if (i * dt >= 1.0 && i * dt < 1.9 && !s.r.body.visible) late++; }); resR.respawnBlinkLate = late; }
+      { G.abilityCd = { emergency_repair: 60 }; const s = rig('pistol'); let abil = 9; run(s, 0.3, () => { abil = Math.min(abil, s.r.st.lf.abil.t); }); resR.leftoverCdGesture = abil < 9; G.abilityCd = {}; }
+      { G.s.job = { type: 'delivery', stage: 'deliver' }; const s = rig('pistol'); s.p.lastCombat = 99; run(s, 1.0); const had = !!s.r.st.lf.parcel; let give = 9;
+        s.p.weapon = 'shotgun'; s.p.swapT = 0.35; run(s, 1.0, () => { give = Math.min(give, s.r.st.lf.giveT ?? 9); }); resR.swapMidDelivery = { had, give: give < 9 }; G.s.job = null; }
+      { const s = rig('pistol'); s.p.lastCombat = 99; const walk = () => { s.p.x += 125 * dt; s.p.vx = 125; s.p.walkPhase += 10 * dt; };
+        run(s, 1.0, walk); G.time += 25; s.p.lastHurt += 25; s.p.walkPhase += 250; s.p.x += 30; let rate = 0, spr = 0; run(s, 0.6, () => { walk(); rate = Math.max(rate, s.r.st.phaseRate); spr = Math.max(spr, s.r.st.sprintW); });
+        resR.gap = { rate: +rate.toFixed(1), sprintW: +spr.toFixed(2) }; }
+      resR.flick = {};
+      for (const w of ['shotgun', 'rifle']) { const s = rig(w); run(s, 0.8); s.p.angle = 160 * Math.PI / 180; run(s, 0.05); shoot(s); tick(s);
+        resR.flick[w] = +Math.abs(((yawOf(s.r.fx.bore) - 160 + 540) % 360) - 180).toFixed(1); }
+    }
+    const RR = resR;
+    check('Frank recoveries and edges (node): no aim on waking from a defeat, a reload running at death resumes, a prequel respawn blinks through its 2 s, no gesture from a leftover cooldown, no hand-over on a long-gun swap mid-delivery, no sprint after a 25 s render gap, a long gun shot after a 160° flick on the bullet line',
+      RR.wakeAim < 0.05 && RR.reloadResumed === true && RR.respawnBlinkLate > 0 && !RR.leftoverCdGesture && RR.swapMidDelivery.had && !RR.swapMidDelivery.give && RR.gap.rate <= 16 && RR.gap.sprintW === 0 &&
+      Object.values(RR.flick).every((d) => d < 5), JSON.stringify(RR));
     G.repairHold = null; G.hurtDir = null; G.fx = null;
     fs.rmSync(TMP, { recursive: true, force: true });
     // (jump: a pop is a gun that moves further in one frame than a hand can swing it; the fastest legitimate move, a long

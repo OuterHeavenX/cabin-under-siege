@@ -788,8 +788,8 @@ function initTitle() {
   document.getElementById('t-import').addEventListener('click', go(() => pickImport(() => showTitle())));
   document.getElementById('t-help').addEventListener('click', go(() => openHelp()));
   // Open on pointerdown: an iOS "click" can be dropped if the finger drifts or another finger is down.
-  document.getElementById('menu-btn').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); suppressGhostClick(); if (!modalOpen()) { sfx('ui'); openMenu(); } });
-  document.getElementById('objective').addEventListener('click', () => { if (!modalOpen()) openMenu('journal'); });
+  document.getElementById('menu-btn').addEventListener('pointerdown', (e) => { e.preventDefault(); e.stopPropagation(); suppressGhostClick(); if (!modalOpen() && !G.transition && !G.player?.dead) { sfx('ui'); openMenu(); } });
+  document.getElementById('objective').addEventListener('click', () => { if (!modalOpen() && !G.transition && !G.player?.dead) openMenu('journal'); });
   const rh = document.getElementById('rotate-hint');
   rh.addEventListener('click', () => rh.classList.add('dismissed'));
 }

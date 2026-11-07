@@ -245,7 +245,7 @@ const S = {
   shot: false, tShot: 99, hit: false, excess: 0, combat: false, weapon: 'pistol', long: false, dPhase: 0, gaitOn: false, wall: false,
   inputYaw: 0, lowHp: false, aimW: 0, aimWb: 0, supW: 1, blade: 0, faceYaw: 0, chestYaw: 0, hipYaw: 0, tau: 0, phi: 0, psi: 0, amp: 0, gs: 0,
   sigma: 0.5, back: false, strafeK: 0, dirSign: 1, crouch: false, breath: 0, bob: 0, counter: 0.6, skid: false,
-  shove: false, shoveDrag: 0, stopK: 0, gsVis: 0, hardReset: false, chestRef: 0, chestLag: 0, flickK: 1,
+  shove: false, shoveDrag: 0, stopK: 0, gsVis: 0, hardReset: false, chestRef: 0, chestLag: 0, flickK: 1, shotW: 0,
   reloadStart: false, reloadCycle: false, reloadEndNat: false, reloadInterr: false, swapStart: false, dryFire: false, weaponJump: false, threat: false,
   reach: false, aimWant: false,
 };
@@ -358,11 +358,16 @@ function resetWeaponClips(st) {
 }
 
 /* ---------------- 1. signals, edges (§4.1, §4.2) ---------------- */
+// (the sim's step clock runs at 10 rad/s, 14 sprinting: a measured cadence above that plus a margin is a frame-timing artefact)
+const PHASE_RATE_MAX = 16;
 function signals(r, p) {
   const st = r.st;
   S.now = G.time || 0;
   S.first = !st.init || st.player !== p || st.lastTime === null;
   S.realDt = S.first ? 0 : clamp(S.now - st.lastTime, 0, 0.05);
+  // a long render gap (the 2D shooting gallery: the rig isn't posed while it runs): a discontinuity, like a teleport (the
+  // walkPhase and the ground gained in it are not this frame's motion; the clamped dt would read them as a sprint)
+  S.gap = !S.first && S.now - st.lastTime > 0.25;
   st.lastTime = S.now;
   const lh = p.lastHurt;
   let simDt = simDtFrom(st.prevLastHurt, st.prevLastCombat, st.lastSimDt, lh, p.lastCombat, G.frameDt);
@@ -376,10 +381,17 @@ function signals(r, p) {
   const map = G.map || null, newMap = !S.first && st.mapRef !== map;
   st.mapRef = map;
   // a new map (loadMap) is a teleport whatever the distance
-  S.teleport = S.first || S.jump > 48 || newMap || (p.dead !== st.deadPrev && !p.dead);
+  S.teleport = S.first || S.jump > 48 || newMap || (p.dead !== st.deadPrev && !p.dead) || (S.gap && !p.dead);
   S.hardReset = S.first || (p.dead !== st.deadPrev && !p.dead);
   if (S.teleport) { st.player = p; st.init = true; hardReset(r, p); }
   if (S.hardReset) resetWeaponClips(st);
+  // a recovery (dead → alive): the fatal hit left lastCombat at 0 and the sim stayed frozen through the hold, the modal and
+  // the wake-up dialogue, so he would wake in the aim. Drop the aim latches and ignore that stale lastCombat (clocks).
+  // A respawn with the revive's invulnerability (the prequels' TRY AGAIN, invuln 2) is a revive: its blink and stagger.
+  if (S.hardReset && !S.first) {
+    st.aimW = st.aimHold = st.aimWb = 0; st.snapT = 9; st.staleLC = p.lastCombat ?? 99; st.shotSeen = false; // (the frozen muzzle timer too)
+    if ((p.invuln || 0) >= 2) { st.rev = 0; st.revFree = false; st.sinceRevive = 0; }
+  }
   // a shove (a ram's 26 u push, a melee hit, a long gun's kick): the body moved further this frame than its own motion
   // explains. All but 5 u of it is a skid (the feet carried along: never drift, never a squat), and a corrective step
   // takes up the rest (frank3d-anim.js).
@@ -419,7 +431,7 @@ function signals(r, p) {
   // (the cadence's low-pass is τ 0.05 s, not the spec's 0.1: the sim's step rate only ever jumps between 10 and 14, and the
   // slower filter lagged the sprint's swing timing by a step; a start locks onto the rate at once, below)
   if (S.dPhase > 1e-6 && simDt > 5e-4) {
-    const pr = S.dPhase / simDt;
+    const pr = Math.min(PHASE_RATE_MAX, S.dPhase / simDt);
     st.phaseRate += (pr - st.phaseRate) * (1 - Math.exp(-simDt / 0.05));
   }
   // measured velocity (never the sim's p.vx/p.vy, which go stale in a dodge or against a wall)
@@ -442,7 +454,7 @@ function signals(r, p) {
   if (simDt > 0) {
     const was = st.gaitOn;
     st.gaitOn = S.dPhase > 1e-6 && !p.dead && !((p.dodgeT || 0) > 0);
-    if (st.gaitOn && !was && S.dPhase > 1e-6 && simDt > 5e-4) st.phaseRate = S.dPhase / simDt; // a start locks onto the cadence at once
+    if (st.gaitOn && !was && S.dPhase > 1e-6 && simDt > 5e-4) st.phaseRate = Math.min(PHASE_RATE_MAX, S.dPhase / simDt); // a start locks onto the cadence at once
   } else if (S.presentation || p.dead) st.gaitOn = false;
   S.gaitOn = st.gaitOn;
   // the wall push: the step clock runs but he isn't getting anywhere, for 0.12 s (a reversal passes through speed 0)
@@ -470,7 +482,11 @@ function clocks(r, p) {
   const E = G.enemies || [];
   for (let i = 0; i < E.length; i++) { const e = E[i]; if (e && !e.dead && (e.aimT || 0) > 0 && Math.hypot(e.x - p.x, e.y - p.y) < 500) { S.threat = true; break; } }
   // aim weight (§4.4 AIM/RELAXED): up in 0.18 s, instantly on a shot; held 0.4 s, then down over 0.6 s
-  const aimWant = !p.dead && (S.combat || (p.lastCombat ?? 99) < 4 || S.tShot < 0.5 || (p.reloadT || 0) > 0 || (p.swapT || 0) > 0 ||
+  // (the lastCombat a recovery woke up with is the fatal fight's: ignored while it keeps counting on from there, until it
+  // is past the 4 s or a new fight resets it below it, or a hit or a shot)
+  const lc = p.lastCombat ?? 99;
+  if (st.staleLC != null && (lc < st.staleLC - 1e-6 || lc >= 4 || S.hit || S.shot)) st.staleLC = null;
+  const aimWant = !p.dead && (S.combat || (lc < 4 && st.staleLC == null) || S.tShot < 0.5 || (p.reloadT || 0) > 0 || (p.swapT || 0) > 0 ||
     !!input.held.fire || !!(input.aim && input.aim.active) || S.threat);
   // A shot from the relaxed carry (a draw-fire) puts the GUN on the aim line that frame (aimW = 1: the gun and the hands
   // on it), but the BODY comes in under it (aimWb: the blade, the crouch, the chest and the cheek weld) over TUNE.drawSnap.T
@@ -803,7 +819,7 @@ function facing(r, p) {
     const Dh = st.dth, k = ES(clamp(st.deathT / DEATH.turnT, 0, 1));
     st.face.x = Dh.f0 + wrap(Dh.F - Dh.f0) * k; st.chest.x = Dh.c0 + wrap(Dh.F - Dh.c0) * k; st.hip.x = Dh.h0 + wrap(Dh.F - Dh.h0) * k;
     st.face.v = st.chest.v = st.hip.v = 0; st.hipIdleT = st.hip.x; st.turning = false;
-    S.faceYaw = S.chestYaw = S.hipYaw = st.hip.x; S.tau = wrap(st.chest.x - st.hip.x); S.chestRef = st.chest.x; S.chestLag = 0; S.flickK = 1; st.mode = 'idle';
+    S.faceYaw = S.chestYaw = S.hipYaw = st.hip.x; S.tau = wrap(st.chest.x - st.hip.x); S.chestRef = st.chest.x; S.chestLag = 0; S.flickK = 1; S.shotW = 0; st.mode = 'idle';
     st.hipYawPrev = S.hipYaw; st.yawRate = st.yawAcc = 0;
     return;
   }
@@ -873,6 +889,10 @@ function facing(r, p) {
   // the direction the chest aims along (its yaw less the blade), and how far the face is ahead of it
   S.chestRef = st.chest.x - bl; S.chestLag = wrap(S.faceYaw - S.chestRef);
   S.flickK = 1 - ss(TUNE.flick.lowFrom, TUNE.flick.lowTo, Math.abs(S.chestLag) / DEG);
+  // (D6) a long gun's shot frame and its flash: the bore is on the bullet line however far the chest lags a fast flick
+  // (shouldered, not held within reach of the chest), then it comes back within reach over 0.12 s
+  S.shotW = S.long ? 1 - ss(st.shotM0, st.shotM0 + 0.12, S.tShot) : 0;
+  S.flickK = lerp(S.flickK, 1, S.shotW);
   // yaw rate and acceleration of the hips (the coat's turn fling)
   if (S.liveDt > 0) {
     const yr = wrap(S.hipYaw - st.hipYawPrev) / S.liveDt, k = 1 - Math.exp(-S.liveDt / 0.03);
@@ -1481,6 +1501,11 @@ function lifeClocks(r, p) {
     L.stroll = L.carry = L.prowl = L.cover = L.low = L.hok = L.phone = L.modal = 0; L.hokOn = false; L.fid = null; L.fw = 0; L.c.w = L.c.fw = 0; L.c.phase = 0;
     L.g.ph = 0; L.g.yaw = L.g.pitch = 0; L.pg.ph = 0; L.pg.w = 0; L.reach.on = false; L.talk.on = false; L.talk.w = 0; L.item.t = 9; L.abil.t = 9; L.steady = 9;
     if (L.modalTool && st.tool === L.modalTool) st.tool = null; L.modalTool = null; L.modalKind = null;
+    // (the item and ability baselines follow along, so an inventory restored by a respawn or a cooldown left over from the
+    // last game is not read as a use on the first live frame)
+    const inv0 = (G.s && G.s.inv) || null;
+    L.prevMed = inv0 ? invSum(inv0, QUICK_MED) : 0; L.prevFood = inv0 ? invSum(inv0, QUICK_FOOD) : 0;
+    const cd0 = G.abilityCd; if (cd0) for (const id in cd0) L.prevCd[id] = cd0[id] || 0;
     lifeOut(L); return;
   }
   // (TUNE.enable.idleLife: the isolation switch; off, no contrapposto, glances or fidgets, e.g. for the §7.4 value gate)
@@ -1504,9 +1529,10 @@ function lifeClocks(r, p) {
   L.pocket = ramp(L.pocket ?? 1, st.speed < LF.stroll.pocketSpeed, adt, LF.stroll.pocketIn, LF.stroll.pocketOut);
   // ---- carry (a delivery parcel in hand); at the end it is handed over (the left hand out, the parcel gone at the
   // reach's peak), then the arm comes down
-  const CY = LF.carry, wantCarry = !!job && job.type === 'delivery' && job.stage === 'deliver' && !S.long;
+  // (a long gun swapped in mid-delivery needs both hands: the parcel goes down without a hand-over, and comes back after)
+  const CY = LF.carry, delivering = !!job && job.type === 'delivery' && job.stage === 'deliver', wantCarry = delivering && !S.long;
   if (wantCarry) { L.giveT = 9; L.parcel = L.parcel || L.carry > CY.show; }
-  else if (L.parcel && L.carry > 0.9 && L.giveT >= 9 && !busyF && !p.dead) L.giveT = 0; // (the hand-over starts)
+  else if (L.parcel && L.carry > 0.9 && L.giveT >= 9 && !busyF && !p.dead && !delivering) L.giveT = 0; // (the hand-over starts)
   if (L.giveT < 9) { L.giveT += adt; if (L.giveT >= CY.giveT) L.parcel = false; if (L.giveT > CY.giveT + 0.6) L.giveT = 9; }
   if (wantCarry && L.carry > CY.show) L.parcel = true;
   L.carry = ramp(L.carry, wantCarry || (L.giveT < CY.giveT), adt, CY.in, CY.out);
@@ -2371,7 +2397,7 @@ const blendPose = (a, b, t, o) => { o.p.lerpVectors(a.p, b.p, t); o.q.slerpQuate
  * shouldered, narrowing toward ±flick.yawLow as it comes off the shoulder to low ready (flickK).
  */
 function flickYaw(w, want) {
-  const FL = TUNE.flick, lim = (LONG[w] ? lerp(FL.yawLow, FL.yawLong, S.flickK) : FL.yawPistol) * DEG;
+  const FL = TUNE.flick, lim = LONG[w] ? lerp(lerp(FL.yawLow, FL.yawLong, S.flickK) * DEG, Math.PI, S.shotW) : FL.yawPistol * DEG;
   return S.chestRef + clamp(wrap(want - S.chestRef), -lim, lim);
 }
 /** The aimed gun (§4.8) for weapon w: converged yaw, aim pitch; `live` adds the recoil, the dry fire, the action roll and the high port. */
@@ -2654,7 +2680,10 @@ function reloadClip(r, p) {
   // a shot during the reload (a hold-fire interrupt of the shell chain, or a click during a render tail): the gun is on the
   // aim line THAT frame (the recoil hides the cut); only the left hand keeps its 0.06 s fade, and its waypoints ride the gun
   if (S.shot && R.on && !S.reloadStart) { R.gunCut = true; if (R.kind !== 'out') { R.kind = 'out'; R.out = 0; } }
-  if (S.reloadStart && rM > 0) {
+  // a reload that was running when he went down: the sim only froze its timer, so no start edge will come after the
+  // recovery; pick the clip up from the live timer on the first alive frame
+  const resume = S.hardReset && !S.first && !p.dead && rT > 0;
+  if ((S.reloadStart || resume) && rM > 0) {
     R.on = true; R.gunCut = false; R.weapon = w; R.empty = (p.mag || 0) === 0; R.cycle = 0; R.tail = 0; R.tailT = 0; R.out = 0; R.entry = 0; R.dropped = false; R.ejected = false;
     R.hold = S.shot || S.tShot < 0.08 ? 0.08 - Math.min(0.08, Math.max(0, S.tShot)) : 0;
     // (a fresh key object per reload or shell: an event, not a frame; the rifle presses one round per round it needs)
@@ -2817,6 +2846,9 @@ function swapClip(r, p) {
   }
   if (W.on && W.render) { W.rT += S.adt; if (W.rT >= st.drawT || p.dead || S.hardReset || W.to !== S.weapon || S.shot || st.tool) W.on = false; }
   else if (W.on && (!(sT > 0) || p.dead || S.hardReset || W.to !== S.weapon)) W.on = false;
+  // a swap that was running when he went down resumes from the live timer on the first alive frame (the gun was dropped:
+  // only the draw)
+  if (!W.on && S.hardReset && !S.first && !p.dead && sT > 0) { W.on = true; W.render = false; W.from = null; W.to = S.weapon; W.snapOk = false; W.relOk = false; }
   if (!W.on) return;
   const f = W.render ? clamp(W.rT / st.drawT, 0, 1) : clamp(1 - sT / SWAP.T, 0, 1);
   GC.sw = true; GC.swF = f; GC.swFrom = W.from; GC.swTo = W.to;

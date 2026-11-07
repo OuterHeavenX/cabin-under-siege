@@ -74,6 +74,7 @@ function init() {
   scene.add(flash); scene.add(flash.target);
   for (let i = 0; i < 8; i++) { const l = new THREE.PointLight(0xffc27a, 0, 300, 1.4); l.position.set(0, -999, 0); scene.add(l); pool.push(l); }
   scene.fog = new THREE.FogExp2(0x9fb3c4, 0.00018);
+  R.shadowMap.enabled = !lowQuality(); // (compile the variants the first frame will use)
   prewarmFrank(R, scene, camera, !!lowQuality());
   return true;
 }
@@ -812,7 +813,13 @@ export function render3d() {
   const { w, h, dpr } = G.view;
   const q = lowQuality();
   if (w !== lastW || h !== lastH || dpr !== lastDpr) { R.setPixelRatio(dpr); R.setSize(w, h, false); canvas3d.style.width = `${w}px`; canvas3d.style.height = `${h}px`; lastW = w; lastH = h; lastDpr = dpr; }
-  if (q !== lastQ) { R.shadowMap.enabled = !q; lastQ = q; scene.traverse((o) => { if (o.material) o.material.needsUpdate = true; }); }
+  if (q !== lastQ) {
+    const switched = lastQ !== null && !!lastQ !== !!q; // ('auto' reads undefined until autoLow is set)
+    R.shadowMap.enabled = !q; lastQ = q; scene.traverse((o) => { if (o.material) o.material.needsUpdate = true; });
+    // a mid-session switch (auto → Low, or Settings): compile the new quality's Frank (and his hidden debris and dust
+    // programs, whose shadow variant just went stale) now, not on the first casing or dodge in a fight
+    if (switched) prewarmFrank(R, scene, camera, !!q);
+  }
   if (!world || world.map !== m || world.groundSrc !== m.groundCanvas) buildWorld(m);
   if (world.season !== seasonId()) { world.season = seasonId(); paintTrees(); }
   const dk = darkness();
