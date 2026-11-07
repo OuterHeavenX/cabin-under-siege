@@ -7,7 +7,7 @@ You are Frank Lowe — formerly Frankie Corsetti of the Vescari crime family —
 to build an honest life in a cabin outside the small town of Pine Hollow. By day you
 work, meet people and fix up the place. Some nights, the family comes for you.
 
-This build (v0.21) contains **the complete story — five playable chapters with four endings, and an epilogue chapter after them**, each chapter now a stretch of Frank's life rather than a stop between sieges — plus a prequel episode, New Game+ and an arcade mode. It runs in the browser and as an installable Steam Deck / PC game:
+This build (v0.22) contains **the complete story — five playable chapters with four endings, and an epilogue chapter after them**, each chapter now a stretch of Frank's life rather than a stop between sieges — plus a prequel episode, New Game+ and an arcade mode. It runs in the browser and as an installable Steam Deck / PC game:
 
 1. **The Cabin** — Pine Hollow, a remote cabin and a small town.
 2. **Larch Street** — Millbrook, Ohio: a house on a quiet street, a neighbor with secrets, and Sal Benedetto.
@@ -40,7 +40,7 @@ than using simple beeps:
 loop per mood). See [`audio/README.md`](audio/README.md) for the sound names and
 recommended free sources.
 
-### Frank in 3D (v0.21.x, in progress)
+### Frank in 3D (v0.21–v0.22)
 
 In the 3D view Frank is no longer a stick figure: he's a real articulated character, built entirely in code
 (`src/world/frank3d*.js`, no model files).
@@ -65,8 +65,12 @@ In the 3D view Frank is no longer a stick figure: he's a real articulated charac
   buckle and he goes down toward the shot, the gun drops and bounces, the coat spreads on the ground, and the
   defeat screen waits for the fall to finish; he gets back up when he recovers. Repairing, chopping wood and
   picking things up are acted out too.
-- **Still to come:** idle life (breathing, weight shifts, glances, fidgets, head turns toward the aim) and a final
-  polish pass.
+- **Life (v0.22):** standing still he breathes, shifts his weight, glances around and fidgets (a press-check, a lapel
+  tug, a neck roll), and his head follows your aim. He turns to whoever he's talking to and gestures on the beats,
+  eats, kneels to dress a wound, carries parcels, strolls with his hands in his pockets when it's quiet, crouches
+  in cover and pops up to shoot, prowls with the gun low, limps and holds his side at low health, stops with his
+  hands on his knees when winded, and hunches with a darker, wet coat in the rain.
+- **Cost:** about 0.03–0.11 ms of CPU per frame, measured in the browser; Low graphics uses a lighter version.
 
 NPCs and attackers still use the old figures for now. The classic 2D view is unchanged.
 
