@@ -65,6 +65,7 @@ function assistTarget(p, maxAngle) {
   return best;
 }
 
+let fenceHintShown = false, fencePush = 0;
 export function updatePlayer(dt) {
   const p = G.player;
   const d = derived();
@@ -94,6 +95,11 @@ export function updatePlayer(dt) {
     const speed = (sprint ? SPRINT_SPEED : PLAYER_SPEED) * (p.reloadT > 0 ? 0.85 : 1) * groundSpeed(p.x, p.y);
     p.vx = mv.x * speed; p.vy = mv.y * speed;
     if (moving) {
+      // Pushing against a fence for a moment: tell him once per session that DODGE vaults it.
+      if (!fenceHintShown) {
+        if (planVault(map, p.x, p.y, p.radius, mv.x, mv.y)) { fencePush += dt; if (fencePush > 0.4) { fenceHintShown = true; toast(input.touchMode ? 'Tap DODGE while pushing into the fence to vault it.' : 'Press Dodge (Space) while pushing into the fence to vault it.', 'info', 3.5); } }
+        else fencePush = 0;
+      }
       map.moveCircle(p, p.vx * dt, p.vy * dt, 'player');
       addTrack(p, 'player');
       p.walkPhase += dt * (sprint ? 14 : 10);
@@ -325,8 +331,10 @@ function melee(p, d) {
 function dodge(p, d, mv) {
   if (p.vaultT > 0) return;
   // DODGE while pushing into a fence vaults it (a standing DODGE stays the back-hop: the vault needs the push)
-  if (p.dodgeT <= 0 && !G.repairHold && Math.hypot(mv.x, mv.y) > 0.3) {
-    const v = planVault(G.map, p.x, p.y, p.radius, mv.x, mv.y);
+  if (p.dodgeT <= 0 && !G.repairHold) {
+    // push toward the fence, or (standing still) just face it
+    const moving = Math.hypot(mv.x, mv.y) > 0.3;
+    const v = moving ? planVault(G.map, p.x, p.y, p.radius, mv.x, mv.y) : planVault(G.map, p.x, p.y, p.radius, Math.cos(p.angle), Math.sin(p.angle));
     if (v) {
       const cost = VAULT.cost * d.staminaMult;
       if (p.stamina < cost) { toast('Too tired to vault.', 'warn', 1.2); return; }

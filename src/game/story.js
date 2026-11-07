@@ -14,6 +14,7 @@ import { addPickup } from './combat.js';
 import { jobWaypoint } from './jobs.js';
 import { scheduleSpot } from './npcs.js';
 import { NPCS } from '../data/npcs.js';
+import { SHOPS } from '../data/items.js';
 import { choresStatus, errandWaypoint, errandGiverWaypoint, startErrand, townErrandsDone, stageLabel } from './errands.js';
 import { startQuest } from './quests.js';
 import { input } from '../input.js';
@@ -864,6 +865,27 @@ function fortifyWaypoint(mapId) {
     if (halfOk(o[k])) continue;
     const b = [...m.blockers.values()].find((x) => x.id === k);
     if (b) return { map: mapId, x: b.cx * TILE + 16, y: b.cy * TILE + 16, label: k === 'gate_l' ? 'Gate (left)' : 'Gate (right)' };
+  }
+  return defenseWaypoint(mapId);
+}
+/** Where the next defense can actually be made, given what Frank carries: a window to board, a door to brace, a spot
+ *  to place cover or a trap, an upgrade to install, or the nearest shop that sells defenses. */
+function defenseWaypoint(mapId) {
+  const m = G.maps[mapId], o = G.s.home.openings, p = G.player;
+  const far = (b) => (p && G.map === m ? Math.hypot(b.cx * TILE + 16 - p.x, b.cy * TILE + 16 - p.y) : 0);
+  const homeOpenings = [...m.blockers.values()].filter((b) => b.rec && !b.rec.npc && o[b.id] && !String(b.id).startsWith('gate'));
+  const pick = (list) => list.sort((a, b) => far(a) - far(b))[0];
+  if (count('board_kit') > 0) { const w = pick(homeOpenings.filter((b) => b.kind === 'window' && !b.rec.boards)); if (w) return { map: mapId, x: w.cx * TILE + 16, y: w.cy * TILE + 16, label: 'Board this window' }; }
+  if (count('door_brace') > 0) { const d = pick(homeOpenings.filter((b) => b.kind === 'door' && !b.rec.reinforced)); if (d) return { map: mapId, x: d.cx * TILE + 16, y: d.cy * TILE + 16, label: 'Brace this door' }; }
+  if (['bear_trap', 'sandbags', 'barricade'].some((id) => count(id) > 0)) return { map: mapId, ...m.points.cabin_in, label: 'Place cover or a trap (Items / Defense Plan)' };
+  if (count('floodlight_kit') > 0 || count('alarm_kit') > 0) return { map: mapId, ...m.points.cabin_in, label: 'Install it (Items)' };
+  // Nothing to build with: send him shopping, preferring a shop on this chapter's maps.
+  const sells = (id) => SHOPS[id] && SHOPS[id].stock.some((it) => ['board_kit', 'door_brace', 'sandbags', 'bear_trap', 'barricade'].includes(it.id));
+  const order = [mapId, ...Object.keys(G.maps).filter((k) => k !== mapId)];
+  for (const mid of order) {
+    const mm = G.maps[mid]; if (!mm || !mm.buildings) continue;
+    const b = mm.buildings.find((bb) => bb.shop && sells(bb.shop));
+    if (b) return { map: mid, x: (b.x + b.w / 2) * TILE, y: (b.y + b.h) * TILE + 8, label: `Buy board kits: ${SHOPS[b.shop].name}` };
   }
   return { map: mapId, ...m.points.cabin_in, label: 'Defenses' };
 }

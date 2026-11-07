@@ -2562,7 +2562,12 @@ if (want('gate')) {
   check('Gate: the fixed half says it\'s repaired', /repaired ✓/.test(lbl || ''), lbl);
   await C(() => { const c = window.__cus, o = c.G.s.home.openings; o.gate_r.hp = o.gate_r.baseHp; c.G.events.emit('repaired', {}); });
   const wp2 = await C(() => import('./src/game/story.js').then((m) => m.storyWaypoint()));
-  check('Gate: with the gate done, the arrow moves to the house for the defenses', wp2 && wp2.label === 'Defenses', JSON.stringify(wp2));
+  // with the gate done the arrow goes to the next defense he can actually make: with nothing to build with, the shop
+  // that sells defenses; with a board kit, a window to board
+  const wpShop = await C(() => { const c = window.__cus, inv = c.G.s.inv; for (const k of ['board_kit', 'door_brace', 'bear_trap', 'sandbags', 'barricade', 'floodlight_kit', 'alarm_kit']) delete inv[k]; return import('./src/game/story.js').then((m) => m.storyWaypoint()); });
+  check('Gate: with the gate done and nothing to build with, the arrow points to a shop that sells defenses', wpShop && /^Buy board kits: /.test(wpShop.label) && wpShop.map === 'farm', JSON.stringify(wpShop));
+  const wpWin = await C(() => { const c = window.__cus; c.dbg.addItem('board_kit', 1); return import('./src/game/story.js').then((m) => m.storyWaypoint()); });
+  check('Gate: with a board kit, the arrow points at a window to board', wpWin && wpWin.label === 'Board this window', JSON.stringify(wpWin));
   await C(() => { const c = window.__cus; c.G.events.emit('defenseInstalled', 'trap'); c.G.events.emit('defenseInstalled', 'cover'); });
   await sleep(400); await skipDialogues(page);
   check('Gate: both halves and two defenses start the attack night', await C(() => window.__cus.G.s.story.step === 'ch3_siege'));
@@ -3569,7 +3574,7 @@ if (want('frank')) {
         const m = mk(), at = (cx, cy) => [cx * T - r0 - 1, cy * T + 16], plan = (cx, cy, dx, dy, back = 0) => { const [x, y] = at(cx, cy); return VL.planVault(m, x - back, y, r0, dx, dy); };
         const v = plan(20, 20, 1, 0);
         resV.plan = v && { x1: v.x1, y1: v.y1, ok: v.x1 - r0 >= 21 * T && v.y1 - r0 >= 20 * T && v.y1 + r0 <= 21 * T }; // (landed past the fence, in its row)
-        resV.no = { wall: plan(20, 10, 1, 0), rock: plan(20, 30, 1, 0), water: plan(20, 33, 1, 0), hedge: plan(20, 36, 1, 0), gate: plan(20, 12, 1, 0), far: plan(20, 20, 1, 0, 9), along: plan(20, 20, 0.3, 1), away: plan(20, 20, -1, 0), edge: VL.planVault(m, 39 * T - r0 - 1, 5 * T + 16, r0, 1, 0) };
+        resV.no = { wall: plan(20, 10, 1, 0), rock: plan(20, 30, 1, 0), water: plan(20, 33, 1, 0), hedge: plan(20, 36, 1, 0), gate: plan(20, 12, 1, 0), far: plan(20, 20, 1, 0, 18), along: plan(20, 20, 0.3, 1), away: plan(20, 20, -1, 0), edge: VL.planVault(m, 39 * T - r0 - 1, 5 * T + 16, r0, 1, 0) };
         resV.no = Object.fromEntries(Object.entries(resV.no).map(([k, o]) => [k, o === null]));
         // the rig on the same map
         const was = { map: G.map, time: G.s.time };

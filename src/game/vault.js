@@ -8,7 +8,7 @@ import { SO, GR } from '../world/map.js';
 // cell's face. land: clearance past the fence cell on landing. cost: stamina (× staminaMult).
 // minAxis: the push must be mostly toward the fence (cos ≥ 0.55, within ~57° of square on). side: how far right of the
 // post (px) he passes.
-export const VAULT = { T: 0.45, reach: 7, land: 4, cost: 12, minAxis: 0.55, side: 5.5 };
+export const VAULT = { T: 0.45, reach: 14, land: 4, cost: 12, minAxis: 0.55, side: 5.5 };
 
 /**
  * Can a circle (x, y, radius r) pushing along (dx, dy) vault the fence in front of it?
