@@ -2836,6 +2836,56 @@ if (want('3d')) {
         await sleep(600);
       }
     }
+    // M5, life (§4.7, §4.18–§4.20) and the §7.3 quality/leak and NaN checks. Standing relaxed: a fidget (the gun check,
+    // started through the harness hook) lifts the pistol in front of him and turns his head to it; a forced contrapposto
+    // switch moves the hips across; fishing puts the rod in his hands and gives the gun back after.
+    {
+      const frames = async (t = 0.3) => { const t0 = await C(() => window.__cus.G.time); for (let i = 0; i < 300 && (await C(() => window.__cus.G.time)) - t0 < t; i++) await sleep(100); };
+      await C(() => { const c = window.__cus, p = c.G.player; c.G.modal = null; p.lastCombat = 99; p.weapon = 'pistol'; p.mag = 8; p.reloadT = 0; p.swapT = 0; c.dbg.input.mouse.inside = false; });
+      await frames(2.0);
+      let L0 = await FR();
+      await mod('./src/world/frank3d.js', (m) => m.setFrankDebug({ fidget: 'gunCheck' }));
+      // (the highest the muzzle came while the gun check played: polled on frames, so a slow software-GL frame rate never
+      // steps over the hold)
+      let LG = null;
+      for (let i = 0; i < 120; i++) {
+        await sleep(100); const f = await FR(), fd = f.life && f.life.fid;
+        if (fd && fd[0] === 'gunCheck') { if (!LG || f.muzzleRel[1] > LG.muzzleRel[1]) LG = f; if (fd[1] > 0.75) break; } else if (LG) break;
+      }
+      check('3D Frank: idle life, a fidget (the gun check lifts the pistol in front of him)', !!LG && LG.muzzleRel[1] > L0.muzzleRel[1] + 12 && LG.resets === 0,
+        JSON.stringify({ before: L0.muzzleRel, during: LG && LG.muzzleRel, fid: LG && LG.life.fid, life0: L0.life }));
+      await frames(1.2);
+      const pz = () => mod('./src/world/render3d.js', (m) => { const f = m.view3dState().frank; return { cS: f.life.contra[1], cw: f.life.contra[0] }; });
+      // (from a settled stance: a natural switch may be under way; then force one and wait for it to settle on the other side)
+      let c0 = await pz();
+      for (let i = 0; i < 60 && Math.abs(c0.cS) < 0.98; i++) { await sleep(150); c0 = await pz(); }
+      await mod('./src/world/frank3d.js', (m) => m.setFrankDebug({ contra: true }));
+      let c1 = await pz();
+      for (let i = 0; i < 80 && !(Math.sign(c1.cS) !== Math.sign(c0.cS) && Math.abs(c1.cS) > 0.9); i++) { await sleep(150); c1 = await pz(); }
+      await frames(0.6); const F5 = await FR();
+      check('3D Frank: idle life, the contrapposto switches the loaded side, the feet re-planted', Math.sign(c0.cS) !== Math.sign(c1.cS) && Math.abs(c1.cS) > 0.9 && c1.cw > 0.5 && F5.planted.every(Boolean) && F5.maxStanceDrift < 0.75,
+        JSON.stringify({ c0, c1, planted: F5.planted, drift: F5.maxStanceDrift }));
+      await C(() => { window.__cus.G.modal = 'fishing'; });
+      await frames(0.8); const FM = await FR();
+      await C(() => { window.__cus.G.modal = null; });
+      await frames(1.0); const FA = await FR();
+      check('3D Frank: fishing puts the rod in his hands (the gun away), and the gun comes back after', FM.actions.tool === 'rod' && FM.inHand === null && FA.actions.tool === null && FA.inHand === 'pistol' && FA.resets === 0,
+        JSON.stringify({ during: [FM.actions.tool, FM.inHand, FM.full], after: [FA.actions.tool, FA.inHand] }));
+      // §7.3: a Low/High switch rebuilds cleanly (no leaks), and nothing ever went non-finite
+      const q0 = await C(() => window.__cus.G.settings.quality);
+      const mem0 = (await mod('./src/world/render3d.js', (m) => m.view3dState())).mem;
+      for (const q of ['low', 'high', 'low', 'high', 'low', 'high', 'low', 'high', 'low', 'high']) { await C((v) => { window.__cus.G.settings.quality = v; }, q); await sleep(250); }
+      // (each switch waits on the rebuilt rig, not on wall time: at a few frames a second 600 ms may not hold a frame)
+      const waitQ = async (q) => { let f = null; for (let i = 0; i < 60; i++) { await sleep(150); f = await FR(); if (f && f.q === q) break; } return f; };
+      await C(() => { window.__cus.G.settings.quality = 'low'; }); const FL = await waitQ(true);
+      await C(() => { window.__cus.G.settings.quality = 'high'; }); const FH = await waitQ(false);
+      const mem1 = (await mod('./src/world/render3d.js', (m) => m.view3dState())).mem;
+      check('3D Frank: Low/High switch rebuilds cleanly (no leaks)', FL && FH && FL.q === true && FL.bones === 39 && FH.q === false && FH.bones === 50 &&
+        mem1.geometries <= mem0.geometries + 1 && mem1.textures <= mem0.textures, JSON.stringify({ mem0, mem1, FL: FL && [FL.q, FL.bones], FH: FH && [FH.q, FH.bones] }));
+      await C((v) => { const c = window.__cus; c.G.settings.quality = v; c.G.modal = null; }, q0);
+      await sleep(400);
+      check('3D Frank: never produced a non-finite transform', (await FR()).resets === 0, '');
+    }
     await C((o) => { const p = window.__cus.G.player; p.x = o.x; p.y = o.y; }, home);
     await sleep(600);
   }
@@ -3143,7 +3193,7 @@ if (want('frank')) {
   {
     const fs = await import('node:fs'), os = await import('node:os'), pth = await import('node:path'), { pathToFileURL, fileURLToPath } = await import('node:url');
     const SRC = fileURLToPath(new globalThis.URL('../src/', import.meta.url)), TMP = fs.mkdtempSync(pth.join(os.tmpdir(), 'frank3d-node-'));
-    for (const f of ['world/frank3d.js', 'world/frank3d-anim.js', 'world/frank3d-clips.js', 'world/frank3d-geo.js', 'world/map.js', 'game/state.js', 'game/season-core.js', 'config.js', 'util.js', 'data/weapons.js', 'vendor/three.module.min.js']) {
+    for (const f of ['world/frank3d.js', 'world/frank3d-anim.js', 'world/frank3d-clips.js', 'world/frank3d-geo.js', 'world/map.js', 'game/state.js', 'game/season-core.js', 'config.js', 'util.js', 'data/weapons.js', 'data/items.js', 'vendor/three.module.min.js']) {
       fs.mkdirSync(pth.dirname(pth.join(TMP, 'src', f)), { recursive: true }); fs.copyFileSync(pth.join(SRC, f), pth.join(TMP, 'src', f));
     }
     fs.writeFileSync(pth.join(TMP, 'src/input.js'), "export const input = { mouse: { x: 0, y: 0, inside: false }, held: { fire: false }, aim: { active: false }, pressed: new Set(), touchMode: false, padMode: false };\n");
@@ -3464,6 +3514,150 @@ if (want('frank')) {
       R4.repair.during[0] === 'repair' && R4.repair.during[1] === 1 && R4.repair.during[2] === 1 && R4.repair.during[3] === 0 && R4.repair.after[1] === 'pistol' && R4.repair.after[2] === 0 && R4.repair.resets === 0 &&
       R4.flinch.hurt && R4.flinch.hurt.zone === 'side' && R4.flinch.hurt.s === 1 && R4.flinch.resets === 0;
     check('Frank actions (node): the dash goes low and the back-hop up, both land planted; death (both variants) lies on the ground above y 0.9, never hidden, the gun dropped and at rest, back on his feet on recovery; a connected strike shows its contact inside the catch-up, a whiff starts mid-swing; the axe and the hammer replace the gun and give it back; the flinch reads the side on the hit frame', ok4, JSON.stringify(R4));
+    // (M5) life, on the bones: standing relaxed he shifts his weight (the contrapposto switches sides, the hips move with
+    // it, the feet re-plant without sliding), glances and fidgets; a tail job puts the pistol under the coat and the hands
+    // in the pockets (a shot draws it on the aim line that frame); a parcel rides the left forearm and the pistol goes
+    // one-handed; low HP presses the left hand to his side; winded after a sprint his hands go to his knees; fishing puts
+    // the rod in his hands (the gun comes back after); a door's handle draws the left hand; a bandage, an ability; the aim
+    // point's distance pitches the head; unseen enemies about make him prowl at a two-handed low ready; low cover crouches
+    // him and a shot pops him up. Never a reset or an IK failure.
+    const resL = {};
+    {
+      const SOm = (await import(U('world/map.js'))).SO, LF = CL.LIFE;
+      G.npcs = []; G.tail = null; G.modal = null; G.abilityCd = {}; G.interactTarget = null; G.siegeActive = false; G.map = { getSolid: () => 0, blockerAt: () => null };
+      const life = (s) => F.frankDebug(s.r).life;
+      const wp = (s, bone, off) => V3().set(off[0], off[1], off[2]).applyMatrix4(s.r.bones[bone].matrixWorld);
+      const hand = (s, n) => V3().setFromMatrixPosition(s.r.bones[n].matrixWorld);
+      const bad = (s) => s.r.st.resets + s.r.st.ikFails;
+      let errs = 0;
+      // (a) idle 30 s
+      { const s = rig('pistol'); s.p.lastCombat = 99; let sw = 0, side = s.r.st.lf.c.side, fids = new Set(), gl = 0, pz = { '1': [], '-1': [] };
+        run(s, 30, (i) => { const c = s.r.st.lf.c; if (c.side !== side) { sw++; side = c.side; } if (i % 6) return; const L = life(s); if (L.fid) fids.add(L.fid[0]); gl = Math.max(gl, Math.abs(L.glance[0])); if (Math.abs(L.contra[1]) > 0.98 && L.contra[0] > 0.9) pz[String(Math.sign(L.contra[1]))].push(s.r.bones.pelvis.position.z); });
+        // (the feet read once a step under way at the 30 s mark has landed: a re-plant, a glance's step, is not a slide)
+        for (let k = 0; k < 60 && !(s.r.st.planner.planted(0) && s.r.st.planner.planted(1)); k++) tick(s);
+        const avg = (a) => a.reduce((x, y) => x + y, 0) / Math.max(1, a.length), d = F.frankDebug(s.r);
+        resL.idle = { switches: sw, fidgets: [...fids], glance: +gl.toFixed(1), hipShift: +(avg(pz['1']) - avg(pz['-1'])).toFixed(2), drift: d.maxStanceDrift, planted: d.planted, bad: bad(s) }; errs += bad(s); }
+      // (b) the stroll
+      { const s = rig('pistol'); s.p.lastCombat = 99; run(s, 0.5); G.tail = {}; run(s, 1.6); const d = F.frankDebug(s.r), PR = LF.stroll.pocketR, PL = LF.stroll.pocketL;
+        const eR = hand(s, 'handR').distanceTo(wp(s, 'pelvis', [PR[0], PR[1], PR[2]])), eL = hand(s, 'handL').distanceTo(wp(s, 'pelvis', [PL[0], PL[1], PL[2]]));
+        shoot(s); tick(s); const d2 = F.frankDebug(s.r); G.tail = null;
+        resL.stroll = { driver: d.gunDriver, inHand: d.inHand, pocket: [+eR.toFixed(2), +eL.toFixed(2)], shot: [d2.inHand, d2.gunDriver, d2.boreMiss], bad: bad(s) }; errs += bad(s); }
+      // (c) carry
+      { const s = rig('pistol'); s.p.lastCombat = 99; G.s.job = { type: 'delivery', stage: 'deliver' }; run(s, 1.0); const B = s.r.bones;
+        const near = V3().setFromMatrixPosition(B.parcel.matrixWorld).distanceTo(V3().setFromMatrixPosition(B.forearmL.matrixWorld)), vis = B.parcel.scale.x;
+        s.p.lastCombat = 0; run(s, 0.6); const d = F.frankDebug(s.r); G.s.job = null;
+        resL.carry = { parcel: [vis, +near.toFixed(1)], aimed: d.gunDriver, support: d.handErr && d.handErr[1], bad: bad(s) }; errs += bad(s); }
+      // (d) low HP
+      { const s = rig('pistol'); s.p.lastCombat = 99; s.p.hp = 20; run(s, 1.6); const SD = LF.lowHp.side;
+        resL.low = { w: life(s).low, side: +wp(s, 'handL', [0.3, -2.6, 1.1]).distanceTo(wp(s, 'pelvis', SD)).toFixed(2), bad: bad(s) }; s.p.hp = 100; errs += bad(s); }
+      // (e) winded after a sprint
+      { const s = rig('pistol'); s.p.lastCombat = 99; s.p.stamina = 20; run(s, 2.0, () => { s.p.x += 185 * dt; s.p.walkPhase += 14 * dt; }); run(s, 1.1); const B = s.r.bones;
+        const KT = CL.SOCKETS.shin.kneeTop;
+        resL.hok = { w: life(s).hok, knees: [+wp(s, 'handR', [0.3, -2.6, -1.1]).distanceTo(wp(s, 'shinR', KT)).toFixed(1), +wp(s, 'handL', [0.3, -2.6, 1.1]).distanceTo(wp(s, 'shinL', [KT[0], KT[1], -KT[2]])).toFixed(1)], pelvisY: F.frankDebug(s.r).pelvisY, bad: bad(s) }; errs += bad(s); }
+      // (f) fishing
+      { const s = rig('pistol'); s.p.lastCombat = 99; G.modal = 'fishing'; run(s, 0.8); const d = F.frankDebug(s.r), rod = s.r.bones.rod.scale.x; G.modal = null; run(s, 0.9); const d2 = F.frankDebug(s.r);
+        resL.fish = { during: [d.actions.tool, rod, d.inHand, d.full], after: [d2.actions.tool, d2.inHand], bad: bad(s) }; errs += bad(s); }
+      // (g) a door's handle
+      { const s = rig('pistol'); s.p.lastCombat = 99; run(s, 0.6); const tgt = V3().set(s.p.x + 22, 35, s.p.y - 6), d0 = hand(s, 'handL').distanceTo(tgt);
+        G.interactTarget = { short: 'OPEN', x: s.p.x + 22, y: s.p.y - 6 }; s.p.reachT = 0.3; run(s, 0.15); const d1 = hand(s, 'handL').distanceTo(tgt); G.interactTarget = null;
+        resL.open = { before: +d0.toFixed(1), at: +d1.toFixed(1), bad: bad(s) }; errs += bad(s); }
+      // (h) a bandage; Emergency Repair (the hammer in the left hand)
+      // (M5 fix: the item edge is read off the inventory, a quick item's count dropping, not off an hp jump)
+      { const s = rig('pistol'); s.p.lastCombat = 99; s.p.hp = 60; G.s.inv.bandage = 2; run(s, 0.6); G.s.inv.bandage = 1; s.p.hp = 85; run(s, 0.25); const it = life(s).item;
+        G.abilityCd = { emergency_repair: 30 }; let ham = 0; run(s, 0.4, () => { ham = Math.max(ham, s.r.bones.hammer.scale.x); }); G.abilityCd = {};
+        resL.item = { item: it, hammer: ham, bad: bad(s) }; errs += bad(s); }
+      // (i) the aim point near and far (an enemy ahead sets D)
+      { const pitch = (d) => { const s = rig('pistol'); s.p.lastCombat = 0; G.enemies = [{ x: s.p.x + d, y: s.p.y, dead: false, alerted: false, radius: 10 }]; run(s, 0.8); const L = life(s); G.enemies = []; errs += bad(s); return L.look[1]; };
+        resL.look = { near: pitch(70), far: pitch(380) }; }
+      // (j) prowl
+      { const s = rig('pistol'); s.p.lastCombat = 99; run(s, 0.8); const y0 = F.frankDebug(s.r).pelvisY;
+        G.enemies = [{ x: s.p.x + 600, y: s.p.y, dead: false, alerted: false, canSee: false, sus: 0, radius: 10 }]; run(s, 1.0); const d = F.frankDebug(s.r); G.enemies = [];
+        resL.prowl = { w: d.life.prowl, drop: +(y0 - d.pelvisY).toFixed(2), hands: d.handErr, driver: d.gunDriver, bad: bad(s) }; errs += bad(s); }
+      // (k) low cover, and the pop on a shot
+      { const s = rig('pistol'); s.p.lastCombat = 0; run(s, 0.6); const y0 = F.frankDebug(s.r).pelvisY, cx = Math.floor(s.p.x / 32), cy = Math.floor(s.p.y / 32);
+        G.siegeActive = true; s.p.inCover = true; G.map = { getSolid: (x, y) => (x === cx + 1 && y === cy ? SOm.ROCK : 0), blockerAt: () => null }; run(s, 0.8); const y1 = F.frankDebug(s.r).pelvisY;
+        shoot(s); run(s, 0.12); const y2 = F.frankDebug(s.r).pelvisY; G.siegeActive = false; s.p.inCover = false; G.map = { getSolid: () => 0, blockerAt: () => null };
+        resL.cover = { drop: +(y0 - y1).toFixed(2), pop: +(y2 - y1).toFixed(2), bad: bad(s) }; errs += bad(s); }
+      resL.errs = errs;
+    }
+    const L5 = resL, okL = L5.idle.switches >= 2 && L5.idle.fidgets.length >= 1 && L5.idle.glance >= 4 && Math.abs(L5.idle.hipShift) >= 2.5 && L5.idle.drift < 0.3 && L5.idle.planted.every(Boolean) &&
+      L5.stroll.driver === 'holster' && L5.stroll.inHand === null && L5.stroll.pocket.every((e) => e < 1.5) && L5.stroll.shot[0] === 'pistol' && L5.stroll.shot[1] === 'aim' &&
+      L5.carry.parcel[0] === 1 && L5.carry.parcel[1] < 9 && L5.carry.aimed === 'aim' && L5.carry.support > 6 &&
+      L5.low.w > 0.95 && L5.low.side < 1 && L5.hok.w > 0.9 && L5.hok.knees.every((e) => e < 2.5) &&
+      L5.fish.during[0] === 'rod' && L5.fish.during[1] === 1 && L5.fish.during[2] === null && L5.fish.after[0] === null && L5.fish.after[1] === 'pistol' &&
+      L5.open.at < L5.open.before - 4 && L5.item.item && L5.item.item[0] === 'bandage' && L5.item.item[1] > 0.9 && L5.item.hammer === 1 &&
+      L5.look.near > L5.look.far + 5 && L5.prowl.w > 0.95 && L5.prowl.drop >= 3 && L5.prowl.hands && L5.prowl.hands[1] < 1.5 &&
+      L5.cover.drop >= 6 && L5.cover.pop >= 3 && L5.errs === 0;
+    check('Frank life (node): the idle shifts its weight (hips across, feet re-planted without sliding), glances and fidgets; the stroll pockets the hands and holsters the pistol, a shot draws it; the parcel, low HP, hands on knees, fishing, a door, a bandage and the hammer, the head on the aim point, the prowl, low cover and its pop; no reset or IK failure', okL, JSON.stringify(L5));
+    // (M5 fix) life's transitions and edges: a shot from any life state puts the gun on the aim line that frame (also just
+    // after a modal closes); the modal in/out, the stroll's draw and the gun check never jump a hand more than 12 u in a
+    // frame, and the modal's way out never lifts the hand above the shoulder; the low-HP limp's hip roll is smooth; a
+    // takedown started through interact keeps its collar grab (no reach gesture); a quick item is read off the inventory
+    // (food plays 'eat', a bare heal plays nothing); the gun check keeps the muzzle off his head.
+    const resT = {};
+    {
+      const SOm = (await import(U('world/map.js'))).SO;
+      G.npcs = []; G.tail = null; G.modal = null; G.abilityCd = {}; G.interactTarget = null; G.siegeActive = false; G.map = { getSolid: () => 0, blockerAt: () => null }; G.enemies = [];
+      const hand = (s, n) => V3().setFromMatrixPosition(s.r.bones[n].matrixWorld);
+      const bad = (s) => s.r.st.resets + s.r.st.ikFails;
+      const shotOk = (s) => { shoot(s); tick(s); const d = F.frankDebug(s.r); return d.inHand === s.p.weapon && d.gunDriver === 'aim' && d.boreMiss !== null && d.boreMiss < 0.1 ? 1 : [d.inHand, d.gunDriver, d.boreMiss]; };
+      // per-frame hand displacement: the largest over a run
+      const jumps = (s, sec, fn) => { let pR = hand(s, 'handR'), pL = hand(s, 'handL'), m = 0; run(s, sec, (i) => { if (fn) fn(i); const R = hand(s, 'handR'), L = hand(s, 'handL'); m = Math.max(m, R.distanceTo(pR), L.distanceTo(pL)); pR = R; pL = L; }); return +m.toFixed(2); };
+      const shots = {};
+      { const s = rig('pistol'); s.p.lastCombat = 99; run(s, 0.5); G.tail = {}; run(s, 1.6); shots.stroll = shotOk(s); G.tail = null; }
+      { const s = rig('pistol'); s.p.lastCombat = 99; G.s.job = { type: 'delivery', stage: 'deliver' }; run(s, 1.0); shots.carry = shotOk(s); G.s.job = null; }
+      { const s = rig('pistol'); s.p.lastCombat = 99; run(s, 0.6); G.enemies = [{ x: s.p.x + 600, y: s.p.y, dead: false, alerted: false, canSee: false, sus: 0, radius: 10 }]; run(s, 1.0); shots.prowl = shotOk(s); G.enemies = []; }
+      { const s = rig('pistol'); s.p.lastCombat = 0; run(s, 0.6); const cx = Math.floor(s.p.x / 32), cy = Math.floor(s.p.y / 32);
+        G.siegeActive = true; s.p.inCover = true; G.map = { getSolid: (x, y) => (x === cx + 1 && y === cy ? SOm.ROCK : 0), blockerAt: () => null }; run(s, 0.8); shots.cover = shotOk(s);
+        G.siegeActive = false; s.p.inCover = false; G.map = { getSolid: () => 0, blockerAt: () => null }; }
+      { const s = rig('pistol'); s.p.lastCombat = 99; s.p.stamina = 20; run(s, 2.0, () => { s.p.x += 185 * dt; s.p.walkPhase += 14 * dt; }); run(s, 1.1); shots.hok = F.frankDebug(s.r).life.hok > 0.9 ? shotOk(s) : 'no hok'; }
+      { const s = rig('pistol'); s.p.lastCombat = 99; s.p.hp = 20; run(s, 1.6); shots.low = shotOk(s); s.p.hp = 100; }
+      for (const after of [0.03, 0.08, 0.2]) { const s = rig('pistol'); s.p.lastCombat = 99; G.modal = 'fishing'; run(s, 0.9); G.modal = null; run(s, after); shots['fish+' + after] = shotOk(s); }
+      { const s = rig('pistol'); s.p.lastCombat = 99; G.s.inv.sandwich = 2; run(s, 0.6); G.s.inv.sandwich = 1; run(s, 0.3); shots.eat = shotOk(s); }
+      { const s = rig('pistol'); s.p.lastCombat = 99; run(s, 0.5); G.abilityCd = { misdirection: 30 }; run(s, 0.12); shots.misdirection = shotOk(s); G.abilityCd = {}; }
+      { const s = rig('pistol'); s.p.lastCombat = 99; run(s, 2.5); F.setFrankDebug({ fidget: 'gunCheck' }); run(s, 0.7); shots.gunCheck = shotOk(s); }
+      resT.shots = shots;
+      // the modal in and out (fishing, craft; pistol and shotgun): hand jumps; on the way out the hand never above the shoulder
+      const modal = {};
+      for (const [w, m] of [['pistol', 'fishing'], ['pistol', 'craft'], ['shotgun', 'fishing']]) {
+        const s = rig(w); s.p.lastCombat = 99; run(s, 1.0); G.modal = m; const jIn = jumps(s, 0.8); G.modal = null;
+        let hi = -99; const jOut = jumps(s, 0.8, () => { hi = Math.max(hi, hand(s, 'handR').y - hand(s, 'upperArmR').y); });
+        modal[w + '/' + m] = { in: jIn, out: jOut, handAboveShoulder: +hi.toFixed(1), after: F.frankDebug(s.r).inHand, bad: bad(s) };
+      }
+      resT.modal = modal;
+      // the stroll's draw on an aim without a shot (an enemy alerted): the pistol comes out of the coat, no hand jump
+      { const s = rig('pistol'); s.p.lastCombat = 99; run(s, 0.5); G.tail = {}; run(s, 2.0); s.p.lastCombat = 0; resT.strollDraw = { jump: jumps(s, 1.0), driver: F.frankDebug(s.r).gunDriver, bad: bad(s) }; G.tail = null; }
+      // the gun check: no hand jump, the muzzle never pointing at his head (bore vs muzzle→head > 45°)
+      { const s = rig('pistol'); s.p.lastCombat = 99; run(s, 2.5); F.setFrankDebug({ fidget: 'gunCheck' }); const B = s.r.bones; let minA = 180;
+        const jump = jumps(s, 1.9, () => { const q = new T3.Quaternion(); B.pistol.matrixWorld.decompose(V3(), q, V3()); if (!B.pistol.scale.x) return;
+          const bore = V3().set(1, 0, 0).applyQuaternion(q), mz = V3().fromArray(F.frankDebug(s.r).muzzleWorld), head = hand(s, 'head').add(V3().set(0, 6, 0));
+          minA = Math.min(minA, bore.angleTo(head.sub(mz)) * 180 / Math.PI); });
+        resT.gunCheck = { jump, minAngle: +minA.toFixed(1), bad: bad(s) }; }
+      // the low-HP limp: the pelvis roll changes smoothly frame to frame (70 u/s; 125 u/s)
+      { const E = new T3.Euler(), limp = (v) => { const s = rig('pistol'); s.p.hp = 20; run(s, 1.0); run(s, 2.0, () => { s.p.x += v * dt; s.p.walkPhase += 10 * dt * Math.min(1, v / 125); });
+          let prev = null, m = 0; run(s, 1.5, () => { s.p.x += v * dt; s.p.walkPhase += 10 * dt * Math.min(1, v / 125); E.setFromQuaternion(s.r.bones.pelvis.quaternion, 'YXZ'); const r = E.x * 180 / Math.PI; if (prev !== null) m = Math.max(m, Math.abs(r - prev)); prev = r; });
+          return +m.toFixed(2); };
+        resT.limp = { v70: limp(70), v125: limp(125) }; }
+      // a takedown started through interact (reachT set, 'TAKEDOWN'): the left hand as without it
+      { const td = (withReach) => { const s = rig('pistol'); s.p.lastCombat = 99; run(s, 1.0); G.enemies = [{ x: s.p.x + 24, y: s.p.y, dead: false, alerted: false, radius: 10, def: {} }]; G.fx = { stop: 0.12 };
+          if (withReach) { G.interactTarget = { short: 'TAKEDOWN', x: s.p.x + 24, y: s.p.y }; s.p.reachT = 0.3; } s.p.meleeAnim = 0.25; s.p.angle = 0; const out = [];
+          for (let i = 0; i < 30; i++) { s.p.meleeAnim = Math.max(0, s.p.meleeAnim - dt); tick(s); if (i === 6) G.fx = null; out.push(hand(s, 'handL')); }
+          G.interactTarget = null; G.enemies = []; G.fx = null; return out; };
+        const a = td(false), b = td(true); resT.takedownReach = +Math.max(...a.map((v, i) => v.distanceTo(b[i]))).toFixed(2); }
+      // items from the inventory
+      { const life = (s) => F.frankDebug(s.r).life; const s = rig('pistol'); s.p.lastCombat = 99; G.s.inv.sandwich = 3; G.s.inv.bandage = 2; s.p.hp = 60; run(s, 0.6);
+        s.p.hp += 8; run(s, 0.1); const heal = life(s).item; run(s, 1.2);
+        G.s.inv.sandwich--; s.p.hp += 12; run(s, 0.1); const food = life(s).item; run(s, 1.2);
+        G.s.inv.bandage--; s.p.hp += 30; run(s, 0.1); const med = life(s).item;
+        resT.items = { heal, food: food && food[0], med: med && med[0] }; }
+    }
+    const T5 = resT, shotsOk = Object.values(T5.shots).every((v) => v === 1);
+    const okT = shotsOk && Object.values(T5.modal).every((m) => m.in <= 12 && m.out <= 12 && m.handAboveShoulder <= 0 && m.after !== null && m.bad === 0) &&
+      T5.strollDraw.jump <= 12 && T5.strollDraw.driver === 'aim' && T5.strollDraw.bad === 0 &&
+      T5.gunCheck.jump <= 12 && T5.gunCheck.minAngle > 45 && T5.gunCheck.bad === 0 &&
+      T5.limp.v70 <= 0.6 && T5.limp.v125 <= 1.2 && T5.takedownReach < 0.05 &&
+      T5.items.heal === null && T5.items.food === 'eat' && T5.items.med === 'bandage';
+    check('Frank life (node), transitions: a shot from every life state (and just after a modal) is on the aim line that frame; the modal in/out, the stroll draw and the gun check never jump a hand > 12 u a frame, the modal exit keeps the hand below the shoulder; the gun check never points the muzzle at his head; the limp is smooth; a takedown through interact keeps its collar grab; items come off the inventory', okT, JSON.stringify(T5));
     G.repairHold = null; G.hurtDir = null; G.fx = null;
     fs.rmSync(TMP, { recursive: true, force: true });
     // (jump: a pop is a gun that moves further in one frame than a hand can swing it; the fastest legitimate move, a long

@@ -432,7 +432,7 @@ export class StepPlanner {
     if (ball) f.hasHeel = false; else f.hasBall = false;
   }
   _gait(I) {
-    const T = 2 * Math.PI / Math.max(I.rate, 1), sig = I.sigma, ch = Math.cos(I.hipYaw), sh = Math.sin(I.hipYaw), dt = I.dt;
+    const T = 2 * Math.PI / Math.max(I.rate, 1), ch = Math.cos(I.hipYaw), sh = Math.sin(I.hipYaw), dt = I.dt;
     if (!this.gait) {
       this.gait = true; this.turnActive = false; this.kick = false;
       for (let i = 0; i < 2; i++) {
@@ -455,6 +455,8 @@ export class StepPlanner {
     const dy = Math.max(0, (I.hipY ?? 34) - FOOT.h), R = PLANNER.reachK * Math.sqrt(Math.max(36, PLANNER.reach * PLANNER.reach - dy * dy));
     for (let i = 0; i < 2; i++) {
       const f = this.feet[i], side = f.side;
+      // (a limp: this foot's own stance fraction and stride, I.sigD / I.leadK; both 0 / 1 otherwise)
+      const sig = I.sigma + (I.sigD ? I.sigD[i] : 0), leadK = I.leadK ? I.leadK[i] : 1;
       const c = ((I.phi - (i ? 0.5 : 0)) % 1 + 1) % 1, prev = f.c, wrapped = c < prev - 0.5;
       f.c = c;
       // this foot's neutral spot under the hip now
@@ -466,7 +468,7 @@ export class StepPlanner {
         const tTo = (1 - c) * T, cx = hx + I.vx * tTo, cz = hz + I.vz * tTo;
         if (uu < 0.85 || !f.frozen) {
           if (uu >= 0.85) f.frozen = true;
-          const lead = tTo + sig * T * (I.land ?? 0.5);
+          const lead = (tTo + sig * T * (I.land ?? 0.5)) * leadK;
           f.landing[0] = hx + I.vx * lead; f.landing[1] = hz + I.vz * lead;
           f.landYaw = I.hipYaw + side * I.toeOut; f.landToe = side * I.toeOut;
         }

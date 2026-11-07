@@ -13,16 +13,28 @@ export const TUNE = {
     steel: '#3c3e44', steelWorn: '#6a6e76', walnut: '#5a3420', brass: '#c9a43a', shell: '#c0392b',
     stubbleLow: '#a8907f', browLow: '#3a2a22',
   },
+  // The face atlas (HQ): every feature painted as a MULTIPLIER of the skin colour (frank3d-geo mulOver), so these are the
+  // colours each feature comes out as on the skin. (M5 art pass: warm dark browns instead of near-blacks, a lid crease, a
+  // fuller iris under a hooded lid, softer and finer stubble, the scowl's frown lines, crow's feet.)
+  face: { brow: '#3e2a21', browHair: '#2c1c15', lid: '#26160f', crease: '#a06a54', iris: '#5e3f2b', pupil: '#170c08', lowerLid: '#a87058', socket: '#9c6c56',
+          bag: '#b88a72', crow: '#9a6450', frown: '#9a6450', fold: '#a46c52', forehead: '#9e6650', mouth: '#7c4636', upperLip: '#b4735e', lipShadow: '#bf7e66',
+          stubble: '#c29f8a', stubbleLip: '#bb977f', stubbleDot: '#86695a', hollow: '#b88e78', nostril: '#7c4c3a', jaw: '#ab684e' },
   // (M4: the hit flash 0.45 over 0.06 s, from 0.6 over 0.08: the full white-out hid the flinch's first 70 ms, its peak)
   // Night: a less saturated, lower fill keeps the coat blue-charcoal (not navy) and lets the moon-side rim do the reading.
   // (M2: the fill a little less blue again, '#c4cce6' → '#c8cad4', about the same luminance: in motion the navy coat merged
   // with the navy trousers and the stride stopped reading)
-  light: { fillDay: [1.25, '#fff0e0'], fillNight: [1.5, '#c8cad4'], rimDay: [0.045, '#ffe0b8'], rimNight: [0.40, '#8fa8ff'],
-           rimFloorDay: 0.20, rimFloorNight: 0.30, sheenDay: 0.30, sheenNight: 0.30, sheenCol: '#9a948e', fillSkin: '#ffe6d6', flash: 0.45, flashT: 0.06, wetTau: 2 },
+  // (M5 fix: the night rim and fill less blue again (the coat read saturated navy and merged with the trousers))
+  light: { fillDay: [1.25, '#fff0e0'], fillNight: [1.5, '#c9c9cc'], rimDay: [0.045, '#ffe0b8'], rimNight: [0.36, '#a9b3cf'],
+           rimFloorDay: 0.20, rimFloorNight: 0.30, sheenDay: 0.30, sheenNight: 0.30, sheenCol: '#9a948e', fillSkin: '#ffe6d6', flash: 0.45, flashT: 0.06, wetTau: 2,
+           // wet wool in the rain (M5 fix: from frank3d-geo's hard-coded 0.15 / ×0.72, which barely read): the coat (and the hair,
+           // × wetHair) darkens by wetDark and gets glossier (roughness × wetRough); relaxed, the shoulders come up wetShrug°, the
+           // head down wetHead° and the left hand goes into the coat pocket
+           wetDark: 0.28, wetRough: 0.5, wetHair: 0.7, wetShrug: 6, wetHead: 8 },
   // Surfaces: (roughness, metalness, cloth/sheen, skin); the hair's slick lives in its painted highlight band, not a specular hotspot.
   surf: {
     wool: [0.95, 0, 0.55, 0], lining: [0.55, 0, 0, 0], trousers: [0.85, 0, 0.25, 0], shirt: [0.80, 0, 0.10, 0.3],
-    skin: [0.58, 0, 0, 1], hair: [0.62, 0, 0, 0], shoes: [0.35, 0, 0, 0], sole: [0.80, 0, 0, 0], steel: [0.36, 0.35, 0, 0],
+    // (the hair's z 0.005: below the cloth band, it marks the hair for the wet look)
+    skin: [0.58, 0, 0, 1], hair: [0.62, 0, 0.005, 0], shoes: [0.35, 0, 0, 0], sole: [0.80, 0, 0, 0], steel: [0.36, 0.35, 0, 0],
     wood: [0.50, 0, 0, 0], rubber: [0.60, 0, 0, 0], brass: [0.30, 0.60, 0, 0], scope: [0.08, 0.20, 0, 0], edge: [0.30, 0.35, 0, 0],
     lens: [0.2, 0, 1.0, 0], button: [0.45, 0, 0, 0],
   },
@@ -197,7 +209,7 @@ const clamp01 = (x) => (x < 0 ? 0 : x > 1 ? 1 : x);
 export function makePlannerInput() {
   return { dt: 0, gait: false, phi: 0, rate: 10, vx: 0, vz: 0, rx: 0, rz: 0, hipYaw: 0, hipY: 34, sigma: 0.5, land: 0.5, half: 4.4, toeOut: 0, lift: 1,
     toe: 0, heel: 0, setA: SWING.walk, setB: null, setW: 0, pitchScale: 1, neutral: [[0, 0, 0, 0], [0, 0, 0, 0]],
-    turning: false, turnSide: 1, still: 0, stanceChanged: false, settleT: 0.25, startLead: -1 };
+    turning: false, turnSide: 1, still: 0, stanceChanged: false, settleT: 0.25, startLead: -1, sigD: [0, 0], leadK: [1, 1] };
 }
 /**
  * The gait table's inputs for a measured speed (u/s): stance fraction, stance half-width, toe-out, heel and toe-off
@@ -221,13 +233,17 @@ export function gaitInputs(I, speed, back = false, wall = false) {
 /* ---------------- idle posture and breath (§4.7) ---------------- */
 export const IDLE = {
   pelvisDy: -0.6, lean: 2, clavProt: 5, neckPitch: 8, headPitch: -6,
+  // (M5 fix: the left arm closer in to the coat, its forearm a little forward with the palm turned in to the thigh, so the
+  // arms are not mirrored (the spec's matching 9° abduction read as an A-pose); the right keeps the spec's carry, which
+  // holds the pistol clear of the trouser leg in the §7.4 value gate's view)
   armR: { flex: 8, abd: 9, twist: 0, elbow: 18, wflex: -14, wdev: 0, wroll: 0 },
-  armL: { flex: 4, abd: 9, twist: 0, elbow: 12, wflex: 4, wdev: 0, wroll: 0 },
+  armL: { flex: 9, abd: 5, twist: 14, elbow: 19, wflex: 4, wdev: 0, wroll: 0 },
   // relaxed with a long gun in hand (low ready, the muzzle down and forward): the right arm's FK
   armRLong: { flex: 14, swing: 0.3, abd: 12, elbow: 34, wflex: 44 },
   // Breath: inhale over 40% of the period (S), exhale over 60% (S).
-  breath: { calm: 4.5, combat: 2.4, winded: 1.4, steady: 6.0, lowHpDiv: 1.6, amp: { calm: 1, exerted: 2, lowHp: 2, steady: 0.5 } },
-  breathOut: { scaleX: 0.03, posY: 0.15, spine2Pitch: -0.8, clavElev: 1.5, headPitch: 0.4 },
+  breath: { calm: 4.5, combat: 2.4, winded: 1.4, steady: 6.0, lowHpDiv: 1.6, hok: 1.0, amp: { calm: 1, exerted: 2, lowHp: 2, steady: 0.5 } },
+  // (armFlex: the breath sways the hanging arms forward a touch, M5 fix)
+  breathOut: { scaleX: 0.03, posY: 0.15, spine2Pitch: -0.8, clavElev: 1.5, headPitch: 0.4, armFlex: 1.5 },
 };
 /* ---------------- aim profiles (§4.8): pose numbers per weapon ---------------- */
 // boreY: the expected bore height (the aim pitch looks down to the y = 30 mouse plane from it; M3 measures it on the
@@ -695,11 +711,110 @@ export const PICK = { T: 0.2, rise: 0.3, pelvisY: [[0, 0], [0.5, -13, 'O'], [1, 
   camYaw: 20, camSide: 4 };
 
 /* ---------------- fidgets (§4.7) ---------------- */
+// Keys over the fidget's own progress u (0..1, T seconds). The lapel tug's left hand goes to the spine2 lapelL socket
+// (w: the hand's weight on the socket, tug: how far it pulls the lapel down, u).
 export const FIDGETS = {
-  neckRoll: { T: 1.4, headRoll: [[0, 0], [0.25, 9, 'S'], [0.5, 0, 'S'], [0.75, -9, 'S'], [1, 0, 'S']], headPitch: [[0, 0], [0.5, 8, 'S'], [1, 0, 'S']] },
-  shoulderRoll: { T: 0.8, clavElev: [[0, 0], [0.4, 6, 'S'], [1, 0, 'S']], clavProt: [[0, 0], [0.4, 0], [0.7, -6, 'S'], [1, 0, 'S']] },
-  gunCheck: { T: 1.2, shoulderFlex: [[0, 0], [0.3, 35, 'S'], [0.67, 35, 'H'], [1, 0, 'S']], elbow: [[0, 0], [0.3, 70, 'S'], [0.67, 70, 'H'], [1, 0, 'S']],
-              headPitch: [[0, 0], [0.3, 14, 'S'], [0.67, 14, 'H'], [1, 0, 'S']], headYaw: [[0, 0], [0.3, 10, 'S'], [1, 0, 'S']] },
+  // (M5 fix: the neck roll and the shoulder roll bigger than the spec's, which did not read even close up)
+  neckRoll: { T: 1.6, headRoll: [[0, 0], [0.25, 16, 'S'], [0.5, 0, 'S'], [0.75, -16, 'S'], [1, 0, 'S']], headPitch: [[0, 0], [0.5, 12, 'S'], [1, 0, 'S']] },
+  shoulderRoll: { T: 0.9, clavElev: [[0, 0], [0.4, 10, 'S'], [1, 0, 'S']], clavProt: [[0, 0], [0.4, 0], [0.7, -10, 'S'], [1, 0, 'S']] },
+  // (M5 fix: a press-check in front of his chest, the GUN driving the hands: the spec's FK shoulder/elbow raise stood the
+  // pistol upright beside his head, the muzzle at his ear. w: the gun's weight on the check pose, which is in frame A
+  // (`at`, pitch/yaw/roll in degrees: the muzzle forward-left and down, rolled so the ejection port faces his eyes);
+  // hand: the left hand's weight on the slide (the rack socket), slide: the slide's travel (u, back −), the head looks
+  // down at it)
+  gunCheck: { T: 1.7, at: [12.5, -1.5, 1.5], pitch: -16, yaw: -36, roll: -55,
+              w: [[0, 0], [0.24, 1, 'S'], [0.8, 1, 'H'], [1, 0, 'S']],
+              hand: [[0, 0], [0.26, 0], [0.38, 1, 'S'], [0.64, 1, 'H'], [0.76, 0, 'S']],
+              slide: [[0, 0], [0.42, 0], [0.5, -1.1, 'O'], [0.6, -1.1, 'H'], [0.65, 0, 'I']],
+              headPitch: [[0, 0], [0.26, 24, 'S'], [0.78, 24, 'H'], [1, 0, 'S']], headYaw: [[0, 0], [0.26, -10, 'S'], [0.78, -10, 'H'], [1, 0, 'S']],
+              s2: [[0, 0], [0.26, 5, 'S'], [0.78, 5, 'H'], [1, 0, 'S']] },
+  lapelTug: { T: 1.1, w: [[0, 0], [0.27, 1, 'S'], [0.68, 1, 'H'], [1, 0, 'S']], tug: [[0, 0], [0.27, 0], [0.5, 1.2, 'O'], [0.68, 1.2, 'H'], [0.8, 0, 'S']],
+              headPitch: [[0, 0], [0.36, 6, 'S'], [0.9, 0, 'S']], spine2Roll: [[0, 0], [0.4, -2, 'S'], [1, 0, 'S']] },
+};
+
+/* ---------------- life (§4.7, §4.18, §4.19, §4.20): idle, gestures, modal poses, abilities, items, carry, stroll, prowl, cover, low HP ---------------- */
+// Times in seconds; angles in degrees; offsets in world units. Hand targets in frame A are (fwd, up, right) from the aim
+// origin (the spine2 pivot); 'abs' heights are world Y.
+export const LIFE = {
+  // contrapposto: the loaded side switches every U(period) s; the switch is two idle steps (the new loaded foot back under
+  // him, then the free foot out `fwd` with toe-out `toe`), while the hips shift `shift` toward the loaded foot and roll its
+  // hip up `roll`°, the shoulders counter-roll (spine1 s1, spine2 s2) and the head rights itself; aimed, the body part runs
+  // at aimK and the feet stay in the aim stance
+  // (M5 fix: shift 3.5, roll 6, drop 1.2 and the free foot 3.5 out at 15° so the free knee visibly bends: the first
+  // numbers were about 2 px at the default zoom)
+  contra: { period: [6, 9], quietT: 2.0, T: 0.8, roll: 6, shift: 3.5, s1: 3.5, s2: 2, head: 2.5, fwd: 3.5, toe: 15, stepT: 0.35, lift: 1.2, aimK: 0.3, drop: 1.2 },
+  // glances: small looks every U(every) s; a look at the nearest person (an NPC, an enemy, the dog) every U(person.every) s
+  // (M5 fix: glances 10–25° with the chest taking `chest` of them; one in `around` is a look round, 40–65°, slower)
+  glance: { every: [2.5, 5], yaw: [10, 25], pitch: 4, in: 0.18, hold: [0.6, 1.8], out: 0.3, chest: 0.25,
+            around: { p: 0.22, yaw: [40, 65], in: 0.45, hold: [1.0, 1.6], out: 0.55, chest: 0.3 },
+            person: { every: [9, 15], range: 350, max: 35, chest: 10, in: 0.3, hold: [1.2, 2], out: 0.35 } },
+  // a fidget every U(every) s while relaxed, calm (no combat for `calm` s) and standing still for `still` s
+  fidget: { every: [10, 16], calm: 20, still: 1.0, first: [4, 7] },
+  // the gun's life: the relaxed wrist drifts ±wrist° at hz; the aimed gun sways (yaw sway°, pitch × swayPitch), × steadyK steady
+  drift: { wrist: 0.4, hz: 0.3, sway: 0.4, swayPitch: 0.3, steadyK: 0.3 },
+  // stroll (a tail job, relaxed): the pistol goes under the coat (in), the hands into the coat pockets; out on aim
+  // (M5 fix: the hands go into the pockets only while he is nearly still (pocketSpeed); faster, the pistol stays hidden
+  // but the arms swing loose at `armK` with the elbows at `elbowK`, the torso upright (`pitchK`), the steps flatter
+  // (`liftK`) and the crouch shallower (`heightK`): the sim's 125 u/s is a jog, and hands-in-pockets read as a crouched
+  // shuffle-jog)
+  stroll: { in: 0.9, out: 0.45, pocketL: [2.8, 0.2, -8.0], pocketR: [2.8, 0.2, 8.0], swing: 0.15, poleL: [-0.5, -1, -0.5], poleR: [-0.5, -1, 0.5],
+            pocketSpeed: 70, pocketIn: 0.35, pocketOut: 0.25, armK: 0.6, elbowK: 0.62, pitchK: 0.35, liftK: 0.67, heightK: 0.57,
+            holHide: 0.22, draw: 0.3 },
+  // carry (a delivery parcel): the left forearm cradles it (FK), the pistol one-handed
+  // (M5 fix: the parcel grows in as the forearm comes up (show from `show`), and at the end it is handed over: the left hand
+  // reaches out to `give` (frame A) over giveT s, the parcel goes at the reach's peak, then the arm lowers over `out`)
+  carry: { in: 0.4, out: 0.5, show: 0.55, showK: 0.25, give: [22, 6, -2], giveT: 0.36, armL: { flex: 20, abd: 4, twist: 38, elbow: 95, wflex: 10, wdev: 0, wroll: -20 }, parcel: [4.6, -6.0, 1.2], tilt: 0 },
+  // prowl (enemies about, unseen, or a quiet assault): crouched, leaning in, the gun at a two-handed low ready, short steps
+  prowl: { in: 0.35, range: 900, pelvis: -4, lean: 10, s1: 3, lift: 0.7, gun: [16, -6, 1.5], gunPitch: -38, gunYaw: -6, abd: -3, head: -6 },
+  // cover (in combat, by bullet-blocking cover, nearly still): crouched behind low cover (pop up on each shot), leaning off
+  // tall cover
+  // (M5 fix: low cover deeper (pelvis −14, s2 16) with a wider, staggered stance (half +2, the left foot `stagger` ahead), so
+  // he reads as behind it, and a bigger, longer pop)
+  cover: { in: 0.3, low: { pelvis: -14, s2: 16, s1: 5, back: 4, pop: 11, popIn: 0.08, popHold: 0.35, popOut: 0.18, half: 2, stagger: 4 }, tall: { roll: 8, pelvis: -3 } },
+  // low HP: hunched, the left hand pressed to his side (relaxed pistol), a limp on the right leg, the heartbeat
+  // (the limp: the right stance sigD shorter and its stride × stride, the pelvis rolls limpRoll° over the right stance
+  // (a smooth sin envelope, never a step) and dips `hitch` at the right heel-strike)
+  lowHp: { in: 0.6, out: 1.0, s2: 10, s1: 3, head: -6, neck: 5, clavProt: 5, clavElev: -2, limpRoll: 3.5, sigD: -0.06, stride: 0.9, hitch: 1.2, side: [4.6, 5.6, -7.6], beat: [0.55, 1.6], beatPitch: 1.2, beatT: 0.12 },
+  // hands on knees after a sprint, out of breath
+  // (M5 fix: it folds as he pulls up (still 0.1, in 0.5), heaves on a 1 s breath while held (heave° on spine2, the
+  // clavicles and the head), exhales with a lean back (exhale° over exhaleT s) as he comes up; out above stamOut)
+  hok: { in: 0.5, out: 0.45, pelvis: -9, pelvisPitch: 12, s2: 32, s1: 18, head: -22, neck: -12, max: 2.2, sprintAgo: 1.2, stam: 0.35, still: 0.1, stamOut: 0.6,
+         heave: { s2: 3, clav: 3, head: 2 }, exhale: 4, exhaleT: 0.35 },
+  // the head look (§4.20): ω, limits (° relative to the chest), the interaction range, a threat's arc; the aim point's
+  // pitch adds aimK × (pitch − aimRef) to the profile's (the tuned profile looks at the 220 u aim)
+  look: { omega: 18, yawMax: 70, pitchLo: -30, pitchHi: 25, interact: 60, threatArc: 110, aimK: 0.5, aimRef: 10, idleK: 0.6 },
+  // a reach (an interaction) per short code; T the envelope (s), kneel the field-dress tail
+  // (M5 fix: OPEN is longer (T 0.45, an in/hold/out envelope) and turns the handle (roll); DRESS kneels down over `down`,
+  // works at the ground (the left hand at `hand`, work frame, abs height; ±work u at hz) for T, then rises over `up` with
+  // a forward lean (rise°) to stand; TALK: speech beats (every U(beat) s: the elbow `beatElbow` over beatIn, back over
+  // beatOut, a nod) on a raised forearm (flex, abd, elbow, the palm open: wroll), a listening head tilt when not Frank)
+  reach: { T: 0.3, tail: 0.15, open: { T: 0.45, clamp: 22, y: 38, s2: 10, roll: 30 }, take: { pelvis: -6, s2: 25, hand: [14, 30, -3] },
+           kneel: { down: 0.25, T: 0.8, up: 0.4, pelvis: -13.5, s2: 24, s1: 10, head: 20, rise: 10, hand: [16, 6, -3], work: 2, hz: 2, back: 5 },
+           look: { s2: 10, head: 12 }, other: { hand: [13, 42, -3] },
+           talk: { nod: 8, chest: 0.5, chestMax: 40, headMax: 70, flex: 22, abd: 8, elbow: 55, wroll: 35, beat: [0.6, 1.2], beatElbow: 26, beatFlex: 8, beatAbd: 7, beatClav: 2.5, beatIn: 0.12, beatOut: 0.35, beatNod: 3, listen: 4, range: 120 },
+           phone: { in: 0.3, out: 0.3 } },
+  // items (0.6 s): the bandage to his side, food to his mouth
+  // (M5 fix: eating takes 1.0 s with two bite nods and a bite of food in hand (the parcel prop, scaled to `food`))
+  item: { T: 0.6, w: [[0, 0], [0.25, 1, 'S'], [0.75, 1, 'H'], [1, 0, 'S']], eatHead: -6, eatT: 1.0, eatW: [[0, 0], [0.2, 1, 'S'], [0.82, 1, 'H'], [1, 0, 'S']],
+          bites: [[0, 0], [0.38, 0], [0.45, 4, 'O'], [0.55, 0, 'S'], [0.63, 0], [0.7, 4, 'O'], [0.8, 0, 'S']], food: [0.34, 0.4, 0.38] },
+  // abilities: Misdirection (the stone thrown with the left hand), Controlled Fire (one deep breath, then steady),
+  // Emergency Repair (one overhand strike with the hammer in the left hand)
+  // (M5 fix: the wind-up back and out at shoulder height (not behind his head), a release well out in front and high, a
+  // follow-through down across; the chest winds −20 and throws +14, the left shoulder drives forward)
+  misdirection: { T: 0.45, hand: [[0, [8, -6, -6]], [0.15, [-5, 5, -17], 'S'], [0.22, [26, 12, -12], 'I'], [0.3, [24, -2, -6], 'O'], [0.45, [8, -6, -6], 'S']],
+                  s2Yaw: [[0, 0], [0.15, -20, 'S'], [0.22, 14, 'I'], [0.3, 10, 'O'], [0.45, 0, 'S']], clavProt: [[0, 0], [0.15, -4, 'S'], [0.22, 8, 'I'], [0.45, 0, 'S']] },
+  steady: { T: 1.6, amp: 3, clav: 4 },
+  // (M5 fix: the strike lands down and to his left, clear of the gun line (it hit the top of his own pistol); the hammer
+  // goes at hide s; spine2 turns toward the strike)
+  patch: { T: 0.45, hide: 0.35, hand: [[0, [10, -2, -7]], [0.12, [4, 16, -12], 'S'], [0.24, [16, -12, -16], 'I'], [0.45, [10, -2, -7], 'S']], pitch: [[0, 0], [0.12, 70, 'S'], [0.24, -40, 'I'], [0.45, 0, 'S']],
+           s2Yaw: [[0, 0], [0.12, 4, 'S'], [0.24, -12, 'I'], [0.45, 0, 'S']] },
+  // modal poses (presentation): fishing (the rod in both hands), craft/cook (the hands working at a bench), repair (the loop)
+  // (M5 fix: the tool takes over at the blend's middle with the right hand where the gun left it: the pistol's relaxed
+  // hand at his side, or a long gun's grip on the sling, which it reaches over the first half. The rod appears there,
+  // lowered (pitch rod.low), and rides the right hand up into the fishing pose over the second half; out, the reverse,
+  // and the pistol is back in the relaxed hand at the middle (no holster trip: from under the coat at the armpit the cross
+  // reach swung the elbow up behind his head))
+  modal: { in: 0.3, out: 0.3, rod: { gripR: [13, -8, 3], pitch: 35, sway: 3, hz: 0.4, gripL: 9, low: -40 }, work: { hands: [12, -6, 3], amp: 2, hz: 1.2, head: 18, s2: 8 } },
 };
 
 /** Every keyed track in this module (for the unit test of sortedness and easing ids). */
@@ -711,5 +826,6 @@ export function allTracks() {
   };
   walk(RECOIL, 'RECOIL'); walk(FIDGETS, 'FIDGETS'); walk(ACTIONS, 'ACTIONS'); walk(SWAP, 'SWAP'); walk(GUN_POSES, 'GUN_POSES');
   walk(MELEE, 'MELEE'); walk(TAKEDOWN, 'TAKEDOWN'); walk(DODGE, 'DODGE'); walk(REVIVE, 'REVIVE'); walk(DEATH, 'DEATH'); walk(REPAIR, 'REPAIR'); walk(PICK, 'PICK');
+  walk(LIFE, 'LIFE');
   return out;
 }

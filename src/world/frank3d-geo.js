@@ -312,15 +312,17 @@ const tubeW = (top, bot, s, s0, s1) => { const w = ss(s0, s1, s); return w <= 0 
 /* ================= parts ================= */
 // ---- head: a loft of two-radius superellipse rings (the jaw, chin and face lines need direct control)
 // [Y, xf (front), xw (widest), xb (back), zw (half-width), nf, nb]
+// (M5 fix, the portrait's long angular face: the chin lower, squarer and a little forward, a squarer jaw, the cheeks
+// narrower from the jaw up to the cheekbones (the round face read young and puffy))
 const HEAD_RINGS = [
-  [62.05, 5.0, 3.6, 2.2, 1.1, 2.3, 2.0], [62.4, 5.6, 3.2, 0.6, 2.2, 2.7, 2.0], [62.95, 5.9, 2.85, -0.7, 2.75, 3.0, 2.2],
-  [63.6, 6.0, 2.55, -1.6, 3.42, 3.1, 2.2], [64.35, 6.12, 2.2, -2.25, 3.8, 2.9, 2.2], [65.2, 6.25, 1.9, -2.75, 3.92, 2.75, 2.2],
-  [66.1, 6.2, 1.7, -3.1, 4.02, 2.7, 2.2], [67.0, 6.08, 1.55, -3.35, 4.08, 2.75, 2.2], [67.8, 6.1, 1.45, -3.45, 4.1, 2.8, 2.2],
+  [61.6, 5.15, 3.7, 2.3, 1.5, 2.3, 2.0], [62.15, 5.7, 3.25, 0.6, 2.45, 2.9, 2.0], [62.8, 5.95, 2.85, -0.7, 2.95, 3.2, 2.2],
+  [63.6, 6.0, 2.55, -1.6, 3.38, 3.1, 2.2], [64.35, 6.12, 2.2, -2.25, 3.55, 2.9, 2.2], [65.2, 6.25, 1.9, -2.75, 3.66, 2.75, 2.2],
+  [66.1, 6.2, 1.7, -3.1, 3.86, 2.7, 2.2], [67.0, 6.08, 1.55, -3.35, 4.0, 2.75, 2.2], [67.8, 6.1, 1.45, -3.45, 4.1, 2.8, 2.2],
   [68.5, 6.3, 1.38, -3.52, 4.12, 2.7, 2.2], [69.1, 6.42, 1.3, -3.56, 4.12, 2.5, 2.2], [69.9, 6.25, 1.2, -3.56, 4.08, 2.35, 2.2],
   [70.9, 5.92, 1.1, -3.46, 3.94, 2.2, 2.2], [71.9, 5.3, 1.0, -3.15, 3.56, 2.1, 2.1], [72.75, 4.25, 0.95, -2.5, 2.85, 2.0, 2.0],
   [73.35, 2.8, 0.95, -1.5, 1.75, 2.0, 2.0],
 ];
-const HEAD_TOP = [1.0, 73.6, 0], HEAD_BOT = [3.6, 61.85, 0];
+const HEAD_TOP = [1.0, 73.6, 0], HEAD_BOT = [3.7, 61.4, 0];
 const SKULL_C = [1.3, 67.8, 0];
 function headRingAt(Y) {
   const R = HEAD_RINGS;
@@ -356,12 +358,12 @@ function faceSculpt(x, y, z, front) {
   const az = Math.abs(z);
   let dx = 0;
   dx -= 0.55 * g2(y - 67.75, az - 1.78, 0.75, 0.95);                    // eye sockets
-  dx += 0.40 * g2(y - 68.95, 0, 0.42, 9) * (1 - ss(2.5, 3.6, az));      // brow ridge
-  dx += 0.30 * g2(y - 66.35, az - 3.0, 0.7, 0.7);                       // cheekbones
-  dx -= 0.24 * g2(y - 65.0, az - 2.35, 0.9, 0.65);                      // cheek hollows under the cheekbones
+  dx += 0.50 * g2(y - 68.95, 0, 0.42, 9) * (1 - ss(2.5, 3.6, az));      // brow ridge (M5: heavier)
+  dx += 0.42 * g2(y - 66.35, az - 3.0, 0.7, 0.7);                       // cheekbones (M5 fix: stronger)
+  dx -= 0.36 * g2(y - 65.0, az - 2.35, 0.9, 0.65);                      // cheek hollows under the cheekbones (deeper)
   dx += 0.12 * g2(y - 64.15, 0, 0.35, 1.2);                             // upper lip
   dx -= 0.14 * g2(y - 63.55, 0, 0.3, 1.0);                              // under the lower lip
-  dx += 0.18 * g2(y - 62.9, 0, 0.5, 1.4);                               // chin
+  dx += 0.22 * g2(y - 62.6, 0, 0.55, 1.5);                              // chin
   dx -= 0.25 * g2(y - 70.2, az - 3.35, 0.9, 0.5);                       // temples
   return [x + dx * front, z];
 }
@@ -400,17 +402,23 @@ function buildHead(q) {
   for (let j = 0; j < J; j++) { const j1 = (j + 1) % J; if (seamSkip.has(j)) continue; p.tri(last[j], top, last[j1]); p.tri(first[j], first[j1], bot); }
   return p;
 }
-function buildNose() {
-  // two halves, each smooth-shaded, meeting on a hard bridge ridge (no faceting, but the ridge still catches the light)
-  const out = [], c = [6.0, 66.6, 0];
-  for (const sd of [1, -1]) {
-    const p = new Part(), v = (pt) => p.v(pt[0], pt[1], pt[2] * sd);
-    const B = v([6.4, 68.45, 0]), T = v([7.45, 65.55, 0]), U = v([6.98, 65.0, 0]), W = v([6.3, 65.2, 0.68]), S = v([6.2, 67.6, 0.44]), N = v([6.1, 65.0, 0.26]);
-    const cc = [c[0], c[1], 0];
-    p.triAway(B, T, S, cc); p.triAway(S, T, W, cc); p.triAway(T, U, W, cc); p.triAway(W, U, N, cc);
-    out.push(p);
+function buildNose(q) {
+  // (M5 art pass) one smooth part: the bridge, tip and underside on the centre line are shared by both halves, so the
+  // ridge shades round instead of standing as a hard wedge; a rounded tip (T, T2) and the nostril wings
+  const p = new Part(), cc = [6.0, 66.6, 0];
+  if (q) { // Low: the same smooth ridge on 8 triangles
+    const B = p.v(6.4, 68.45, 0), T = p.v(7.45, 65.55, 0), U = p.v(6.98, 65.0, 0);
+    for (const sd of [1, -1]) { const W = p.v(6.3, 65.2, 0.68 * sd), S = p.v(6.2, 67.6, 0.44 * sd), N = p.v(6.1, 65.0, 0.26 * sd); p.triAway(B, T, S, cc); p.triAway(S, T, W, cc); p.triAway(T, U, W, cc); p.triAway(W, U, N, cc); }
+    return [p];
   }
-  return out;
+  const B = p.v(6.35, 68.45, 0), M = p.v(6.75, 67.0, 0), T = p.v(7.4, 65.75, 0), T2 = p.v(7.25, 65.2, 0), U = p.v(6.85, 64.95, 0);
+  for (const sd of [1, -1]) {
+    const v = (x, y, z) => p.v(x, y, z * sd);
+    const S = v(6.2, 67.6, 0.42), S2 = v(6.55, 66.2, 0.5), W = v(6.3, 65.25, 0.72), N = v(6.15, 64.98, 0.3);
+    p.triAway(B, M, S, cc); p.triAway(S, M, S2, cc); p.triAway(M, T, S2, cc); p.triAway(S2, T, W, cc);
+    p.triAway(T, T2, W, cc); p.triAway(W, T2, U, cc); p.triAway(W, U, N, cc);
+  }
+  return [p];
 }
 function buildEars(q) {
   // An ear: a raised helix rim round a recessed concha, a back plate, standing 0.3 off the skull and flared back 18°.
@@ -428,7 +436,7 @@ function buildEars(q) {
       else { p.poly([rim[i], rim[j], inner[j], inner[i]], [0, 0, -5], 'rim'); p.poly([inner[i], inner[j], concha], [0, 0, -5], 'in'); }
       p.poly([back[i], back[j], bc], [0, 0, 5], 'out'); p.poly([rim[i], rim[j], back[j], back[i]], ctr, 'rim');
     }
-    p.xform(CH(TR(0.9, 66.9, s * 4.4), RY(s * 18 * DEG), RZ(15 * DEG), s < 0 ? RY(Math.PI) : M4()));
+    p.xform(CH(TR(0.9, 66.9, s * 4.3), RY(s * 18 * DEG), RZ(15 * DEG), s < 0 ? RY(Math.PI) : M4()));
     out.push(p);
   }
   return out;
@@ -572,16 +580,20 @@ function foreheadX(y, z) {
 // coat under them: with a torso twist they stuck out past the lapels as flat white wings)
 const CP = { pts: [[59.75, 3.75, 0.95], [59.75, 5.3, 0.85], [58.6, 5.15, 0.75], [56.9, 3.75, 0.8]] }; // [y, |z|, lift off the coat]
 const FORELOCKS = [
-  // [bone, root y, root z, length, root width, z drift]
-  ['forelockA', 71.7, -1.0, 2.9, 1.8, -0.9],
-  ['forelockB', 71.5, -2.3, 2.3, 1.4, -0.6],
-].map(([bone, y, z, len, w0, dz]) => ({ bone, root: [foreheadX(y, z) + 0.3, y, z], len, w0, dz }));
+  // [bone, root y, root z, length, root width, z drift, geometry]
+  // (M5 fix: ONE lock, rooted well up under the quiff so it grows out of the hair mass, wide there and tapering to a point
+  // just above his left brow, in the hair's own colour: two short strands starting under the hairline read as scratches
+  // on the forehead. forelockB keeps its bone (and spring) but has no geometry)
+  ['forelockA', 73.0, -0.9, 3.7, 2.0, -2.2, true],
+  ['forelockB', 72.3, -2.0, 1.7, 0.75, -1.1, false],
+].map(([bone, y, z, len, w0, dz, geo]) => ({ bone, root: [foreheadX(y, z) + 0.3, y, z], len, w0, dz, geo }));
 function buildForelocks() {
   const out = [], bend = Math.tan(35 * DEG);
   for (const f of FORELOCKS) {
-    const p = new Part(true), N = 4, front = [], back = [];
+    if (!f.geo) continue;
+    const p = new Part(true), N = 5, front = [], back = [];
     for (let i = 0; i < N; i++) {
-      const t = i / (N - 1), w = lerp(f.w0, 0.4, t ** 1.2) / 2;
+      const t = i / (N - 1), w = lerp(f.w0, 0.14, t ** 0.9) / 2;
       // down across the brow with a slight S, always just off the skin
       const cy = f.root[1] - f.len * t ** 1.3, cz = f.root[2] + f.dz * t + 0.35 * Math.sin(t * Math.PI) * (f.dz < -0.7 ? 1 : -1);
       const cx = foreheadX(cy, cz) + 0.25 + 0.2 * Math.sin(t * 2.4) * (1 - t);
@@ -1144,20 +1156,27 @@ export function frankAssets(q, young, opts = {}) {
     c = mix(c, warm, 0.35 * ss(2.4, 4.4, Math.abs(z)) * ss(64.5, 66.5, y) * (1 - ss(67, 68.5, y)) * front); // warm cheeks
     if (q) { // Low: the face lives in vertex colour
       if (!young) c = mix(c, stub, 0.35 * front * ss(65.2, 64.4, y)); // a shadow of stubble, not a ginger beard
-      c = mix(c, ao, 0.7 * front * Math.exp(-(((y - 67.8) / 0.7) ** 2)) * ss(0.6, 1.6, Math.abs(z)) * (1 - ss(2.6, 3.4, Math.abs(z))));
-      c = mix(c, brow, 0.85 * front * Math.exp(-(((y - 68.9) / 0.45) ** 2)) * ss(0.5, 1.2, Math.abs(z)) * (1 - ss(3.0, 3.6, Math.abs(z))));
+      // (M5 fix: lighter sockets and a thin brow line above the eye row: on Low's few rings the old band read as a blindfold)
+      c = mix(c, ao, 0.4 * front * Math.exp(-(((y - 67.8) / 0.6) ** 2)) * ss(0.6, 1.6, Math.abs(z)) * (1 - ss(2.6, 3.4, Math.abs(z))));
+      c = mix(c, brow, 0.75 * front * Math.exp(-(((y - 69.0) / 0.28) ** 2)) * ss(0.5, 1.2, Math.abs(z)) * (1 - ss(3.0, 3.6, Math.abs(z))));
     }
     return c;
   } });
-  for (const np of buildNose()) B.add('nose', np, { bone: 'head', uv: q ? null : (x, y, z) => [0.25 + z / 19.2, clamp((y - 61.6) / 12.4, 0, 1)], surf: SURF.skin,
-    col: (x, y) => mix(skin, warm, 0.6 * ss(66.5, 65.3, y)) });
+  // (the nose: warmer toward the tip, a little shadow under it where it meets the lip)
+  for (const np of buildNose(q)) B.add('nose', np, { bone: 'head', uv: q ? null : (x, y, z) => [0.25 + z / 19.2, clamp((y - 61.6) / 12.4, 0, 1)], surf: SURF.skin,
+    col: (x, y) => mul(mix(skin, warm, 0.5 * ss(66.8, 65.6, y)), 1 - 0.12 * ss(65.3, 64.95, y)) });
+  // (M5 art pass: §3.3's brow ridge bar was built and tried, 0.6 and then 0.35 proud; from the high game camera its upper
+  // face caught the noon sun and read as a pale band across the forehead, so the brow stays in the head's own sculpt
+  // (faceSculpt's ridge) and the atlas's socket shading)
   for (const e of buildEars(q)) B.add('ears', e, { bone: 'head', surf: SURF.skin, col: (x, y, z, m) => (m === 'in' ? mul(mix(warm, skin, 0.4), 0.7) : mul(mix(warm, skin, 0.4), m === 'rim' ? 0.86 : 0.9)) });
   B.add('hair', buildHair(q), { bone: 'head', surf: SURF.hair, col: hairColor(young, q) });
   const sbHair = lin(young ? COL.hairYoung : COL.hair), sbGrey = lin(COL.grey0);
   // the sideburns: greying where they meet the temples, the dark hair colour below (not grey plates)
   for (const sb of buildSideburns(q)) B.add('sideburns', sb, { bone: 'head', surf: SURF.hair, col: (x, y, z, m) => (young ? mul(sbHair, 1.05) : mix(sbHair, sbGrey, (z > 0 ? 0.85 : 0.78) - 0.2 * (m ? m.t : 0))) });
   // the forelocks: the quiff's highlight at the root, the base hair colour at the tip
-  if (!q) for (const [bone, p] of buildForelocks()) B.add('forelocks', p, { bone, surf: SURF.hair, col: (x, y, z, m) => mix(lin(young ? '#5a3e30' : COL.hairHi), lin(young ? COL.hairYoung : COL.hair), 0.55 * (m ? m.t : 0)) });
+  // (M5: the root the hair's own colour where it leaves the hairline, the strand catching the highlight toward its tip)
+  // (M5 fix: the hair's base colour, a touch darker toward the tip, like the hair it comes out of)
+  if (!q) for (const [bone, p] of buildForelocks()) B.add('forelocks', p, { bone, surf: SURF.hair, col: (x, y, z, m) => mul(lin(young ? COL.hairYoung : COL.hair), 1 - 0.08 * ss(0.3, 1, m ? m.t : 0)) });
   buildTorso(q, B);
   buildCoat(q, B);
   buildArms(q, B);
@@ -1184,71 +1203,87 @@ const FACE_TEX = {};
 function faceTexture(young) {
   const k = young ? 'y' : 'a';
   if (FACE_TEX[k]) return FACE_TEX[k];
+  // painted at 4× (512 × 256) for clean strokes, stored at 2× (256 × 128, about 175 KB with mips, M5 fix: the 4× store was
+  // ~700 KB per key for detail no zoom shows)
   const S = 4, c = document.createElement('canvas'); c.width = 128 * S; c.height = 64 * S;
   const g = c.getContext('2d'); g.scale(S, S);
   g.fillStyle = '#ffffff'; g.fillRect(0, 0, 128, 64);
-  const skin = COL.skin, M = (hex) => mulOver(hex, skin);
-  const line = (pts, w, hex, a = 1) => { g.globalAlpha = a; g.strokeStyle = M(hex); g.lineWidth = w; g.lineCap = 'round'; g.lineJoin = 'round'; g.beginPath(); g.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]); g.stroke(); g.globalAlpha = 1; };
-  // cheek hollows and stubble first (under everything)
+  const skin = COL.skin, FC = TUNE.face, M = (hex) => mulOver(hex, skin);
+  const path = (pts) => { g.beginPath(); g.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]); };
+  const line = (pts, w, hex, a = 1, blur = 0) => { g.save(); if (blur) g.filter = `blur(${blur * S}px)`; g.globalAlpha = a; g.strokeStyle = M(hex); g.lineWidth = w; g.lineCap = 'round'; g.lineJoin = 'round'; path(pts); g.stroke(); g.restore(); };
+  const blob = (x, y, rx, ry, hex, a, blur = 0, rot = 0) => { g.save(); if (blur) g.filter = `blur(${blur * S}px)`; g.globalAlpha = a; g.fillStyle = M(hex); g.beginPath(); g.ellipse(x, y, rx, ry, rot, 0, TAU); g.fill(); g.restore(); };
+  // stubble: an even, soft-edged shadow over the jaw and chin, a lighter one on the upper lip, the lips cut back, then
+  // fine darker hairs (it reads as stubble up close and as a shadow at game size)
   if (!young) {
-    g.save(); g.filter = 'blur(1.4px)'; g.globalAlpha = 0.8;
-    g.fillStyle = M('#b8957f');
-    g.beginPath(); g.moveTo(32 - 15.5, 43); g.lineTo(32 - 14, 56); g.lineTo(32 - 8, 62); g.lineTo(32, 63.6); g.lineTo(32 + 8, 62); g.lineTo(32 + 14, 56); g.lineTo(32 + 15.5, 43);
-    g.lineTo(32 + 11, 45.5); g.lineTo(32 + 6, 46.5); g.lineTo(32 - 6, 46.5); g.lineTo(32 - 11, 45.5); g.closePath(); g.fill();
-    g.fillRect(25.5, 46, 13, 4.6); // upper-lip band
+    // (M5 fix: the shadow on the jaw, the chin and round the mouth only, its top edge down at the jawline on the cheeks
+    // (it covered the whole lower face like dirt); the cheeks get a faint half-strength wash)
+    g.save(); g.filter = `blur(${2.0 * S}px)`; g.globalAlpha = 0.3; g.fillStyle = M(FC.stubble);
+    path([[32 - 15.2, 45], [32 - 14.2, 55.5], [32 - 8.5, 61.8], [32, 63.6], [32 + 8.5, 61.8], [32 + 14.2, 55.5], [32 + 15.2, 45], [32 + 11, 47.8], [32 + 7, 50], [32 - 7, 50], [32 - 11, 47.8]]); g.closePath(); g.fill();
+    g.globalAlpha = 0.72;
+    path([[32 - 14.6, 52.5], [32 - 13.6, 56.5], [32 - 8.5, 61.8], [32, 63.6], [32 + 8.5, 61.8], [32 + 13.6, 56.5], [32 + 14.6, 52.5], [32 + 10.5, 52.0], [32 + 7.2, 50.2], [32 - 7.2, 50.2], [32 - 10.5, 52.0]]); g.closePath(); g.fill();
     g.restore();
-    // cut the lip band back to white
-    g.save(); g.filter = 'blur(0.6px)'; g.fillStyle = '#ffffff'; g.beginPath(); g.ellipse(32, 52.3, 5.2, 1.5, 0, 0, TAU); g.fill(); g.restore();
-    // speckle: a few darker hairs so it reads as stubble, not a shadow
+    g.save(); g.filter = `blur(${1.2 * S}px)`; g.globalAlpha = 0.55; g.fillStyle = M(FC.stubbleLip);
+    path([[32 - 6.5, 47.6], [32, 47.0], [32 + 6.5, 47.6], [32 + 7.2, 50.6], [32, 50.2], [32 - 7.2, 50.6]]); g.closePath(); g.fill();
+    g.restore();
+    blob(32, 52.5, 6.5, 1.5, '#ffffff', 1, 0.5); // (white = no change: the lips stay clean)
     let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-    g.fillStyle = M('#7e6254');
-    for (let i = 0; i < 420; i++) {
-      const x = 32 + (rnd() * 2 - 1) * 15, y = 44 + rnd() * 19.5;
-      const inside = Math.abs(x - 32) < 15 - Math.max(0, y - 55) * 0.9 && !(y > 50.8 && y < 53.8 && Math.abs(x - 32) < 5);
-      if (inside) { g.globalAlpha = 0.18 + rnd() * 0.3; g.fillRect(x, y, 0.4, 0.4); }
+    g.fillStyle = M(FC.stubbleDot);
+    for (let i = 0; i < 1400; i++) {
+      const x = 32 + (rnd() * 2 - 1) * 15, y = 44.5 + rnd() * 19;
+      const inside = Math.abs(x - 32) < 14.6 - Math.max(0, y - 55) * 0.95 && !(y > 50.9 && y < 54 && Math.abs(x - 32) < 6.2) && !(y < 47 && Math.abs(x - 32) < 5.5);
+      // (the cheeks above the jawline: every other hair)
+      const cheek = y < 51.5 && Math.abs(x - 32) > 7.5, a = 0.1 + rnd() * 0.22;
+      if (inside && !(cheek && i % 2)) { g.globalAlpha = a; g.fillRect(x, y, 0.3, 0.3); }
     }
     g.globalAlpha = 1;
-    // cheek hollows
-    g.save(); g.filter = 'blur(2px)'; g.globalAlpha = 0.4; g.fillStyle = M('#b48a74');
-    for (const s of [-1, 1]) { g.beginPath(); g.ellipse(32 + s * 12.5, 43, 2.6, 3.2, 0, 0, TAU); g.fill(); }
-    g.restore();
+    for (const s of [-1, 1]) blob(32 + s * 12.5, 43, 2.6, 3.2, FC.hollow, 0.4, 2); // cheek hollows
   }
-  // eye sockets
+  // eye sockets, the bags under the eyes
   for (const s of [-1, 1]) {
-    const gr = g.createRadialGradient(32 + s * 12, 31.5, 0, 32 + s * 12, 31.5, 7);
-    gr.addColorStop(0, hexA(M('#94634e'), 0.5)); gr.addColorStop(1, hexA(M('#94634e'), 0));
-    g.fillStyle = gr; g.fillRect(32 + s * 12 - 8, 23, 16, 16);
+    const gr = g.createRadialGradient(32 + s * 11.8, 31.4, 0, 32 + s * 11.8, 31.4, 7);
+    gr.addColorStop(0, hexA(M(FC.socket), 0.45)); gr.addColorStop(1, hexA(M(FC.socket), 0));
+    g.fillStyle = gr; g.fillRect(32 + s * 11.8 - 8, 23, 16, 16);
+    line([[32 + s * 8.6, 35.0], [32 + s * 11.6, 35.6], [32 + s * 14.4, 34.8]], 0.7, FC.bag, !young ? 0.4 : 0.15, 0.25);
   }
-  // forehead creases
-  if (!young) { line([[23, 16.5], [41, 16.2]], 0.9, '#9a6248', 0.32); line([[24.5, 19.6], [39.5, 19.4]], 0.9, '#9a6248', 0.26); line([[29.6, 24.5], [30.4, 21.8]], 0.8, '#9a6248', 0.12); }
+  // forehead creases, the scowl's frown lines between the brows
+  if (!young) {
+    line([[23, 16.6], [32, 16.1], [41, 16.4]], 0.8, FC.forehead, 0.28, 0.15); line([[24.5, 19.6], [32, 19.2], [39.5, 19.5]], 0.8, FC.forehead, 0.22, 0.15);
+    for (const s of [-1, 1]) line([[32 + s * 1.3, 24.4], [32 + s * 1.0, 26.8]], 0.6, FC.frown, 0.3, 0.15);
+  }
   // nasolabial folds
-  g.save(); g.filter = 'blur(0.5px)';
-  for (const s of [-1, 1]) line([[32 + s * 5, 41], [32 + s * 7.6, 45.5], [32 + s * 8.6, 50]], 1.1, '#a06a50', 0.38);
-  g.restore();
-  // brows: heavy, angled down toward the centre (the scowl); his right brow (px > 32) a pixel lower
+  for (const s of [-1, 1]) line([[32 + s * 5, 41], [32 + s * 7.6, 45.5], [32 + s * 8.6, 50]], 1.0, FC.fold, young ? 0.18 : 0.36, 0.4);
+  // brows: heavy at the inner end, angled down toward the centre (the scowl), tapering out; his right brow (px > 32) a
+  // pixel lower; a few hair strokes on top
   for (const s of [-1, 1]) {
     const dy = s > 0 ? 1 : 0;
-    g.fillStyle = M('#33201a');
-    g.beginPath(); g.moveTo(32 + s * 3.6, 26.7 + dy); g.lineTo(32 + s * 9, 23.8 + dy); g.lineTo(32 + s * 17.5, 23.6 + dy); g.lineTo(32 + s * 17.0, 24.9 + dy); g.lineTo(32 + s * 9.5, 25.4 + dy); g.lineTo(32 + s * 4.2, 28.1 + dy); g.closePath(); g.fill();
+    g.save(); g.filter = `blur(${0.3 * S}px)`; g.fillStyle = M(FC.brow);
+    // (M5 fix: low and nearly straight like the portrait's, the scowl's V 40% flatter, a little heavier)
+    path([[32 + s * 3.5, 25.9 + dy], [32 + s * 8.5, 24.25 + dy], [32 + s * 13.5, 23.8 + dy], [32 + s * 17.6, 24.6 + dy], [32 + s * 13.5, 25.3 + dy], [32 + s * 9.2, 26.0 + dy], [32 + s * 4.2, 27.5 + dy]]); g.closePath(); g.fill();
+    g.restore();
+    for (let i = 0; i < 6; i++) { const t = i / 5, x0 = 32 + s * lerp(4.2, 15.5, t), y0 = lerp(26.7, 24.5, Math.sqrt(t)) + dy; line([[x0, y0], [x0 + s * 1.6, y0 - 0.7]], 0.35, FC.browHair, 0.55); }
   }
-  // upper lids (heavy, hooded), irises, a thin lower lid
+  // the eyes: the lid crease, the iris under a hooded upper lid (thicker toward the outer corner), a soft lower lid, crow's feet
   for (const s of [-1, 1]) {
-    line([[32 + s * 7.2, 31.2], [32 + s * 10.5, 30.0], [32 + s * 14, 30.1], [32 + s * 16, 31.1]], 1.6, '#1e1210');
-    g.fillStyle = M('#4a3226'); g.beginPath(); g.ellipse(32 + s * 11.6, 32.0, 1.35, 1.25, 0, 0, TAU); g.fill();
-    g.fillStyle = M('#1a0e0a'); g.beginPath(); g.arc(32 + s * 11.6, 32.0, 0.55, 0, TAU); g.fill();
-    line([[32 + s * 8.4, 33.6], [32 + s * 11.6, 34.1], [32 + s * 14.6, 33.4]], 0.6, '#9a6248', 0.6);
+    line([[32 + s * 7.6, 29.4], [32 + s * 11, 28.6], [32 + s * 15, 29.3]], 0.6, FC.crease, 0.5, 0.2);
+    blob(32 + s * 11.4, 32.1, 1.6, 1.5, FC.iris, 1);
+    blob(32 + s * 11.4, 32.1, 0.62, 0.62, FC.pupil, 1);
+    g.save(); g.fillStyle = M(FC.lid);
+    path([[32 + s * 7.0, 31.5], [32 + s * 10.5, 30.0], [32 + s * 14.0, 30.0], [32 + s * 16.4, 31.2], [32 + s * 15.6, 31.4], [32 + s * 13.8, 30.9], [32 + s * 10.6, 30.95], [32 + s * 7.6, 31.9]]); g.closePath(); g.fill();
+    g.restore();
+    line([[32 + s * 8.4, 33.5], [32 + s * 11.6, 34.05], [32 + s * 14.8, 33.3]], 0.55, FC.lowerLid, 0.6);
+    if (!young) { line([[32 + s * 16.6, 31.4], [32 + s * 18.6, 30.5]], 0.45, FC.crow, 0.32); line([[32 + s * 16.6, 32.0], [32 + s * 18.4, 32.6]], 0.45, FC.crow, 0.28); }
   }
-  // mouth: a hard, flat line; his right corner a pixel lower
-  line([[26, 52], [29, 52.4], [35, 52.5], [38, 53.1]], 1.4, '#7a4434');
-  line([[28.5, 54.4], [35.5, 54.4]], 0.8, '#b8765e', 0.5); // lower-lip shadow
-  // nostril shadows
-  for (const s of [-1, 1]) { g.fillStyle = hexA(M('#7a4a38'), 0.7); g.beginPath(); g.ellipse(32 + s * 1.7, 46.8, 0.9, 0.5, 0, 0, TAU); g.fill(); }
-  // jaw underside
-  const jg = g.createLinearGradient(0, 61, 0, 64); jg.addColorStop(0, hexA(M('#a8644a'), 0)); jg.addColorStop(1, hexA(M('#a8644a'), 0.5));
+  // mouth: a hard, flat line (his right corner a pixel lower), the upper lip a little darker, the lower lip's shadow
+  // (M5 fix: 20% wider, the corners turned down (the portrait's hard set mouth), the lower lip's shadow lighter)
+  line([[25.4, 51.7], [32, 51.2], [38.6, 51.9]], 0.95, FC.upperLip, 0.45, 0.2);
+  line([[24.8, 52.75], [26.4, 52.3], [29, 52.2], [35, 52.3], [37.8, 52.55], [39.2, 53.1]], 1.2, FC.mouth);
+  line([[27.8, 54.5], [36.2, 54.5]], 1.0, FC.lipShadow, 0.3, 0.3);
+  // nostril shadows, the jaw's underside
+  for (const s of [-1, 1]) blob(32 + s * 1.7, 46.8, 0.9, 0.5, FC.nostril, 0.7);
+  const jg = g.createLinearGradient(0, 61, 0, 64); jg.addColorStop(0, hexA(M(FC.jaw), 0)); jg.addColorStop(1, hexA(M(FC.jaw), 0.5));
   g.fillStyle = jg; g.fillRect(12, 61, 40, 3);
-  // painted at 4× for clean anti-aliased lines, stored at 2× (256 × 128, a quarter of the GPU memory)
-  const c2 = document.createElement('canvas'); c2.width = 256; c2.height = 128;
-  const g2 = c2.getContext('2d'); g2.imageSmoothingEnabled = true; g2.imageSmoothingQuality = 'high'; g2.drawImage(c, 0, 0, 256, 128);
+  const c2 = document.createElement('canvas'); c2.width = 128 * 2; c2.height = 64 * 2;
+  const g2c = c2.getContext('2d'); g2c.imageSmoothingEnabled = true; g2c.imageSmoothingQuality = 'high'; g2c.drawImage(c, 0, 0, c2.width, c2.height);
   const t = new THREE.CanvasTexture(c2);
   t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; t.generateMipmaps = true;
   FACE_TEX[k] = t;
@@ -1278,9 +1313,11 @@ function patch(sh, hq) {
   sh.vertexShader = rep(sh.vertexShader, '#include <begin_vertex>', 'vSurf = aSurf;');
   let f = sh.fragmentShader;
   f = rep(f, '#include <common>', 'varying vec4 vSurf;\nuniform vec3 uFill, uFillSkin, uRim, uKeyDirV, uSheen;\nuniform float uRimFloor, uFlash, uWet, uLens, uLensGun;');
-  f = rep(f, '#include <color_fragment>', 'float fLens = step(0.985, vSurf.z); float fCloth = step(0.01, vSurf.z) * (1.0 - fLens);\ndiffuseColor.rgb *= 1.0 - 0.15 * uWet * fCloth;');
+  // (wet wool, M5 fix: TUNE.light's wetDark / wetRough, and the hair (its surf z band 0.003..0.01) darker by wetHair of it)
+  const WL = TUNE.light, wd = WL.wetDark.toFixed(3), wr = WL.wetRough.toFixed(3), wh = WL.wetHair.toFixed(3);
+  f = rep(f, '#include <color_fragment>', `float fLens = step(0.985, vSurf.z); float fCloth = step(0.01, vSurf.z) * (1.0 - fLens); float fHair = step(0.003, vSurf.z) * (1.0 - step(0.01, vSurf.z));\ndiffuseColor.rgb *= 1.0 - ${wd} * uWet * (fCloth + ${wh} * fHair);`);
   if (hq) {
-    f = rep(f, '#include <roughnessmap_fragment>', 'roughnessFactor = mix(vSurf.x, vSurf.x * 0.72, uWet * fCloth);');
+    f = rep(f, '#include <roughnessmap_fragment>', `roughnessFactor = mix(vSurf.x, vSurf.x * ${wr}, uWet * (fCloth + fHair));`);
     f = rep(f, '#include <metalnessmap_fragment>', 'metalnessFactor = vSurf.y;');
   }
   f = rep(f, '#include <emissivemap_fragment>', `{ float ndv = clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0);

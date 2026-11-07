@@ -18,14 +18,15 @@ import * as THREE from '../vendor/three.module.min.js';
 import { G } from '../game/state.js';
 import { derived } from '../game/progression.js';
 import { TUNE, SOCKETS, STANCES, IDLE, AIM, RELAXED, GUN_POSES, HAND_ON, ACTIONS, RECOIL, SWAP, CASING, reloadKeys, breathCurve, gaitAt, makePlannerInput, gaitInputs,
-  MELEE, TAKEDOWN, DODGE, FLINCH, REVIVE, DEATH, REPAIR, CHOP, PICK } from './frank3d-clips.js';
+  MELEE, TAKEDOWN, DODGE, FLINCH, REVIVE, DEATH, REPAIR, CHOP, PICK, FIDGETS, LIFE } from './frank3d-clips.js';
 import {
   DEG, clamp, lerp, smoothstep as ss, wrap, angleDiff, makeSpring, resetSpring, springTo, springAngle, springPend, solveTwoBone, makeIKOut,
   StepPlanner, PK, makePose, poseRest, makeFade, fadeStart, fadeApply, poseBlend, reachDrop, twistAngle, noise1, SPRING_H, FOOT,
-  EASE, sample, sampleV, qbez, simDtFrom, weaponEdges, jolt,
+  EASE, sample, sampleV, qbez, simDtFrom, weaponEdges, jolt, mulberry32, uniform,
 } from './frank3d-anim.js';
 import { input } from '../input.js';
 import { WEAPONS } from '../data/weapons.js';
+import { ITEMS } from '../data/items.js';
 import { SO } from './map.js';
 import { frankAssets, FRANK_U, decalGeometry, decalMaterial, debrisAssets, dustMaterial, coneAssets, DECAL, PROP_NAMES, SKIRT6, SKIRT4, patchState, coatSurface } from './frank3d-geo.js';
 
@@ -62,7 +63,7 @@ const PI = makePlannerInput();
 const SC = TUNE.coat, LO = TUNE.loco;
 
 let warnedPose = false, warnedNaN = false, SERIAL = 0;
-const DBG = { pose: null, gizmos: false, resetStats: false, twistLog: null };
+const DBG = { pose: null, gizmos: false, resetStats: false, twistLog: null, fidget: null, contra: false, perfLog: null };
 
 /* ---------------- rig ---------------- */
 function coatState() { const f = () => new Float64Array(6); return { n: 0, a: f(), va: f(), b: f(), vb: f(), g: f(), vg: f(), aT: f(), aT2: f(), bT: f(), lo: f(), loG: f(), xs: f() }; }
@@ -112,6 +113,22 @@ function freshState() {
       gun: { on: false, w: 'pistol', t: 0, p: [0, 0, 0], v: [0, 0, 0], q: new THREE.Quaternion(), ax: V(), bounced: false, rest: false, restT: 0, q0: new THREE.Quaternion(), qRest: new THREE.Quaternion() } },
     dust: { t: 9, x: 0, z: 0, dir: 0, K: null, y: 1.2 }, nOff: [[0, 0], [0, 0]], nOffT: 0,
     armQ: [0, 1, 2, 3, 4, 5].map(() => new THREE.Quaternion()), armQok: false, handRPrev: V(), handRVel: V(), handRok: false,
+    // M5 life: contrapposto, glances, fidgets, the stroll, carry, prowl, cover, low HP, hands on knees, gestures, items,
+    // abilities, modal poses and the head look (lifeClocks)
+    lf: lifeState(),
+  };
+}
+function lifeState() {
+  const rnd = mulberry32(0x5f3759df);
+  return {
+    rnd, c: { side: 1, x: 1, t: uniform(rnd, 3, 5), phase: 0, foot: -1, w: 0, fw: 0 },
+    g: { ph: 0, t: 0, next: uniform(rnd, 1.5, 3), y0: 0, p0: 0, y1: 0, p1: 0, hold: 1, yaw: 0, pitch: 0 },
+    pg: { ph: 0, t: 0, next: uniform(rnd, 5, 9), hold: 1.5, who: null, w: 0, yaw: 0 },
+    fid: null, fu: 0, fw: 0, fT: uniform(rnd, LIFE.fidget.first[0], LIFE.fidget.first[1]), fidLast: null,
+    stroll: 0, carry: 0, prowl: 0, cover: 0, coverLow: 1, coverSide: 1, coverT: 0, popT: 9, low: 0, beat: 0, beatPh: 0, hok: 0, hokOn: false, hokT: 0,
+    reach: { on: false, t: 9, short: '', x: 0, y: 0, kneel: 9 }, talk: { on: false, x: 0, y: 0, w: 0, who: null, pollT: 0, frank: false, t: 0 },
+    phone: 0, item: { t: 9, kind: 'eat' }, abil: { t: 9, id: '' }, steady: 9, modal: 0, modalKind: null, modalTool: null,
+    prevCd: {}, prevMed: undefined, prevFood: 0, reachGate: 1, look: { y: makeSpring(0), p: makeSpring(0) }, eye: null, clock: 0,
   };
 }
 export function frankRig({ q, young, carry }) {
@@ -218,7 +235,7 @@ export function poseFrank(r, p, ctx) {
     try { resetBind(r); r.body.position.set(p.x || 0, 0, p.y || 0); r.body.updateMatrixWorld(true); } catch { /* keep going */ }
     if (typeof location !== 'undefined' && String(location.search).includes('debug')) throw e;
   }
-  if (t0) { const dt = performance.now() - t0; r.st.cpuMs = r.st.cpuMs ? r.st.cpuMs * 0.95 + dt * 0.05 : dt; }
+  if (t0) { const dt = performance.now() - t0; r.st.cpuMs = r.st.cpuMs ? r.st.cpuMs * 0.95 + dt * 0.05 : dt; if (DBG.perfLog && DBG.perfLog.length < 2000) DBG.perfLog.push(dt); }
 }
 
 // Signals of this frame (§4.2): one module-level struct, refilled every frame.
@@ -230,6 +247,7 @@ const S = {
   sigma: 0.5, back: false, strafeK: 0, dirSign: 1, crouch: false, breath: 0, bob: 0, counter: 0.6, skid: false,
   shove: false, shoveDrag: 0, stopK: 0, gsVis: 0, hardReset: false, chestRef: 0, chestLag: 0, flickK: 1,
   reloadStart: false, reloadCycle: false, reloadEndNat: false, reloadInterr: false, swapStart: false, dryFire: false, weaponJump: false, threat: false,
+  reach: false, aimWant: false,
 };
 
 function update(r, p, ctx) {
@@ -241,14 +259,17 @@ function update(r, p, ctx) {
   clocks(r, p);
   states(r, p);
   gunClips(r, p);
+  lifeClocks(r, p);
   facing(r, p);
   locomotion(r, p);
   // 6–9: compose the pose buffer from its layers
   poseRest(PB);
   layerC(r, p);
   layerU(r, p);
+  lifePose(r, p);
   layerF(r, p);
   additives(r, p);
+  headLook(r, p);
   // 10: FK (root → spine → head, clavicles, arms, FK legs)
   r.body.position.set(p.x, 0, p.y);
   writeFK(r);
@@ -258,14 +279,20 @@ function update(r, p, ctx) {
   // 11: pelvis reach fix and leg IK onto the planner's feet; arm IK onto the gun
   legs(r, p); // (legs() updates the chains it changes)
   if (st.stateF === 'death') { deathClamp(r); deathHands(r); }
+  // (M5) the right hand's life targets (the holster and the pockets, the knees): before the gun, which rides the hand
+  lifeArms(r, p);
   // 11–12: the gun first (aim, relaxed, reload, swap), then the hands onto it, then the props (weapons() updates the
   // chains it moves)
   weapons(r, p);
-  r.body.updateMatrixWorld(true);
-  // 13: secondary motion: the coat skirt's pendulums, the forelocks
+  lifeProps(r, p);
+  // (§6 chain-only matrix updates: the IK already updated the chains it moved; the props were only placed)
+  for (let i = 0; i < PROP_NAMES.length; i++) B[PROP_NAMES[i]].updateMatrixWorld(true);
+  // 13: secondary motion: the coat skirt's pendulums, the forelocks (then their chains only)
   coatSim(r, p);
   forelocks(r, p);
-  r.body.updateMatrixWorld(true);
+  const SKB = r.q ? SK4 : SKU;
+  for (let i = 0; i < SKB.length; i++) B[SKB[i]].updateMatrixWorld(true);
+  if (B.forelockA) { B.forelockA.updateMatrixWorld(true); B.forelockB.updateMatrixWorld(true); }
   // 15: decal, uniforms, blink, fx anchors, debug measurements, NaN guard
   measureDrift(r, p);
   updateDecal(r, p, ctx);
@@ -370,7 +397,9 @@ function signals(r, p) {
     st.derivedT = 0.5;
     try { if (G.s) { const d = derived(); st.maxHp = d.maxHp || 100; st.maxSt = d.maxStamina || 100; } } catch { /* keep the last values */ }
   }
-  // reach: the render-side countdown (exact mirror of render.js:1386), never twice in one frame
+  // reach: the edge (the sim set reachT this frame), then the render-side countdown (exact mirror of render.js:1386), never
+  // twice in one frame
+  S.reach = !S.first && (p.reachT || 0) > st.reachLeft + 1e-4;
   if (S.realDt > 0 && (p.reachT || 0) > 0) p.reachT -= G.frameDt || 1 / 60;
   st.reachLeft = p.reachT || 0;
   // edges
@@ -457,6 +486,10 @@ function clocks(r, p) {
   // caps the aim for its first 0.3 s (a shot overrides)
   if ((st.tool || (st.rp.on && st.rp.w > 0)) && !S.shot) { st.aimW = Math.max(0, st.aimW - adt / 0.15); st.aimHold = 0; }
   if (st.rev < REVIVE.aimCapT && !S.shot && !st.revFree) st.aimW = Math.min(st.aimW, REVIVE.aimCap);
+  // (M5 fix) a stroll's pistol under the coat: an aim without a shot waits for the hand to bring it out of the holster
+  // (lifeClocks runs the holster path back quickly); a shot draws it on the aim line at once
+  S.aimWant = aimWant;
+  if (st.lf.stroll >= LIFE.stroll.holHide && !S.shot && !p.dead) { st.aimW = 0; st.aimHold = Math.max(st.aimHold, aimWant ? 0.4 : 0); }
   if (st.snapT < 9 && !S.shot) st.snapT += adt;
   const snapU = clamp(st.snapT / DS.T, 0, 1);
   st.aimWb = st.snapT < DS.T ? Math.min(st.aimW, lerp(st.snapFrom, 1, EASE.O(snapU))) : st.aimW;
@@ -478,6 +511,7 @@ function clocks(r, p) {
   if ((p.lastCombat ?? 99) < 8) { Tb = BR.combat; ab = BR.amp.exerted; }
   if ((p.stamina ?? st.maxSt) / st.maxSt < 0.35 || st.sinceSprint < 2) { Tb = BR.winded; ab = BR.amp.exerted; }
   if ((p.steadyT || 0) > 0) { Tb = BR.steady; ab = BR.amp.steady; }
+  if (st.lf.hok > 0.5) Tb = BR.hok; // (hands on knees: heaving, a breath a second)
   if (S.lowHp) { Tb /= BR.lowHpDiv; ab = BR.amp.lowHp; }
   const kb = 1 - Math.exp(-S.liveDt / 0.5);
   st.breathT += (Tb - st.breathT) * kb; st.breathA += (ab - st.breathA) * kb;
@@ -499,6 +533,7 @@ function states(r, p) {
   else if (st.td.ph === 1 || st.td.ph === 2) f = 'takedown';
   else if (st.rp.w > 0) f = 'repair';
   else if (C.ph === 1 || C.ph === 2) f = C.pick ? 'pick' : 'chop';
+  else if (st.lf.modal > 0) f = 'modal'; // (M5: fishing, crafting, cooking; LV.modal is its own envelope)
   if (f !== st.stateF) {
     st.fadeFreal = false;
     if (S.teleport || f === 'death' || st.stateF === 'death') st.fadeF.active = false; // death: a jerk in, a snap out
@@ -778,7 +813,8 @@ function facing(r, p) {
   // aimed, a chest far behind the face (a fast flick) turns faster (TUNE.springs.chestFlick), so the shouldered gun is
   // back on the line sooner
   const lag0 = Math.abs(wrap(S.faceYaw + bl - st.chest.x)) / DEG;
-  springAngle(st.chest, S.faceYaw + bl, lerp(SPR.chest, SPR.chestFlick, ss(30, 60, lag0) * S.aimW), adt);
+  // (M5: a talk or a person glance turns the chest part of the way, LV.chestYaw)
+  springAngle(st.chest, S.faceYaw + bl + LV.chestYaw * DEG * (1 - S.aimW), lerp(SPR.chest, SPR.chestFlick, ss(30, 60, lag0) * S.aimW), adt);
   if (S.shot) resetSpring(st.chest, S.faceYaw + bl);
   // hips: follow the velocity while moving (forward, strafe or backpedal), the shooting stance while still
   let hipT, mode = 'idle';
@@ -925,6 +961,13 @@ function locomotion(r, p) {
   I.turning = st.turning; I.turnSide = st.turnSide; I.still = st.stillT; I.stanceChanged = st.stanceT > 0; I.settleT = LO.stillSettle;
   I.hipY = 37.5 + IDLE.pelvisDy * (1 - S.amp) + st.height.x * S.amp;
   neutralFeet(st, p, S.gaitOn ? S.hipYaw : st.hipIdleT, key);
+  // (M5) the contrapposto stance: the free foot out and turned out by the stance weight; a switch of the loaded side is two
+  // forced steps (the new loaded foot back under him, then the free one out)
+  contraFeet(st, key);
+  coverFeet(st);
+  I.lift *= (1 - (1 - LIFE.prowl.lift) * LV.prowl) * lerp(1, LIFE.stroll.liftK, LV.stroll);
+  // (M5 fix) the low-HP limp: the right leg's stance shorter and its stride shorter (§4.19)
+  I.sigD[1] = LIFE.lowHp.sigD * LV.low; I.leadK[1] = 1 - (1 - LIFE.lowHp.stride) * LV.low;
   // a forced step (melee lunge, takedown, repair) keeps its foot there while the action runs (the settle brings it back)
   if (st.nOffT > 0) { for (let i = 0; i < 2; i++) { PI.neutral[i][0] += st.nOff[i][0]; PI.neutral[i][1] += st.nOff[i][1]; } st.nOffT -= S.adt; }
   // the dodge and its tail own the feet (no idle step starts; it hands them back placed, frank3d dodgeFeet)
@@ -939,13 +982,40 @@ function locomotion(r, p) {
     st.planner.drag((p.x - st.prevPos[0]) * k, (p.y - st.prevPos[1]) * k);
     if (S.shove) st.planner.kick = true;
   }
-  if (!p.dead) st.planner.update(I);
+  if (!p.dead) { contraSteps(st); st.planner.update(I); }
   if (st.stateF === 'dodge') dodgeFeet(r, p);
   I.startLead = -1;
   for (let i = 0; i < 2; i++) st.planted[i] = !p.dead && st.planner.planted(i);
   st.contacts = st.planner.contacts;
   st.locoAt = !S.gaitOn ? (st.turning ? 'turn' : 'idle') : S.wall ? 'wall' : st.sprintW > 0.5 ? 'sprint' : st.speed > 95 ? 'jog' : 'walk';
 }
+
+/** The contrapposto's foot offsets on the neutral stance (relaxed, idle): the free foot `fwd` out, turned out to `toe`. */
+function contraFeet(st, key) {
+  if (key !== 'relaxed' || LV.cFoot < 0.01 || S.gaitOn) return;
+  const CO = LIFE.contra, C = st.lf.c, free = C.side > 0 ? 0 : 1, sd = free ? 1 : -1, hy = st.hipIdleT, k = LV.cFoot, n = PI.neutral[free];
+  n[0] += Math.cos(hy) * CO.fwd * k; n[1] += Math.sin(hy) * CO.fwd * k;
+  const dToe = sd * (CO.toe - STANCES.relaxed.L[2]) * DEG * k; n[2] += dToe; n[3] += dToe;
+}
+/** Low cover (M5 fix): the stance wider by cover.low.half each side and the left foot `stagger` ahead (the idle steps take him there). */
+function coverFeet(st) {
+  const k = LV.cover * LV.coverLow;
+  if (k < 0.01 || S.gaitOn) return;
+  const CL = LIFE.cover.low, hy = st.hipIdleT, c = Math.cos(hy), sn = Math.sin(hy);
+  for (let i = 0; i < 2; i++) { const n = PI.neutral[i], sd = i ? 1 : -1, f = i ? -0.3 * CL.stagger : 0.7 * CL.stagger; n[0] += (-sn * sd * CL.half + c * f) * k; n[1] += (c * sd * CL.half + sn * f) * k; }
+}
+/** The contrapposto's switch: the new loaded foot steps back under him (if it is off its spot), then the free foot steps out. */
+function contraSteps(st) {
+  const C = st.lf.c, PL = st.planner, CO = LIFE.contra;
+  if (!C.phase || S.gaitOn || st.stanceKey !== 'relaxed') { C.phase = 0; return; }
+  const loaded = C.side > 0 ? 1 : 0, free = 1 - loaded;
+  if (C.phase === 1) { if (!footOff(PL, loaded)) C.phase = 2; else if (PL.forceStep(loaded, PI.neutral[loaded], CO.stepT, CO.lift)) C.phase = 1.5; else C.phase = 0; }
+  else if (C.phase === 1.5) { if (PL.planted(loaded)) C.phase = 2; }
+  if (C.phase === 2) { if (!footOff(PL, free)) C.phase = 0; else if (PL.forceStep(free, PI.neutral[free], CO.stepT, CO.lift)) C.phase = 2.5; else C.phase = 0; }
+  else if (C.phase === 2.5) { if (PL.planted(free)) C.phase = 0; }
+}
+/** Is planner foot i off its neutral spot (PI.neutral) by more than a re-plant's tolerance? */
+function footOff(PL, i) { const f = PL.feet[i], n = PI.neutral[i]; return Math.hypot(f.plant[0] - n[0], f.plant[1] - n[1]) > 0.8 || Math.abs(wrap(f.plantYaw - n[2])) > 3 * DEG; }
 
 /* ---------------- 6. layer C: locomotion and the lower body (§4.6) ---------------- */
 const STOP_W = 2 * Math.PI * 2.2;
@@ -957,7 +1027,9 @@ function layerC(r, p) {
   const cphi = Math.cos(2 * Math.PI * S.phi), sphi = Math.sin(2 * Math.PI * S.phi);
   // pelvis height, bob (high at mid-stance in a walk, low in a jog), hip drop, weight shift over the stance foot; a stop
   // lets the crouch out slowly (the hips settle up over about 0.35 s, never pop)
-  const hT = gaitAt('height', gs) - gaitAt('height', 0);
+  // (M5 fix) a stroll runs upright and loose: a shallower crouch, the torso nearly upright, flatter steps (locomotion)
+  const SR = LIFE.stroll, stK = LV.stroll;
+  const hT = (gaitAt('height', gs) - gaitAt('height', 0)) * lerp(1, SR.heightK, stK);
   springTo(st.height, hT, hT > st.height.x ? LO.heightRise : 10, S.adt);
   const bob = gaitAt('bob', gs) * amp * (S.back ? 0.8 : 1) * Math.cos(2 * Math.PI * (S.psi - sig));
   const yawOsc = gaitAt('yawOsc', gs) * amp, rollOsc = gaitAt('roll', gs) * amp, sway = gaitAt('sway', gs) * amp;
@@ -978,7 +1050,7 @@ function layerC(r, p) {
   const aF = st.acc[0] * ch + st.acc[1] * sh, aS = -st.acc[0] * sh + st.acc[1] * ch;
   springTo(st.leanF, clamp(aF * LO.accLean, LO.accLeanMin, LO.accLeanMax) * (S.back ? -0.6 : 1) + (S.wall ? LO.wallLean : 0), 2 * Math.PI * LO.leanHz, S.adt);
   springTo(st.leanS, clamp(aS * LO.bank, -LO.bankMax, LO.bankMax) * (S.gaitOn ? 1 : 0), 2 * Math.PI * LO.leanHz, S.adt);
-  const gp = gaitAt('pitch', gs) * amp * (S.back ? 0.3 : 1) + st.leanF.x;
+  const gp = gaitAt('pitch', gs) * amp * (S.back ? 0.3 : 1) * lerp(1, SR.pitchK, stK) + st.leanF.x;
   P[PK.pelRot] = IDLE.lean * 0.3;
   P[PK.pelRot + 1] = yawOsc * cphi * ds;
   P[PK.pelRot + 2] = rollOsc * sphi + st.leanS.x * 0.4;
@@ -987,8 +1059,9 @@ function layerC(r, p) {
   P[PK.s2] = IDLE.lean * 0.4 + gp * 0.6 + (S.back ? -3 * amp : 0) + st.stopP.x;
   // relaxed arm swing against the legs (the pistol arm at half; reversed when backing up; nearly still when strafing)
   const AS = LO.arm;
-  const armA = gaitAt('armSwing', gs) * amp * ds * (1 - AS.strafeDamp * S.strafeK);
-  const elb = gaitAt('elbowBase', gs);
+  // (the stroll: nearly no swing with the hands in the pockets, a loose 0.6 swing with the elbows lower when out)
+  const armA = gaitAt('armSwing', gs) * amp * ds * (1 - AS.strafeDamp * S.strafeK) * (1 - (1 - lerp(SR.armK, SR.swing, LV.pocket)) * stK);
+  const elb = gaitAt('elbowBase', gs) * lerp(1, SR.elbowK, stK * (1 - LV.pocket));
   const aL = Object.assign(ARM_L, IDLE.armL), aR = Object.assign(ARM_R, IDLE.armR);
   // the swing sits back of the hang (the hand comes up to the chest in front, the elbow drives back behind); the elbow
   // closes as the arm comes forward, and in a jog the upper arm rolls in so the forearm swings across the body (a true
@@ -1077,6 +1150,7 @@ function layerF(r, p) {
   else if (s === 'repair') repairPose(r, p, F);
   else if (s === 'chop') chopPose(r, p, F);
   else if (s === 'pick') pickPose(r, p, F);
+  else if (s === 'modal') modalPose(r, p, F);
   fadeApply(st.fadeF, F, st.fadeFreal ? (G.paused ? 0 : S.realDt) : S.adt);
   st.lastF.set(F);
   PB.set(F);
@@ -1342,6 +1416,608 @@ function deathHands(r) {
 }
 const _dhq0 = new THREE.Quaternion(), _dhq1 = new THREE.Quaternion(), _dhq3 = new THREE.Quaternion(), _dhq4 = new THREE.Quaternion(), _dhq5 = new THREE.Quaternion(), _dhq6 = new THREE.Quaternion();
 
+/* ======================= M5: life (§4.7, §4.18–§4.20) ======================= */
+// lifeClocks (after the weapon clocks) reads the sim and keeps the life clocks in st.lf; this frame's values go to LV,
+// read by: the facing (a talk or a person glance turns the chest), the planner input (the contrapposto stance and its
+// re-plants, the prowl's short steps), lifePose (the body channels, after the U layer), the head look (last), lifeArms
+// (the right hand before the gun: the holster, the pockets, the knees), leftOverride (the left hand's gestures), the
+// weapons (the holstered pistol, the prowl's low ready, the one-handed carry, the sway) and lifeProps (the parcel, the
+// ability's hammer). Everything is a weight eased in and out on its own times, so nothing pops.
+const LV = {
+  cw: 0, cS: 0, cFoot: 0,      // contrapposto: body weight, eased side (+1 loaded right), stance weight (the feet)
+  gYaw: 0, gPitch: 0, pYaw: 0, pW: 0, chestYaw: 0,
+  fid: null, fu: 0, fw: 0,
+  stroll: 0, hol: 0, carry: 0, prowl: 0, cover: 0, coverLow: 1, coverSide: 1, pop: 0, low: 0, beat: 0, hok: 0,
+  reachE: 0, reachShort: '', kneel: 0, talkW: 0, talkYaw: 0, phone: 0, itemW: 0, item: 'eat', abil: '', abilT: 9, steadyK: 0,
+  modal: 0, modalKind: null, swayYaw: 0, swayPitch: 0, gunW: 0, lookYaw: 0, lookPitch: 0, eye: null,
+  chk: 0, chkW: 0, chkHand: 0, chkSlide: 0, // the gun check (a press-check): the gun's weight on its pose, the left hand on the slide, the slide's travel
+  pocket: 1, parcelK: 0, giveW: 0, hokEx: 0, reachT: 0, kneelUp: -1, kneelT: 9, talkF: 0, talkBeat: 0, bite: 0, // (M5 fix)
+};
+const COVER_LOW = new Set([SO.ROCK, SO.CAR, SO.LOGS]), COVER_TALL = new Set([SO.WALL, SO.TREE]);
+const MODAL_POSE = { fishing: 'rod', craft: 'work', cook: 'work', repair: 'work' };
+// the quick items whose use plays a gesture (§4.2 item edge, read off the inventory: a heal from a kill boon, a supper or a
+// level-up is not an item): the medical ones (a bandage to his side) and the food (to his mouth)
+const QUICK_MED = ['bandage', 'medkit'], QUICK_FOOD = Object.keys(ITEMS).filter((k) => ITEMS[k] && ITEMS[k].food);
+const invSum = (inv, ids) => { let n = 0; for (let i = 0; i < ids.length; i++) n += inv[ids[i]] || 0; return n; };
+// the interactions that start an action of their own (the takedown, the axe, a repair, the bed, a car): no reach gesture
+const NO_REACH = new Set(['TAKEDOWN', 'CHOP', 'FIX', 'REST', 'DRIVE', 'WALK', 'CAR']);
+const ramp = (x, on, dt, tin, tout) => clamp(x + (on ? dt / tin : -dt / tout), 0, 1);
+/** The nearest person (a present NPC, a live enemy, the dog) within range of p: the entity, or null. */
+function nearestPerson(p, range) {
+  let best = null, bd = range;
+  const N = G.npcs || [], E = G.enemies || [];
+  for (let i = 0; i < N.length; i++) { const n = N[i]; if (!n || !n.present) continue; const d = Math.hypot(n.x - p.x, n.y - p.y); if (d < bd && d > 8) { bd = d; best = n; } }
+  for (let i = 0; i < E.length; i++) { const e = E[i]; if (!e || e.dead || e.gone) continue; const d = Math.hypot(e.x - p.x, e.y - p.y); if (d < bd && d > 8) { bd = d; best = e; } }
+  const dg = G.dog; if (dg && Number.isFinite(dg.x)) { const d = Math.hypot(dg.x - p.x, dg.y - p.y); if (d < bd && d > 8) best = dg; }
+  return best;
+}
+/** The nearest present (not scripted) NPC within range: a dialogue's partner when no TALK target was latched (§4.18). */
+function nearestNpc(p, range) {
+  let best = null, bd = range;
+  const N = G.npcs || [];
+  for (let i = 0; i < N.length; i++) { const n = N[i]; if (!n || !n.present || n.scripted) continue; const d = Math.hypot(n.x - p.x, n.y - p.y); if (d < bd && d > 8) { bd = d; best = n; } }
+  return best;
+}
+/** The cover he is in (§4.19): the nearest bullet-blocking neighbour cell (the sim's own test): 1 low, 0 tall; and its side. */
+function coverKind(L, p) {
+  const m = G.map; if (!m || !m.getSolid) return;
+  const cx = Math.floor(p.x / 32), cy = Math.floor(p.y / 32);
+  let bd = Infinity, low = 1, side = 1;
+  for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) {
+    if (!ox && !oy) continue;
+    const nx = cx + ox, ny = cy + oy, so = m.getSolid(nx, ny), b = m.blockerAt ? m.blockerAt(nx, ny) : null;
+    const isLow = COVER_LOW.has(so) || (b && b.kind === 'cover'), isTall = COVER_TALL.has(so);
+    if (!isLow && !isTall) continue;
+    const rx = nx * 32 + 16, ry = ny * 32 + 16, d = Math.hypot(rx - p.x, ry - p.y);
+    if (d < bd) { bd = d; low = isLow ? 1 : 0; const a = p.angle || 0; side = -Math.sin(a) * (rx - p.x) + Math.cos(a) * (ry - p.y) >= 0 ? 1 : -1; }
+  }
+  if (bd < Infinity) { L.coverLowT = low; L.coverSide = side; }
+}
+function lifeClocks(r, p) {
+  const st = r.st, L = st.lf, dt = S.liveDt, adt = S.adt, rnd = L.rnd, LF = LIFE;
+  L.clock = (L.clock || 0) + dt; // (the life motions' clock: it stops while paused, unlike G.time)
+  LV.chestYaw = 0; LV.gunW = 0; LV.swayYaw = LV.swayPitch = 0; LV.reachE = 0; LV.kneel = 0;
+  if (p.dead || S.hardReset) {
+    L.stroll = L.carry = L.prowl = L.cover = L.low = L.hok = L.phone = L.modal = 0; L.hokOn = false; L.fid = null; L.fw = 0; L.c.w = L.c.fw = 0; L.c.phase = 0;
+    L.g.ph = 0; L.g.yaw = L.g.pitch = 0; L.pg.ph = 0; L.pg.w = 0; L.reach.on = false; L.talk.on = false; L.talk.w = 0; L.item.t = 9; L.abil.t = 9; L.steady = 9;
+    if (L.modalTool && st.tool === L.modalTool) st.tool = null; L.modalTool = null; L.modalKind = null;
+    lifeOut(L); return;
+  }
+  // (TUNE.enable.idleLife: the isolation switch; off, no contrapposto, glances or fidgets, e.g. for the §7.4 value gate)
+  const idleOn = TUNE.enable.idleLife !== false;
+  const busyF = !!st.stateF && st.stateF !== 'modal', relaxed = S.aimW < 0.05, still = !S.gaitOn && !busyF && st.stillT > 0.3;
+  const calm = !S.combat && (p.lastCombat ?? 99) > LF.fidget.calm && !S.threat;
+  // ---- the eye (§4.2): enemies about and none sees him (prowl), any suspicious
+  // (and how near the nearest one is: the prowl wants one within prowl.range, so an unaware enemy across the map doesn't
+  // keep him crouching round his own yard; a quiet assault always does)
+  let any = false, seen = false, sus = false, near = Infinity;
+  const E = G.enemies || [];
+  for (let i = 0; i < E.length; i++) { const e = E[i]; if (!e || e.dead || e.gone || (e.def && e.def.vehicle)) continue; any = true; if (e.alerted && e.canSee) seen = true; else if (!e.alerted && (e.sus || 0) > 0.12) sus = true; near = Math.min(near, Math.hypot(e.x - p.x, e.y - p.y)); }
+  L.eye = any ? (seen ? 'seen' : sus ? 'sus' : 'hidden') : null;
+  // ---- stroll (a tail job): the pistol goes under the coat, the hands into the pockets; a shot draws at once
+  const job = G.s && G.s.job;
+  const wantStroll = !!G.tail && S.weapon === 'pistol' && !S.aimWant && S.aimW < (L.stroll > 0.01 ? 0.3 : 0.1) && !busyF && !st.tool && !GC.sw && !GC.rl && !(p.reloadT > 0) && !S.lowHp;
+  // (an aim wanted: the holster path plays back quickly, the pistol out of the coat into the hand, then the aim)
+  L.stroll = ramp(L.stroll, wantStroll, adt, LF.stroll.in, S.aimWant ? LF.stroll.draw : LF.stroll.out);
+  if (S.shot) L.stroll = 0;
+  // (the hands in the pockets only while nearly still; moving, the pistol stays hidden and the arms swing loose)
+  L.pocket = ramp(L.pocket ?? 1, st.speed < LF.stroll.pocketSpeed, adt, LF.stroll.pocketIn, LF.stroll.pocketOut);
+  // ---- carry (a delivery parcel in hand); at the end it is handed over (the left hand out, the parcel gone at the
+  // reach's peak), then the arm comes down
+  const CY = LF.carry, wantCarry = !!job && job.type === 'delivery' && job.stage === 'deliver' && !S.long;
+  if (wantCarry) { L.giveT = 9; L.parcel = L.parcel || L.carry > CY.show; }
+  else if (L.parcel && L.carry > 0.9 && L.giveT >= 9 && !busyF && !p.dead) L.giveT = 0; // (the hand-over starts)
+  if (L.giveT < 9) { L.giveT += adt; if (L.giveT >= CY.giveT) L.parcel = false; if (L.giveT > CY.giveT + 0.6) L.giveT = 9; }
+  if (wantCarry && L.carry > CY.show) L.parcel = true;
+  L.carry = ramp(L.carry, wantCarry || (L.giveT < CY.giveT), adt, CY.in, CY.out);
+  if (L.carry <= 0) L.parcel = false;
+  // ---- prowl: enemies about but unaware of him, or a quiet assault; never sprinting or fighting
+  const wantProwl = (((L.eye === 'hidden' || L.eye === 'sus') && near < LF.prowl.range) || (G.assault && !G.assault.alarm)) && st.sprintW < 0.3 && !S.combat && !busyF && L.stroll < 0.5;
+  L.prowl = ramp(L.prowl, wantProwl, adt, LF.prowl.in, LF.prowl.in);
+  // ---- cover: in a fight, by bullet-blocking cover, nearly still
+  const wantCover = S.combat && !!p.inCover && st.speed < 20 && !busyF;
+  if (wantCover) { L.coverT -= adt; if (L.coverT <= 0 || L.cover <= 0) { coverKind(L, p); L.coverT = 0.25; } }
+  L.cover = ramp(L.cover, wantCover, adt, LF.cover.in, LF.cover.in);
+  L.coverLow += ((L.coverLowT ?? 1) - L.coverLow) * (1 - Math.exp(-adt / 0.15));
+  if (S.shot && L.cover > 0.3) L.popT = 0; else if (L.popT < 9) L.popT += adt;
+  // ---- low HP (blend in 0.6, out 1.0) and the heartbeat
+  L.low = ramp(L.low, S.lowHp, adt, LF.lowHp.in, LF.lowHp.out);
+  if (L.low > 0) { const frac = clamp(p.hp / st.maxHp, 0, 0.3), per = LF.lowHp.beat[0] + frac * LF.lowHp.beat[1]; L.beatPh += dt; if (L.beatPh >= per) L.beatPh -= per; } else L.beatPh = 0;
+  // ---- hands on knees: out of breath after a sprint, stopped (long guns skip it)
+  const HK = LF.hok, stam = (p.stamina ?? st.maxSt) / st.maxSt;
+  if (!L.hokOn) { if (!S.gaitOn && st.stillT > HK.still && st.sinceSprint < HK.sprintAgo + HK.still && stam < HK.stam && S.aimW < 0.1 && !S.long && !busyF && !S.combat && L.carry < 0.5) { L.hokOn = true; L.hokT = 0; } }
+  else { L.hokT += dt; if (S.gaitOn || S.combat || S.aimW > 0.1 || stam > HK.stamOut || L.hokT > HK.max || busyF || S.long) { L.hokOn = false; L.hokExT = 0; } }
+  if (L.hokExT !== undefined && L.hokExT < 9) { L.hokExT += adt; if (L.hokExT > HK.exhaleT) L.hokExT = 9; }
+  L.hok = ramp(L.hok, L.hokOn, adt, HK.in, HK.out);
+  // ---- contrapposto (§4.7): the loaded side switches every U(period) s while he stands relaxed
+  const C = L.c, CO = LF.contra, PL = st.planner;
+  const cOk = !S.gaitOn && !busyF && !st.turning && L.hok < 0.1 && L.cover < 0.1 && st.stanceKey === 'relaxed';
+  C.t -= dt;
+  // (a switch waits for him to have stood quietly, both feet down and no idle step, for quietT s: he settles first)
+  C.quiet = PL.stepping > 0 || !PL.planted(0) || !PL.planted(1) || S.gaitOn ? 0 : (C.quiet || 0) + dt;
+  const force = DBG.contra; // (the harness's switch waits, like a natural one, for both feet down and no step running)
+  if (force) C.t = 0;
+  if (C.t <= 0) {
+    if (cOk && (force || (st.stillT > 2.0 && C.quiet > CO.quietT)) && PL.planted(0) && PL.planted(1) && PL.stepping === 0 && C.phase === 0) {
+      DBG.contra = false; C.side = -C.side; C.phase = 1; C.t = uniform(rnd, CO.period[0], CO.period[1]); }
+    else C.t = 0.8;
+  }
+  C.x = clamp(C.x + clamp(C.side - C.x, -2 * dt / CO.T, 2 * dt / CO.T), -1, 1);
+  if (S.gaitOn || busyF) C.phase = 0;
+  const cWant = (idleOn ? 1 - S.amp : 0) * (busyF ? 0 : 1) * lerp(1, CO.aimK, S.aimWb) * (1 - L.hok) * (1 - L.cover);
+  C.w += (cWant - C.w) * (1 - Math.exp(-adt / 0.25));
+  C.fw += ((cOk && idleOn ? 1 : 0) * (1 - S.amp) - C.fw) * (1 - Math.exp(-adt / 0.3));
+  // ---- glances (relaxed or lightly aimed; a person glance every U(9, 15) s)
+  const GL = LF.glance, g = L.g, gOk = idleOn && S.aimW < 0.5 && !busyF && st.sprintW < 0.3 && L.hok < 0.5 && !(L.fid === 'neckRoll' || L.fid === 'gunCheck') && !L.talk.on;
+  g.t += dt;
+  // (one glance in GL.around.p is a look round: wider, slower, the chest more; only standing still)
+  if (g.ph === 0) { g.next -= dt; if (g.next <= 0) { if (gOk) { const A = GL.around, ar = still && rnd() < A.p, Y = ar ? A.yaw : GL.yaw; g.ph = 1; g.t = 0; g.y0 = g.yaw; g.p0 = g.pitch; g.y1 = (rnd() < 0.5 ? -1 : 1) * uniform(rnd, Y[0], Y[1]); g.p1 = uniform(rnd, -GL.pitch, GL.pitch); const H = ar ? A.hold : GL.hold; g.hold = uniform(rnd, H[0], H[1]); g.tin = ar ? A.in : GL.in; g.tout = ar ? A.out : GL.out; g.chest = ar ? A.chest : GL.chest; } else g.next = 0.7; } }
+  if (g.ph && !gOk && g.ph !== 3) { g.ph = 3; g.t = 0; g.y0 = g.yaw; g.p0 = g.pitch; }
+  if (g.ph === 1) { const u = clamp(g.t / (g.tin || GL.in), 0, 1), e = ES(u); g.yaw = lerp(g.y0, g.y1, e); g.pitch = lerp(g.p0, g.p1, e); if (u >= 1) { g.ph = 2; g.t = 0; } }
+  else if (g.ph === 2) { if (g.t >= g.hold) { g.ph = 3; g.t = 0; g.y0 = g.yaw; g.p0 = g.pitch; } }
+  else if (g.ph === 3) { const u = clamp(g.t / (g.tout || GL.out), 0, 1), e = ES(u); g.yaw = lerp(g.y0, 0, e); g.pitch = lerp(g.p0, 0, e); if (u >= 1) { g.ph = 0; g.next = uniform(rnd, GL.every[0], GL.every[1]); } }
+  LV.chestYaw += g.yaw * (g.chest ?? GL.chest);
+  const PG = GL.person, pg = L.pg;
+  pg.t += dt;
+  if (pg.ph === 0) { pg.next -= dt; if (pg.next <= 0) { const who = gOk ? nearestPerson(p, PG.range) : null; if (who) { pg.ph = 1; pg.t = 0; pg.who = who; pg.hold = uniform(rnd, PG.hold[0], PG.hold[1]); } else pg.next = 2; } }
+  if (pg.ph && (!gOk || !pg.who || pg.who.dead || pg.who.gone)) { if (pg.ph !== 3) { pg.ph = 3; pg.t = 0; } }
+  if (pg.ph === 1) { pg.w = EO(clamp(pg.t / PG.in, 0, 1)); if (pg.t >= PG.in) { pg.ph = 2; pg.t = 0; } }
+  else if (pg.ph === 2) { pg.w = 1; if (pg.t >= pg.hold) { pg.ph = 3; pg.t = 0; } }
+  else if (pg.ph === 3) { pg.w = Math.min(pg.w, 1 - ES(clamp(pg.t / PG.out, 0, 1))); if (pg.w <= 0) { pg.ph = 0; pg.who = null; pg.next = uniform(rnd, PG.every[0], PG.every[1]); } }
+  if (pg.who && pg.w > 0 && Number.isFinite(pg.who.x)) pg.yaw = Math.atan2(pg.who.y - p.y, pg.who.x - p.x);
+  // ---- fidgets: one every U(10, 16) s, relaxed, calm, standing still
+  if (DBG.fidget && FIDGETS[DBG.fidget]) { L.fid = DBG.fidget; L.fidLast = L.fid; L.fu = 0; L.fw = 1; DBG.fidget = null; }
+  const FD = LF.fidget, fOk = idleOn && relaxed && calm && still && st.stillT > FD.still && L.hok <= 0 && L.low <= 0 && L.cover <= 0 && L.prowl <= 0 && !L.talk.on && L.reach.t > 1 && L.modal <= 0 && L.item.t > 0.6 && !st.tool && !G.cutscene;
+  if (!L.fid) {
+    L.fT -= dt;
+    if (L.fT <= 0) {
+      if (fOk) {
+        const pool = ['neckRoll', 'shoulderRoll'];
+        if (L.carry < 0.1 && L.stroll < 0.1) pool.push('lapelTug');
+        if (S.weapon === 'pistol' && L.stroll < 0.1) pool.push('gunCheck');
+        let pick = pool[Math.floor(rnd() * pool.length) % pool.length];
+        if (pick === L.fidLast) pick = pool[(pool.indexOf(pick) + 1) % pool.length];
+        L.fid = pick; L.fidLast = pick; L.fu = 0; L.fw = 1;
+      } else L.fT = 1.5;
+    }
+  } else {
+    L.fu += dt / FIDGETS[L.fid].T;
+    if (!fOk || ((L.fid === 'lapelTug' || L.fid === 'gunCheck') && (L.stroll > 0.02 || L.carry > 0.02))) L.fw = Math.max(0, L.fw - adt / 0.2);
+    if (L.fu >= 1 || L.fw <= 0) { L.fid = null; L.fw = 0; L.fT = uniform(rnd, FD.every[0], FD.every[1]); }
+  }
+  // ---- reach (§4.18): the interaction's short code, from the target the sim used
+  const R = L.reach, RC = LF.reach;
+  if (S.reach && !NO_REACH.has((G.interactTarget && G.interactTarget.short) || '')) {
+    const tg = G.interactTarget;
+    R.on = true; R.t = 0; R.short = (tg && tg.short) || ''; R.x = tg && Number.isFinite(tg.x) ? tg.x : p.x + 20 * Math.cos(p.angle || 0); R.y = tg && Number.isFinite(tg.y) ? tg.y : p.y + 20 * Math.sin(p.angle || 0);
+    if (R.short === 'TALK') { const T = L.talk; T.on = true; T.x = R.x; T.y = R.y; T.t = 0; T.who = null; }
+    // (the field-dress: a kneel, the right foot back a step so the right knee goes down toward the ground, the left forward)
+    if (R.short === 'DRESS') { R.kneel = 0; const KN = RC.kneel, a = p.angle || 0; lungeStep(st, 1, -KN.back * Math.cos(a), -KN.back * Math.sin(a), 0.22, 2, KN.down + KN.T + 0.1); }
+  }
+  if (R.on) { R.t += dt || (S.presentation ? 0 : adt); if (R.t > (R.short === 'OPEN' || R.short === 'CLOSE' ? RC.open.T : RC.T) + RC.tail) R.on = false; }
+  L.reachGate = ramp(L.reachGate ?? 1, !busyF && MC.w <= 0 && TC.w <= 0, adt, 0.06, 0.06); // (a full-body clip, a strike or a takedown owns the hands)
+  if (R.kneel < 9) { R.kneel += dt || adt; if (R.kneel > RC.kneel.down + RC.kneel.T + RC.kneel.up) R.kneel = 9; }
+  // ---- talk: face the one he talks to while the dialogue lasts (else the nearest NPC within range)
+  const T = L.talk, dlg = G.modal === 'dialogue';
+  if (dlg && !T.on) { const n = nearestNpc(p, RC.talk.range); if (n) { T.on = true; T.who = n; T.t = 0; } }
+  if (T.on) {
+    T.t += dt;
+    if (T.who && Number.isFinite(T.who.x)) { T.x = T.who.x; T.y = T.who.y; }
+    if (!dlg && T.t > 1.0) T.on = false;
+    T.pollT -= S.realDt;
+    if (T.pollT <= 0) { T.pollT = 0.25; let fr = false; try { const el = typeof document !== 'undefined' ? document.getElementById('dlg-who') : null; fr = !!el && el.textContent === 'Frank'; } catch { /* no DOM */ } T.frank = fr && dlg; }
+  } else T.frank = false;
+  T.w = ramp(T.w, T.on, S.realDt || adt, 0.25, 0.35);
+  // (Frank speaking: the forearm up (fw) and speech beats at random intervals; listening, a head tilt)
+  const TK = RC.talk, rdt = S.liveDt;
+  T.fw = ramp(T.fw || 0, T.frank, rdt, 0.3, 0.45);
+  if (T.frank) { T.next = (T.next ?? 0.2) - rdt; if (T.next <= 0) { T.beatT = 0; T.next = uniform(rnd, TK.beat[0], TK.beat[1]); } }
+  if (T.beatT !== undefined && T.beatT < 9) { T.beatT += rdt; if (T.beatT > TK.beatIn + TK.beatOut) T.beatT = 9; }
+  if (T.w > 0) {
+    const rel = wrap(Math.atan2(T.y - p.y, T.x - p.x) - (st.face.x));
+    LV.talkYaw = rel / DEG;
+    LV.chestYaw += clamp(LV.talkYaw * RC.talk.chest, -RC.talk.chestMax, RC.talk.chestMax) * T.w;
+  }
+  // ---- the phone: the receiver at his ear while the call lasts
+  L.phone = ramp(L.phone, (R.on && R.short === 'PHONE') || (L.phone > 0 && !!G.modal), S.realDt || adt, RC.phone.in, RC.phone.out);
+  // ---- items (§4.2): a quick item used (its count dropped this frame, no menu open): a bandage or a medkit, or food
+  const inv = (G.s && G.s.inv) || null, med = inv ? invSum(inv, QUICK_MED) : 0, food = inv ? invSum(inv, QUICK_FOOD) : 0;
+  if (L.prevMed !== undefined && !S.first && !S.teleport && !G.modal && !G.cutscene) {
+    if (med < L.prevMed) { L.item.t = 0; L.item.kind = 'bandage'; }
+    else if (food < L.prevFood) { L.item.t = 0; L.item.kind = 'eat'; }
+  }
+  L.prevMed = med; L.prevFood = food;
+  if (L.item.t < 9) { L.item.t += adt || S.realDt; if (L.item.t > (L.item.kind === 'eat' ? LF.item.eatT : LF.item.T)) L.item.t = 9; }
+  // ---- abilities (the cooldown jumps): Misdirection, Controlled Fire, Emergency Repair
+  const cd = G.abilityCd;
+  if (cd) for (const id in cd) { const v = cd[id] || 0; if (v > (L.prevCd[id] || 0) + 0.5 && !S.first) { L.abil.id = id; L.abil.t = 0; if (id === 'controlled_fire') L.steady = 0; } L.prevCd[id] = v; }
+  if (L.abil.t < 9) { L.abil.t += adt || S.realDt; if (L.abil.t > 1) L.abil.t = 9; }
+  if (L.steady < 9) { L.steady += dt; if (L.steady > LF.steady.T) L.steady = 9; }
+  // ---- modal poses (presentation): fishing, crafting, cooking, the repair game; the tool takes over at the blend's middle
+  // with the right hand where the gun left it (toolHands), and gives the gun back there on the way out (no draw)
+  // (a shot after the modal closed, inside its ramp-out, ends it at once: the gun is on the aim line for the flash, §4.4)
+  if (S.shot) { L.modal = 0; L.modalKind = null; if (L.modalTool && st.tool === L.modalTool) st.tool = null; L.modalTool = null; }
+  const mk = MODAL_POSE[G.modal] || null;
+  if (mk) L.modalKind = mk;
+  L.modal = ramp(L.modal, !!mk, S.realDt || adt, LF.modal.in, LF.modal.out);
+  // (only while the modal is open: a tool cleared in the ramp-out, by a shot, is never put back)
+  if (mk && L.modal >= 0.5 && L.modalKind && !st.tool) { st.tool = L.modalKind; L.modalTool = L.modalKind; st.stowed = true; st.drawStart = false; }
+  if (L.modalTool && (L.modal < 0.5 || st.tool !== L.modalTool)) { if (st.tool === L.modalTool) st.tool = null; L.modalTool = null; }
+  if (L.modal <= 0) L.modalKind = null;
+  // ---- the gun's life: the aimed sway (faded out round a shot: the bore is on the line for the flash)
+  const DR = LF.drift, sk = ((p.steadyT || 0) > 0 ? DR.steadyK : 1) * (S.tShot < 0.15 ? 0 : ss(0.15, 0.4, S.tShot)), t = L.clock;
+  LV.swayYaw = DR.sway * 0.5 * (Math.sin(0.7 * t) + Math.sin(1.13 * t + 1.3)) * sk * S.aimW;
+  LV.swayPitch = DR.sway * DR.swayPitch * 0.5 * (Math.sin(0.83 * t + 0.4) + Math.sin(1.37 * t + 2.1)) * sk * S.aimW;
+  LV.chestYaw += pg.w > 0 ? clamp(Math.abs(wrap(pg.yaw - st.chest.x) / DEG) - PG.max, 0, PG.chest) * Math.sign(wrap(pg.yaw - st.chest.x)) * pg.w : 0;
+  lifeOut(L);
+}
+/** LV from the life state (eased sides, weights). */
+function lifeOut(L) {
+  const C = L.c, CO = LIFE.contra;
+  LV.cw = C.w; LV.cS = 2 * ES((C.x + 1) / 2) - 1; LV.cFoot = C.fw;
+  LV.gYaw = L.g.yaw; LV.gPitch = L.g.pitch; LV.pW = L.pg.w; LV.pYaw = L.pg.yaw;
+  LV.fid = L.fid; LV.fu = L.fu; LV.fw = L.fw;
+  if (L.fid === 'gunCheck' && L.fw > 0) { const GK = FIDGETS.gunCheck, u = clamp(L.fu, 0, 1); LV.chk = sample(GK.w, u) * L.fw; LV.chkHand = sample(GK.hand, u) * L.fw; LV.chkSlide = sample(GK.slide, u) * L.fw; }
+  else LV.chk = LV.chkHand = LV.chkSlide = 0;
+  LV.stroll = L.stroll; LV.carry = ES(L.carry); LV.pocket = ES(L.pocket ?? 1);
+  const CY = LIFE.carry, gt = L.giveT ?? 9;
+  LV.parcelK = L.parcel ? clamp((L.carry - CY.show) / CY.showK, 0, 1) : 0; // (the parcel grows in as the forearm comes up)
+  LV.giveW = gt < 9 ? (gt < CY.giveT ? EO(clamp(gt / CY.giveT, 0, 1)) : 1 - ES(clamp((gt - CY.giveT) / 0.3, 0, 1))) : 0; LV.prowl = ES(L.prowl); LV.cover = ES(L.cover); LV.coverLow = L.coverLow; LV.coverSide = L.coverSide;
+  const PO = LIFE.cover.low, pt = L.popT;
+  LV.pop = pt < PO.popIn ? EO(pt / PO.popIn) : pt < PO.popIn + PO.popHold ? 1 : pt < PO.popIn + PO.popHold + PO.popOut ? 1 - ES((pt - PO.popIn - PO.popHold) / PO.popOut) : 0;
+  LV.low = ES(L.low); LV.beat = L.low > 0 && L.beatPh < LIFE.lowHp.beatT ? Math.sin(Math.PI * L.beatPh / LIFE.lowHp.beatT) : 0; LV.hok = ES(L.hok);
+  LV.hokEx = L.hokExT !== undefined && L.hokExT < 9 ? Math.sin(Math.PI * clamp(L.hokExT / LIFE.hok.exhaleT, 0, 1)) : 0;
+  const R = L.reach;
+  // (OPEN / CLOSE: in 0.15 (O), held, out 0.15 (S) over open.T: the hand stays on the handle long enough to read)
+  const RC = LIFE.reach, opn = R.short === 'OPEN' || R.short === 'CLOSE', OT = RC.open.T;
+  LV.reachE = R.on ? (opn ? (R.t < 0.15 ? EO(R.t / 0.15) : R.t < OT - 0.15 ? 1 : 1 - ES(clamp((R.t - OT + 0.15) / 0.15, 0, 1))) : Math.sin(Math.PI * clamp(R.t / RC.T, 0, 1))) * (L.reachGate ?? 1) : 0;
+  LV.reachShort = R.on ? R.short : ''; LV.reachT = R.t;
+  // (the field-dress kneel: down over KN.down (S), working for KN.T, up over KN.up (S); kneelUp: the rise's progress)
+  const KN = RC.kneel, kt = R.kneel;
+  LV.kneel = kt < 9 ? (kt < KN.down ? ES(kt / KN.down) : kt < KN.down + KN.T ? 1 : 1 - ES(clamp((kt - KN.down - KN.T) / KN.up, 0, 1))) * (L.reachGate ?? 1) : 0;
+  LV.kneelUp = kt < 9 && kt >= KN.down + KN.T ? clamp((kt - KN.down - KN.T) / KN.up, 0, 1) : -1;
+  LV.kneelT = kt;
+  LV.talkW = ES(L.talk.w); LV.phone = ES(L.phone);
+  const T = L.talk, TK = RC.talk; LV.talkF = ES(T.fw || 0);
+  LV.talkBeat = T.beatT !== undefined && T.beatT < 9 ? (T.beatT < TK.beatIn ? EO(T.beatT / TK.beatIn) : 1 - ES(clamp((T.beatT - TK.beatIn) / TK.beatOut, 0, 1))) : 0;
+  const eat = L.item.kind === 'eat';
+  LV.itemW = L.item.t < 9 ? sample(eat ? LIFE.item.eatW : LIFE.item.w, L.item.t / (eat ? LIFE.item.eatT : LIFE.item.T)) : 0; LV.item = L.item.kind;
+  LV.bite = L.item.t < 9 && eat ? sample(LIFE.item.bites, L.item.t / LIFE.item.eatT) : 0;
+  LV.abil = L.abil.t < 9 ? L.abil.id : ''; LV.abilT = L.abil.t;
+  LV.steadyK = L.steady < 9 ? Math.sin(Math.PI * clamp(L.steady / LIFE.steady.T, 0, 1)) : 0;
+  LV.modal = ES(L.modal); LV.modalKind = L.modalKind; LV.eye = L.eye;
+  LV.hol = L.stroll;
+}
+
+/** The body channels of life (§4.7, §4.18, §4.19), on the composed C + U pose (the full-body clips start from it). */
+function lifePose(r, p) {
+  const st = r.st, P = PB, L = st.lf;
+  if (p.dead) return;
+  const relax = 1 - S.aimWb;
+  // contrapposto: the loaded hip up and the hips over the loaded foot, the shoulders counter-rolled, the head righted
+  if (LV.cw > 0.001) {
+    const CO = LIFE.contra, k = LV.cw, s = LV.cS;
+    P[PK.pel + 2] += CO.shift * s * k; P[PK.pelRot + 2] += -CO.roll * s * k; P[PK.pel + 1] -= CO.drop * k * Math.abs(s);
+    P[PK.s1 + 2] += CO.s1 * s * k; P[PK.s2 + 2] += CO.s2 * s * k; P[PK.head + 2] -= CO.head * s * k;
+  }
+  // the relaxed gun hand's slow drift
+  P[PK.armR + 4] += LIFE.drift.wrist * noise1(L.clock * LIFE.drift.hz) * relax;
+  // fidgets
+  if (LV.fid && LV.fw > 0) {
+    const F = FIDGETS[LV.fid], u = clamp(LV.fu, 0, 1), w = LV.fw;
+    if (LV.fid === 'neckRoll') { const rl = sample(F.headRoll, u) * w, pt = sample(F.headPitch, u) * w; P[PK.head + 2] += 0.6 * rl; P[PK.neck + 2] += 0.4 * rl; P[PK.head] += 0.6 * pt; P[PK.neck] += 0.4 * pt; }
+    else if (LV.fid === 'shoulderRoll') { const e = sample(F.clavElev, u) * w, pr = sample(F.clavProt, u) * w; P[PK.clavL] += e; P[PK.clavR] += e; P[PK.clavL + 1] += pr; P[PK.clavR + 1] += pr; }
+    else if (LV.fid === 'gunCheck') { const hp = sample(F.headPitch, u) * w; P[PK.head] += 0.6 * hp; P[PK.neck] += 0.4 * hp; P[PK.head + 1] += sample(F.headYaw, u) * w; P[PK.s2] += sample(F.s2, u) * w; } // (the gun and the hands: baseGun, lifeLeft)
+    else if (LV.fid === 'lapelTug') { P[PK.head] += sample(F.headPitch, u) * w; P[PK.s2 + 2] += sample(F.spine2Roll, u) * w; }
+  }
+  // rain: the shoulders up and the head down against it, relaxed (eased on the wet wool's own τ 2 s)
+  // (eased off as a fight starts, never switched: relax already takes it out as the gun comes up)
+  L.rainK = ramp(L.rainK ?? 0, !S.combat, S.adt, 0.4, 0.4);
+  const WT = TUNE.light, rk = clamp((st.wet - 0.3) / 0.5, 0, 1) * relax * ES(L.rainK);
+  if (rk > 0) { P[PK.clavL] += WT.wetShrug * rk; P[PK.clavR] += WT.wetShrug * rk; P[PK.clavL + 1] += 3 * rk; P[PK.clavR + 1] += 3 * rk; P[PK.head] += WT.wetHead * rk; P[PK.s2] += 3 * rk; }
+  // stroll: the shoulders up a touch with the hands in the pockets
+  if (LV.stroll > 0) { const k = ES(clamp((LV.stroll - 0.3) / 0.7, 0, 1)) * LV.pocket; P[PK.clavL] += 2 * k; P[PK.clavR] += 2 * k; P[PK.clavL + 1] += 3 * k; P[PK.clavR + 1] += 3 * k; }
+  // carry: the left forearm cradles the parcel (FK; aimed, the pistol goes one-handed)
+  if (LV.carry > 0) {
+    const a = readArm(P, PK.armL, ARM_L), c = LIFE.carry.armL, k = LV.carry;
+    a.flex = lerp(a.flex, c.flex, k); a.abd = lerp(a.abd, c.abd, k); a.twist = lerp(a.twist, c.twist, k); a.elbow = lerp(a.elbow, c.elbow, k); a.wflex = lerp(a.wflex, c.wflex, k); a.wroll = lerp(a.wroll, c.wroll, k);
+    writeArm(P, PK.armL, a);
+  }
+  // prowl: down and leaning in, the head up to see, the elbows in
+  if (LV.prowl > 0) {
+    const PW = LIFE.prowl, k = LV.prowl;
+    P[PK.pel + 1] += PW.pelvis * k; P[PK.pelRot] += 0.3 * PW.lean * k; P[PK.s1] += (0.3 * PW.lean + PW.s1) * k; P[PK.s2] += 0.4 * PW.lean * k; P[PK.head] += PW.head * k;
+    P[PK.armL + 1] += PW.abd * k; P[PK.armR + 1] += PW.abd * k;
+  }
+  // cover: crouched behind low cover (popping up on a shot), or leaning off tall cover
+  if (LV.cover > 0) {
+    const CV = LIFE.cover, k = LV.cover, lo = LV.coverLow, hi = 1 - lo;
+    P[PK.pel + 1] += (CV.low.pelvis + CV.low.pop * LV.pop) * k * lo + CV.tall.pelvis * k * hi;
+    P[PK.s2] += CV.low.s2 * (1 - LV.pop) * k * lo; P[PK.s1] += CV.low.s1 * (1 - LV.pop) * k * lo;
+    P[PK.s1 + 2] -= CV.tall.roll * 0.5 * LV.coverSide * k * hi; P[PK.s2 + 2] -= CV.tall.roll * 0.5 * LV.coverSide * k * hi;
+  }
+  // low HP: hunched, the heartbeat, the limp's hip drop over the right stance
+  if (LV.low > 0) {
+    const LH = LIFE.lowHp, k = LV.low;
+    P[PK.s2] += (LH.s2 + LH.beatPitch * LV.beat) * k; P[PK.s1] += LH.s1 * k; P[PK.neck] += LH.neck * k; P[PK.head] += LH.head * k;
+    P[PK.clavL] += LH.clavElev * k; P[PK.clavR] += LH.clavElev * k; P[PK.clavL + 1] += LH.clavProt * k; P[PK.clavR + 1] += LH.clavProt * k;
+    // (the limp's hip roll over the right stance, a sin envelope on its progress (0 at the contact and the toe-off: never a
+    // step), and the hitch at the right heel-strike)
+    // (on the gait phase, as the planner reads the right foot's cycle: continuous, so a forced lift-off never steps it)
+    if (S.amp > 0.001) {
+      const sg = Math.max(0.15, S.sigma + LH.sigD * k), c = (((S.phi - 0.5) % 1) + 1) % 1, u = c < sg ? c / sg : -1;
+      if (u >= 0) {
+        P[PK.pelRot + 2] += LH.limpRoll * k * S.amp * Math.sin(Math.PI * u);
+        if (u < 0.3) P[PK.pel + 1] -= LH.hitch * k * S.amp * Math.sin(Math.PI * u / 0.3);
+      }
+    }
+  }
+  // hands on knees
+  if (LV.hok > 0) {
+    const HK = LIFE.hok, k = LV.hok;
+    P[PK.pel + 1] += HK.pelvis * k; P[PK.pelRot] += HK.pelvisPitch * k; P[PK.s2] += HK.s2 * k; P[PK.s1] += HK.s1 * k; P[PK.neck] += HK.neck * k; P[PK.head] += HK.head * k;
+    // the heave: each breath lifts the chest, the shoulders and the head (inhale +1, exhale −1)
+    const hv = (st.breathA > 1e-3 ? 2 * S.breath / st.breathA - 1 : 0) * k, HV = HK.heave;
+    P[PK.s2] -= HV.s2 * hv; P[PK.clavL] += HV.clav * hv; P[PK.clavR] += HV.clav * hv; P[PK.head] -= HV.head * hv;
+  }
+  // (coming up out of it: one exhale with a lean back)
+  if (LV.hokEx > 0) P[PK.s2] -= LIFE.hok.exhale * LV.hokEx;
+  // reaches (§4.18)
+  const e = LV.reachE, RC = LIFE.reach;
+  if (e > 0) {
+    const sh = LV.reachShort;
+    if (sh === 'OPEN' || sh === 'CLOSE') P[PK.s2] += RC.open.s2 * e;
+    else if (sh === 'TAKE' || sh === 'PICK' || sh === 'ARM' || sh === 'GIVE' || sh === 'DROP') { P[PK.pel + 1] += RC.take.pelvis * e; P[PK.s2] += RC.take.s2 * e; P[PK.s1] += 0.3 * RC.take.s2 * e; }
+    else if (sh === 'LOOK') { P[PK.s2] += RC.look.s2 * e; P[PK.head] += RC.look.head * e; }
+    else if (sh === 'TALK') P[PK.head] += RC.talk.nod * e;
+  }
+  // the field-dress kneel: down over the carcass, the head down at the work; a forward lean to stand up (the hand: lifeLeft)
+  if (LV.kneel > 0) {
+    const KN = RC.kneel, k = LV.kneel;
+    P[PK.pel + 1] += KN.pelvis * k; P[PK.s2] += KN.s2 * k; P[PK.s1] += KN.s1 * k; P[PK.head] += 0.6 * KN.head * k; P[PK.neck] += 0.4 * KN.head * k;
+    if (LV.kneelUp >= 0) P[PK.s2] += KN.rise * Math.sin(Math.PI * Math.min(1, LV.kneelUp * 1.6));
+  }
+  // talking: Frank speaking raises the free (left) forearm, the palm open, and beats it on the words (a nod with each);
+  // listening, the head tilts
+  if (LV.talkW > 0) {
+    const TK = RC.talk, k = LV.talkW * relax, kf = k * LV.talkF, b = LV.talkBeat * kf;
+    if (kf > 0) {
+      const a = readArm(P, PK.armL, ARM_L);
+      // (each beat: the forearm lifts and the hand opens out, the shoulder with it, the head nods)
+      a.flex += TK.flex * kf + TK.beatFlex * b; a.abd += TK.abd * kf + TK.beatAbd * b; a.elbow = lerp(a.elbow, TK.elbow, kf) + TK.beatElbow * b; a.wroll += TK.wroll * kf; a.wflex -= 10 * kf; a.twist += 10 * kf;
+      writeArm(P, PK.armL, a);
+      P[PK.head] += TK.beatNod * b; P[PK.clavL] += TK.beatClav * b;
+    }
+    P[PK.head + 2] += TK.listen * k * (1 - LV.talkF);
+  }
+  // items: food to the mouth takes the head down to it, with a nod at each bite
+  if (LV.itemW > 0 && LV.item === 'eat') P[PK.head] += LIFE.item.eatHead * LV.itemW + LV.bite;
+  // (the bandage: he looks down at his side as he presses it on)
+  if (LV.itemW > 0 && LV.item === 'bandage') { P[PK.head] += 12 * LV.itemW; P[PK.head + 1] -= 22 * LV.itemW; P[PK.s2] += 4 * LV.itemW; P[PK.s2 + 2] -= 4 * LV.itemW; }
+  // Misdirection's throw turns the chest; Controlled Fire's deep breath lifts the shoulders
+  if (LV.abil === 'misdirection') { P[PK.s2 + 1] += sample(LIFE.misdirection.s2Yaw, LV.abilT); P[PK.clavL + 1] += sample(LIFE.misdirection.clavProt, LV.abilT); }
+  else if (LV.abil === 'emergency_repair') P[PK.s2 + 1] += sample(LIFE.patch.s2Yaw, LV.abilT);
+  if (LV.steadyK > 0) { P[PK.clavL] += LIFE.steady.clav * LV.steadyK; P[PK.clavR] += LIFE.steady.clav * LV.steadyK; P[PK.s2] -= 1.5 * LV.steadyK; }
+}
+
+/**
+ * The head look (§4.20), applied last: the aim point's distance (aimed), a threat drawing a bead on him, the one he talks
+ * to, the thing he reaches for or works on, the person he glances at, the idle glances. The neck takes 40%, the head 60%;
+ * yaw within ±70° of the chest, pitch −30..+25; one critically damped spring per axis.
+ */
+function headLook(r, p) {
+  const st = r.st, L = st.lf, LK = LIFE.look, P = PB;
+  if (p.dead) { resetSpring(L.look.y, 0); resetSpring(L.look.p, 0); LV.lookYaw = LV.lookPitch = 0; return; } // (the fall owns the head)
+  let yaw = 0, pitch = 0, abs = null;
+  const on = !p.dead && (!st.stateF || st.stateF === 'modal') && TUNE.enable.headLook;
+  if (on) {
+    const eyeY = 68;
+    if (S.aimW > 0.5) {
+      if (!S.long) pitch = LK.aimK * (Math.atan2(eyeY - 30, st.aimD) / DEG - LK.aimRef);
+    } else {
+      // a threat within ±110° of the chest
+      const E = G.enemies || [];
+      let th = null, bd = 500;
+      for (let i = 0; i < E.length; i++) { const e = E[i]; if (!e || e.dead || !((e.aimT || 0) > 0)) continue; const d = Math.hypot(e.x - p.x, e.y - p.y); if (d < bd && Math.abs(wrap(Math.atan2(e.y - p.y, e.x - p.x) - st.chest.x)) < LK.threatArc * DEG) { bd = d; th = e; } }
+      if (th) abs = Math.atan2(th.y - p.y, th.x - p.x);
+      else if (LV.talkW > 0.01) { abs = Math.atan2(L.talk.y - p.y, L.talk.x - p.x); pitch = 2; }
+      else if (L.reach.on && Math.hypot(L.reach.x - p.x, L.reach.y - p.y) < LK.interact) { abs = Math.atan2(L.reach.y - p.y, L.reach.x - p.x); pitch = 14; }
+      else if (LV.pW > 0.01) { abs = st.face.x + wrap(LV.pYaw - st.face.x) * LV.pW; }
+      else { yaw = LV.gYaw; pitch = LV.gPitch; }
+      if (abs !== null) yaw = wrap(abs - st.face.x) / DEG;
+      // (an interaction target he walks up to, within reach: a glance down at it)
+      const tg = G.interactTarget;
+      if (abs === null && S.aimW < 0.05 && tg && Number.isFinite(tg.x)) { const d = Math.hypot(tg.x - p.x, tg.y - p.y); if (d < LK.interact && d > 6) { const k = LK.idleK * (1 - ss(LK.interact * 0.6, LK.interact, d)); yaw = lerp(yaw, wrap(Math.atan2(tg.y - p.y, tg.x - p.x) - st.face.x) / DEG, k); pitch = lerp(pitch, 12, k); } }
+    }
+  }
+  // the limits relative to the chest
+  const faceRel = wrap(st.face.x - st.chest.x) / DEG;
+  yaw = clamp(faceRel + yaw, -LK.yawMax, LK.yawMax) - faceRel;
+  pitch = clamp(pitch, LK.pitchLo, LK.pitchHi);
+  const k = S.liveDt; // (0 while paused: the head holds)
+  springTo(L.look.y, yaw, LK.omega, k); springTo(L.look.p, pitch, LK.omega, k);
+  if (!Number.isFinite(L.look.y.x) || !Number.isFinite(L.look.p.x)) { resetSpring(L.look.y, 0); resetSpring(L.look.p, 0); }
+  LV.lookYaw = L.look.y.x; LV.lookPitch = L.look.p.x;
+  P[PK.head + 1] += LV.lookYaw; P[PK.head] += 0.6 * LV.lookPitch; P[PK.neck] += 0.4 * LV.lookPitch;
+}
+
+/**
+ * The right hand's life targets before the gun is placed (§4.8 stroll, §4.19 hands on knees): the relaxed pistol rides
+ * the FK hand, so a hand IK'd here carries the gun with it (into the holster under the coat, onto his knee); a holstered
+ * pistol leaves the hand free for the coat pocket.
+ */
+const _lw = V(), _lq = new THREE.Quaternion(), _lw2 = V(), _lq2 = new THREE.Quaternion();
+const POLE_POCKET_R = [-0.5, -1, 0.5], POLE_KNEE_R = [0.6, -0.4, 0.8], POLE_HOL = [-0.2, -1, 0.9];
+function lifeArms(r, p) {
+  const st = r.st, B = r.bones;
+  if (p.dead || st.tool || GC.sw || GC.rl > 0 || S.weapon !== 'pistol' || S.aimW > 0.95) return;
+  const hok = LV.hok * (1 - S.aimW), hol = LV.hol;
+  if (hok <= 0.001 && hol <= 0.001) return;
+  boneFrame(B.handR, _fkRw, _fkRq); boneFrame(B.handL, _fkLw, _fkLq);
+  _fkRe.setFromMatrixPosition(B.forearmR.matrixWorld); _fkLe.setFromMatrixPosition(B.forearmL.matrixWorld);
+  if (hol > 0.001) {
+    // 0 → .45: the hand carries the pistol from the carry to the holster under the coat (left armpit); the pistol slips
+    // under the coat front at holHide (its muzzle still down and across), so it never sweeps sideways at chest height;
+    // .45 → 1: from the holster into the right coat pocket, nearly still, or back out to the free swinging hand, moving
+    // (the gun is hidden from holHide, weapons())
+    namedGun(r, 'holster', GT); onFrame(GT.p, GT.q, H_GRIP, _lw, _lq);
+    if (hol < 0.45) {
+      const u = ES(hol / 0.45);
+      bodyPath(r, _fkRw, _lw, SWAP.exit.hand, SWAP.exit.holster, u, _wR); _qR.slerpQuaternions(_fkRq, _lq, u);
+      armIK(r, 'R', _wR, _qR, POLE_HOL, 1, u, 0);
+    } else {
+      // (the free hand: the pocket, by the pocket weight; else the FK swing, with the FK elbow)
+      pocketHand(r, 1, _lw2, _lq2);
+      const pk = LV.pocket; _lw2.lerpVectors(_fkRw, _lw2, pk); _lq2.slerpQuaternions(_fkRq, _lq2, pk);
+      const u = ES((hol - 0.45) / 0.55);
+      bodyPath(r, _lw, _lw2, SWAP.exit.holster, SWAP.exit.hand, u, _wR); _qR.slerpQuaternions(_lq, _lq2, u);
+      armIK(r, 'R', _wR, _qR, lerp3(POLE_HOL, POLE_POCKET_R, u, POLE_TMP), 1, 1 - u * (1 - pk), 0);
+    }
+  } else if (hok > 0.001) {
+    kneeHand(r, 1, _wR, _qR);
+    armIK(r, 'R', _wR, _qR, POLE_KNEE_R, hok, hok, 0);
+  }
+}
+/** A hand in its coat pocket (side +1 right, −1 left): the wrist into the pocket slit, the fingers down into it. */
+function pocketHand(r, side, outP, outQ) {
+  const B = r.bones, pk = side > 0 ? LIFE.stroll.pocketR : LIFE.stroll.pocketL;
+  workV(S.hipYaw, 0.12, -1, -0.5 * side, _hX); workV(S.hipYaw, 0, 0, side, _hZ);
+  handQW(_hX, _hZ.negate(), side > 0, outQ);
+  outP.set(pk[0], pk[1], pk[2]).applyMatrix4(B.pelvis.matrixWorld);
+  return outP;
+}
+/** A hand on its knee (hands on knees): the palm on the knee cap's top, the fingers forward and down the shin. */
+function kneeHand(r, side, outP, outQ) {
+  const B = r.bones, sh = B[side > 0 ? 'shinR' : 'shinL'], kt = SOCKETS.shin.kneeTop;
+  _gv.set(kt[0], kt[1], kt[2] * side).applyMatrix4(sh.matrixWorld);
+  _gv2.set(0.5, -1, 0).transformDirection(sh.matrixWorld); _hX.copy(_gv2); _hX.y -= 0.3;
+  handQW(_hX, _hZ.set(0, -1, 0), side > 0, outQ);
+  // the palm (hand-local (0.3, −2.6, ∓1.1)) on the knee
+  outP.copy(_gv).sub(_gv3.set(0.3, -2.6, side > 0 ? -1.1 : 1.1).applyQuaternion(outQ));
+  outP.y += 1.0;
+  return outP;
+}
+/** One left-hand override at a world target (wrist, hand rotation): kept if it outweighs the current one. */
+function setALw(w, wrist, q, pole) { if (w <= AL.w) return; AL.w = w; AL.p.copy(wrist); AL.q.copy(q); AL.pole = pole; }
+const _ow = V(), _oq = new THREE.Quaternion();
+const POLE_POCKET_L = [-0.5, -1, -0.5], POLE_SIDE = [-0.6, -1, -0.6], POLE_FACE = [0.2, -1, -0.9], POLE_LAPEL = [0.1, -1, -0.8], POLE_KNEE_L = [0.6, -0.4, -0.8];
+/** The left hand's life gestures, as leftOverride candidates (they win over the support grip while their weight lasts). */
+/** The left hand pressed to his side (the low-HP flank, the bandage), rubbing `rub` u at 3 Hz on the life clock: a left-hand override. */
+function sideHand(r, w, rub) {
+  const s = LIFE.lowHp.side, t = r.st.lf.clock;
+  _ow.set(s[0] + rub * Math.sin(2 * Math.PI * 3 * t), s[1] + rub * Math.cos(2 * Math.PI * 3 * t), s[2]).applyMatrix4(r.bones.pelvis.matrixWorld);
+  workV(S.hipYaw, 0.5, -0.6, 0.45, _hX); workV(S.hipYaw, 0, 0, 1, _hZ); handQW(_hX, _hZ, false, _oq); _ow.sub(_gv3.set(0.3, -2.6, 1.1).applyQuaternion(_oq));
+  setALw(w, _ow, _oq, POLE_SIDE);
+}
+const FING_THROW = [0.3, 1, 0.2], PALM_THROW = [1, 0, 0.2];
+/** The left hand's life gestures, as leftOverride candidates (they win over the support grip while their weight lasts). */
+function lifeLeft(r, p) {
+  const st = r.st, B = r.bones, yaw = S.faceYaw, o = aimOrigin(r, _tw);
+  const relaxedPistol = S.weapon === 'pistol' && !st.tool;
+  // (the parcel in the left arm: the gestures that would take it to his flank, his mouth, his ear or overhead wait)
+  const free = 1 - LV.carry;
+  // the stroll's pocket (only while nearly still), the knees, his side (low HP, relaxed pistol)
+  if (LV.hol > 0.3 && relaxedPistol) { pocketHand(r, -1, _ow, _oq); setALw(ES(clamp((LV.hol - 0.3) / 0.7, 0, 1)) * (1 - S.aimW) * LV.pocket, _ow, _oq, POLE_POCKET_L); }
+  // (rain, relaxed and still: the left hand into the coat pocket)
+  const wetK = clamp((st.wet - 0.3) / 0.5, 0, 1) * (1 - S.aimW) * ES(st.lf.rainK ?? 0) * (S.gaitOn ? 0 : 1) * free;
+  st.lf.wetHand = ramp(st.lf.wetHand ?? 0, wetK > 0.5, S.adt, 0.5, 0.35);
+  if (st.lf.wetHand > 0 && relaxedPistol && LV.hol <= 0.3) { pocketHand(r, -1, _ow, _oq); setALw(ES(st.lf.wetHand) * (1 - S.aimW), _ow, _oq, POLE_POCKET_L); }
+  if (LV.hok > 0 && relaxedPistol) { kneeHand(r, -1, _ow, _oq); setALw(LV.hok * (1 - S.aimW), _ow, _oq, POLE_KNEE_L); }
+  if (LV.low > 0 && relaxedPistol && S.aimW < 0.5 && !GC.rl) sideHand(r, LV.low * (1 - S.aimW) * (1 - LV.hok) * free, 0);
+  // the lapel tug
+  if (LV.fid === 'lapelTug' && LV.fw > 0) {
+    const F = FIDGETS.lapelTug, u = clamp(LV.fu, 0, 1), s = SOCKETS.spine2.lapelL, tug = sample(F.tug, u);
+    _ow.set(s[0] + 0.5, s[1] - 3.2 - tug, s[2] - 1.6).applyMatrix4(B.spine2.matrixWorld);
+    workV(yaw, -0.1, 1, 0.25, _hX); workV(yaw, -1, 0, 0.2, _hZ); handQW(_hX, _hZ, false, _oq);
+    _ow.sub(_gv3.set(GRIPL[0], GRIPL[1], GRIPL[2]).applyQuaternion(_oq));
+    setALw(sample(F.w, u) * LV.fw, _ow, _oq, POLE_LAPEL);
+  }
+  // the gun check: the left hand on the slide (it pulls it back a touch: the press-check)
+  if (LV.chkHand > 0 && st.inHand === 'pistol') { wpLeft(r, WP.RACK, 'pistol', GN, _ow, _oq); setALw(LV.chkHand * (1 - S.aimW), _ow, _oq, POLE_GUARD); }
+  // the parcel handed over: the left hand out in front, palm up (the parcel rides the forearm out, and goes at the peak)
+  if (LV.giveW > 0) { const g = LIFE.carry.give; setAL(yaw, o, LV.giveW, g[0], g[1], g[2], FING_GIVE, PALM_GIVE, POLE_REACH); }
+  // reaches: a door's handle, a pick-up low in front, any other reach at chest height
+  const e = LV.reachE, RC = LIFE.reach, L = st.lf;
+  if (e > 0) {
+    const sh = LV.reachShort;
+    if (sh === 'OPEN' || sh === 'CLOSE') {
+      let dx = L.reach.x - p.x, dz = L.reach.y - p.y; const d = Math.hypot(dx, dz) || 1, cl = Math.min(d, RC.open.clamp); dx *= cl / d; dz *= cl / d;
+      _ow.set(p.x + dx, RC.open.y, p.y + dz); const ry = Math.atan2(dz, dx);
+      workV(ry, 1, -0.2, 0.1, _hX); workV(ry, 0, 0, 1, _hZ); handQW(_hX, _hZ, false, _oq);
+      // (the handle turns: the wrist rolls over the hold)
+      const tr = RC.open.roll * DEG * ss(0.1, 0.25, LV.reachT) * (1 - ss(RC.open.T - 0.2, RC.open.T - 0.05, LV.reachT));
+      if (tr) _oq.multiply(_hq3.setFromAxisAngle(_gv3.set(0, 1, 0), -tr));
+      _ow.sub(_gv3.set(GRIPL[0], GRIPL[1], GRIPL[2]).applyQuaternion(_oq));
+      setALw(e, _ow, _oq, POLE_REACH);
+    } else if (sh === 'TAKE' || sh === 'PICK' || sh === 'ARM' || sh === 'GIVE' || sh === 'DROP') {
+      const h = RC.take.hand; workV(yaw, h[0], 0, h[2], _ow); _ow.x += p.x; _ow.z += p.y; _ow.y = h[1];
+      handQW(workV(yaw, 0.6, -1, 0, _hX), workV(yaw, 0, -1, 0, _hZ), false, _oq); _ow.sub(_gv3.set(GRIPL[0], GRIPL[1], GRIPL[2]).applyQuaternion(_oq));
+      setALw(e, _ow, _oq, POLE_REACH);
+    } else if (sh !== 'TALK' && sh !== 'LOOK' && sh !== 'PHONE' && sh !== 'DRESS') {
+      const h = RC.other.hand; workV(yaw, h[0], 0, h[2], _ow); _ow.x += p.x; _ow.z += p.y; _ow.y = h[1];
+      handQW(workV(yaw, 1, -0.3, 0, _hX), workV(yaw, 0, 0, 1, _hZ), false, _oq); _ow.sub(_gv3.set(GRIPL[0], GRIPL[1], GRIPL[2]).applyQuaternion(_oq));
+      setALw(e, _ow, _oq, POLE_REACH);
+    }
+  }
+  // the field-dress: the left hand down at the carcass on the ground (absolute height), working at it while he kneels
+  if (LV.kneel > 0) {
+    const KN = RC.kneel, h = KN.hand, wk = KN.work * Math.sin(2 * Math.PI * KN.hz * L.clock) * ss(KN.down, KN.down + 0.15, LV.kneelT);
+    workV(yaw, h[0] + wk, 0, h[2] + 0.5 * wk, _ow); _ow.x += p.x; _ow.z += p.y; _ow.y = h[1];
+    handQW(workV(yaw, 0.7, -1, 0, _hX), workV(yaw, 0, -1, 0, _hZ), false, _oq); _ow.sub(_gv3.set(GRIPL[0], GRIPL[1], GRIPL[2]).applyQuaternion(_oq));
+    setALw(LV.kneel, _ow, _oq, POLE_REACH);
+  }
+  // the phone's receiver at his ear; food to his mouth; the bandage to his side
+  if (LV.phone > 0) { const s = SOCKETS.spine2.earL; _ow.set(s[0] + 2.5, s[1] - 4.5, s[2] - 1.5).applyMatrix4(B.spine2.matrixWorld); workV(yaw, 0.15, 1, 0, _hX); workV(yaw, 0, 0, 1, _hZ); handQW(_hX, _hZ, false, _oq); setALw(LV.phone * free, _ow, _oq, POLE_FACE); }
+  if (LV.itemW > 0) {
+    // (eating: the hand comes in to the mouth at each bite and drops a little away from it to chew between them)
+    if (LV.item === 'eat') { const s = SOCKETS.spine2.mouth, ch = 1 - clamp(LV.bite / 4, 0, 1); _ow.set(s[0] + 3.5 + 1.6 * ch, s[1] - 5.5 - 2.6 * ch, s[2] - 0.5).applyMatrix4(B.spine2.matrixWorld); workV(yaw, -0.3, 1, 0.3, _hX); workV(yaw, -1, 0, 0.2, _hZ); handQW(_hX, _hZ, false, _oq); setALw(LV.itemW * free, _ow, _oq, POLE_FACE); }
+    else sideHand(r, LV.itemW * free, 1.2);
+  }
+  // Misdirection: the stone thrown overhand; Emergency Repair: the hammer struck once (its frame drives the hand)
+  if (LV.abil === 'misdirection') {
+    const t = LV.abilT, M = LIFE.misdirection; sampleV(M.hand, t, _v3c);
+    const w = (t < 0.05 ? t / 0.05 : t > M.T - 0.06 ? clamp((M.T - t) / 0.06, 0, 1) : 1) * free;
+    setAL(yaw, o, w, _v3c[0], _v3c[1], _v3c[2], FING_THROW, PALM_THROW, POLE_GUARD);
+  } else if (LV.abil === 'emergency_repair') {
+    const t = LV.abilT, M = LIFE.patch; sampleV(M.hand, t, _v3c);
+    const w = (t < 0.05 ? t / 0.05 : t > M.T - 0.08 ? clamp((M.T - t) / 0.08, 0, 1) : 1) * free;
+    gunInA(r, yaw, _v3c[0], _v3c[1], _v3c[2], sample(M.pitch, t), 0, GT2);
+    onFrame(GT2.p, GT2.q, H_GRIP_L, _ow, _oq);
+    setALw(w, _ow, _oq, POLE_GUARD);
+  }
+}
+const FING_GIVE = [1, -0.1, 0.1], PALM_GIVE = [0, 1, 0.1];
+const _v3c = [0, 0, 0];
+const H_GRIP_L_INV = new THREE.Matrix4(); let H_GRIP_L_INV_OK = false;
+/** Life's props after the hands (§4.8 carry, §4.18 Emergency Repair): the parcel on the left forearm, the hammer in the left hand. */
+function lifeProps(r, p) {
+  const st = r.st, B = r.bones;
+  if (p.dead) return;
+  if (LV.parcelK > 0.001) {
+    const c = LIFE.carry;
+    // (on the left forearm; the carry only runs with the pistol in hand: a long gun needs the left hand on its forend; it
+    // grows in as the forearm comes up, and rides the forearm out when it is handed over)
+    _m1.copy(B.forearmL.matrixWorld).multiply(_m2.makeTranslation(c.parcel[0], c.parcel[1], c.parcel[2])).multiply(_m3.makeRotationZ((92 + c.tilt) * DEG));
+    showPropAt(r, B.parcel, _m1); B.parcel.scale.setScalar(EO(LV.parcelK));
+  } else if (LV.itemW > 0.05 && LV.item === 'eat' && LV.carry < 0.05) {
+    // (a bite of food in the eating hand: the parcel prop, small; brown like bread or a ration)
+    const fs = LIFE.item.food;
+    _m1.copy(B.handL.matrixWorld).multiply(_m2.makeTranslation(GRIPL[0] + 0.4, GRIPL[1] + 0.2, GRIPL[2] + 0.3));
+    showPropAt(r, B.parcel, _m1); B.parcel.scale.set(fs[0], fs[1], fs[2]).multiplyScalar(ss(0.05, 0.4, LV.itemW));
+  }
+  if (LV.abil === 'emergency_repair' && LV.abilT < LIFE.patch.hide) {
+    if (!H_GRIP_L_INV_OK) { H_GRIP_L_INV.compose(H_GRIP_L.t, H_GRIP_L.q, _gw2.set(1, 1, 1)).invert(); H_GRIP_L_INV_OK = true; }
+    _m1.copy(B.handL.matrixWorld).multiply(H_GRIP_L_INV); _m1.decompose(TOOL.p, TOOL.q, _s1); TOOL.q.multiply(Q_RZ90);
+    _m1.compose(TOOL.p, TOOL.q, _gw2.set(1, 1, 1)); showPropAt(r, B.hammer, _m1);
+  }
+}
+/** The modal pose (§4.18, presentation): the body over the work; the hands are the 'rod' / 'work' tools (toolHands). */
+function modalPose(r, p, F) {
+  const k = LV.modal, MD = LIFE.modal;
+  if (LV.modalKind === 'work') { F[PK.s2] += MD.work.s2 * k; F[PK.head] += MD.work.head * k; F[PK.s1] += 3 * k; }
+  else if (LV.modalKind === 'rod') { F[PK.s2] += 3 * k; F[PK.head] += 6 * k; }
+}
+
 /* ---------------- 9. additives (§4.7): breath ---------------- */
 const FLX = { gunPitch: 0, gunYaw: 0, shieldW: 0, abdL: 0 };
 /** The flinch envelope (§4.15): up over 0.05 s (O), then one damped overshoot that settles by ~0.35 s. */
@@ -1353,10 +2029,13 @@ function flinchEnv(t) {
   return Math.exp(-tp / FL.tau) * Math.cos(2 * Math.PI * FL.hz * tp);
 }
 function additives(r, p) {
-  const st = r.st, P = PB, b = S.breath, BO = IDLE.breathOut;
+  // (M5: Controlled Fire's one deep breath: the breath's depth × (1 + (amp − 1)·the ability's envelope))
+  const st = r.st, P = PB, b = S.breath * (1 + (LIFE.steady.amp - 1) * LV.steadyK), BO = IDLE.breathOut;
   P[PK.s2] += BO.spine2Pitch * b;
   P[PK.head] += BO.headPitch * b;
   P[PK.clavL] += BO.clavElev * b; P[PK.clavR] += BO.clavElev * b;
+  // (the breath sways the hanging arms forward a touch, relaxed)
+  const rx = BO.armFlex * b * (1 - S.aimWb); P[PK.armL] += rx; P[PK.armR] += rx;
   P[PK.breath] = b;
   FLX.gunPitch = FLX.gunYaw = FLX.shieldW = FLX.abdL = 0;
   if (p.dead) return;
@@ -1700,10 +2379,11 @@ function aimGun(r, w, live, out) {
   const st = r.st, B = r.bones, AP = AIM[w] || AIM.pistol, Sk = SOCKETS[w] || SOCKETS.pistol;
   // the gun's yaw stays within reach of the chest (a fast flick: the chest lags the face; a shouldered gun otherwise swung
   // through his body): the long guns ±flickYaw.long of the chest's aim line, the pistol ±flickYaw.pistol
-  const yaw = flickYaw(w, S.faceYaw + st.conv) + (live ? (GC.rYaw + GC.rlGunYaw * GC.rl) * DEG : 0), port = live ? st.port.x : 0, HP = LONG[w] ? TUNE.highPort.long : TUNE.highPort.pistol;
-  const pitch = st.aimPitch + (live ? (GC.rPitch + GC.dryPitch + GC.actPitch) * DEG + HP[1] * DEG * port : 0);
+  // (M5: live, the aimed gun sways a little (faded out round a shot) and comes back off low cover)
+  const yaw = flickYaw(w, S.faceYaw + st.conv) + (live ? (GC.rYaw + GC.rlGunYaw * GC.rl + LV.swayYaw) * DEG : 0), port = live ? st.port.x : 0, HP = LONG[w] ? TUNE.highPort.long : TUNE.highPort.pistol;
+  const pitch = st.aimPitch + (live ? (GC.rPitch + GC.dryPitch + GC.actPitch + LV.swayPitch) * DEG + HP[1] * DEG * port : 0);
   gunQ(yaw, pitch, live ? (GC.gunRoll + GC.cant * ACTIONS.bolt.cantRoll) * DEG : 0, out.q);
-  const back = live ? GC.rBack + GC.actBack - HP[0] * port : 0;
+  const back = live ? GC.rBack + GC.actBack - HP[0] * port - LIFE.cover.low.back * LV.cover * LV.coverLow * (1 - LV.pop) : 0;
   if (LONG[w]) {
     const pk = SOCKETS.spine2.pocketR, CW = TUNE.cheek, dP = clamp(CW.refPitch - st.aimPitch / DEG, -6, 12);
     _gv.set(pk[0] + CW.pocket * dP, pk[1] - HP[2] * port - CW.pocket * dP, pk[2]).applyMatrix4(B.spine2.matrixWorld);
@@ -1807,6 +2487,10 @@ function baseGun(r, w, out) {
   const wA = S.aimW * (LONG[w] ? S.flickK : 1);
   if (wA >= 0.999) return aimGun(r, w, true, out);
   relaxedGun(r, w, out);
+  // (M5) the prowl's two-handed low ready (the pistol; the long guns are at low ready already)
+  if (!LONG[w] && LV.prowl > 0.001) { const PW = LIFE.prowl; gunInA(r, S.faceYaw + r.st.conv, PW.gun[0], PW.gun[1], PW.gun[2], PW.gunPitch, PW.gunYaw, GAIM); blendPose(out, GAIM, LV.prowl, out); }
+  // (M5 fix) the gun check: the pistol to its press-check pose in front of his chest (the right hand follows it)
+  if (!LONG[w] && LV.chk > 0.001) { const GK = FIDGETS.gunCheck; gunInA(r, S.faceYaw, GK.at[0], GK.at[1], GK.at[2], GK.pitch, GK.yaw, GAIM, GK.roll); blendPose(out, GAIM, LV.chk, out); }
   if (wA > 0.001) { aimGun(r, w, true, GAIM); blendPose(out, GAIM, wA, out); }
   return out;
 }
@@ -2177,7 +2861,7 @@ const H_GRIP_L = { t: new THREE.Vector3(H_GRIP.t.x, H_GRIP.t.y, -H_GRIP.t.z), q:
 const Q_RZ90 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 0, 1), Math.PI / 2), Q_RZM90 = Q_RZ90.clone().invert();
 const Q_RYM90 = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -Math.PI / 2);
 const _hX = V(), _hY = V(), _hZ = V(), _hM = new THREE.Matrix4(), _tw = V(), _tw2 = V(), _tq = new THREE.Quaternion(), _tq2 = new THREE.Quaternion(), _tq3 = new THREE.Quaternion();
-const TOOL = { p: V(), q: new THREE.Quaternion() }, GR_ = { p: V(), q: new THREE.Quaternion() }, GL_ = { p: V(), q: new THREE.Quaternion() };
+const TOOL = { p: V(), q: new THREE.Quaternion() }, GR_ = { p: V(), q: new THREE.Quaternion() }, GL_ = { p: V(), q: new THREE.Quaternion() }, _tw3 = V();
 /** A hand's world rotation from its finger direction (the hand's −Y) and palm normal (right hand −Z, left +Z), world vectors. */
 function handQW(f, palm, right, out) {
   _hY.copy(f).normalize().negate(); _hZ.copy(palm); if (right) _hZ.negate();
@@ -2274,6 +2958,9 @@ function actionGun(r, p, held) {
   const st = r.st, w = S.weapon;
   if (st.tool) return null;
   if (!held) return held;
+  // (M5) a modal pose's first half: a long gun goes to the sling (it changes for the tool at the middle); the pistol stays
+  // in the relaxed hand, which takes the tool at the middle
+  if (LV.modal > 0 && !GC.sw && LONG[held]) { stowGun(r, held, GT); blendPose(GN, GT, ES(clamp(LV.modal * 2, 0, 1)), GN); }
   // the repair's in-blend: the gun goes where the hammer will be (it changes hands at the midpoint)
   if (st.rp.on && st.rp.w > 0 && st.rp.kind !== 'phone') { hammerFrames(r, p, (st.rp.t * REPAIR.rate) % 1, GT); blendPose(GN, GT, ES(clamp(st.rp.w / 0.5, 0, 1)), GN); }
   const D = st.dg;
@@ -2319,6 +3006,7 @@ function leftOverride(r, p, held) {
       AL.p.sub(_tw2.set(GRIPL[0], GRIPL[1], GRIPL[2]).applyQuaternion(AL.q)); AL.pole = POLE_REACH;
     }
   }
+  if (!p.dead) lifeLeft(r, p); // (M5: the pockets, the knees, his side, the lapel, the reaches, the phone, the items, the abilities)
   return AL;
 }
 const POLE_AXE_R = [-0.3, -1, 0.7], POLE_HAM_R = [-0.4, -1, 0.5], POLE_AXE_L = [0.1, -1, -0.4], POLE_HAM_L = [0.2, -1, -0.6];
@@ -2326,7 +3014,7 @@ const POLE_AXE_R = [-0.3, -1, 0.7], POLE_HAM_R = [-0.4, -1, 0.5], POLE_AXE_L = [
 function toolHands(r, p) {
   const st = r.st, B = r.bones, tool = st.tool, RP = st.rp, yaw = S.faceYaw;
   // (the repair's out-blend: the hammer comes down to his side, the hands stay on it; the splice's hands let go)
-  const wOut = tool === 'splice' && !RP.on ? clamp(RP.w * 2 - 1, 0, 1) : 1;
+  const wOut = tool === 'splice' && !RP.on ? clamp(RP.w * 2 - 1, 0, 1) : tool === 'rod' || tool === 'work' ? ES(clamp(LV.modal * 2 - 1, 0, 1)) : 1;
   let haveL = false;
   if (tool === 'hammer') {
     hammerFrames(r, p, (RP.t * REPAIR.rate) % 1, GR_);
@@ -2355,6 +3043,29 @@ function toolHands(r, p) {
     workV(yaw, Hx, PH.y, -2.5, _wL); _wL.x += p.x; _wL.z += p.y;
     handQW(workV(yaw, 1, -0.4, 0.2, _hX), workV(yaw, 0, 0, 1, _hZ), false, _qL); _qL.multiply(_tq.setFromAxisAngle(_gv.set(0, 1, 0), -tw));
     _wL.sub(_tw2.set(GRIPL[0], GRIPL[1], GRIPL[2]).applyQuaternion(_qL)); haveL = true;
+  } else if (tool === 'rod') {
+    // (M5) fishing: the rod in both hands, pitched up, swaying gently. Over the blend's second half it rides the right hand
+    // up from where the gun left it (lowered at his side, or off the sling), and back down on the way out
+    const MD = LIFE.modal.rod, sw = MD.sway * Math.sin(2 * Math.PI * MD.hz * st.lf.clock);
+    gunInA(r, yaw, MD.gripR[0], MD.gripR[1], MD.gripR[2], MD.pitch + sw, -6 + 0.5 * sw, GR_);
+    if (wOut < 1) {
+      modalBaseHand(r, _wA, _qA);
+      gunQ(yaw - 6 * DEG, MD.low * DEG, 0, GT3.q); GT3.p.copy(_wA).sub(_tw2.copy(H_GRIP.t).applyQuaternion(GT3.q)); // (the rod lowered, its grip in that hand)
+      travel(r, GT3.p, GT3.q, GR_.p, GR_.q, wOut, _wB, _qB); GR_.p.copy(_wB); GR_.q.copy(_qB); // (never aliased: slerpQuaternions copies qA first)
+    }
+    _m1.compose(GR_.p, GR_.q, _gw2.set(1, 1, 1)); showPropAt(r, B.rod, _m1);
+    onFrame(GR_.p, GR_.q, H_GRIP, _wR, _qR);
+    GL_.q.copy(GR_.q); GL_.p.copy(GR_.p).addScaledVector(_hX.set(1, 0, 0).applyQuaternion(GR_.q), MD.gripL);
+    onFrame(GL_.p, GL_.q, H_GRIP_L, _wL, _qL); haveL = true;
+  } else if (tool === 'work') {
+    // (M5) crafting, cooking: both hands working at the bench, alternately, palms down (the right hand comes there from
+    // where the gun left it)
+    const MD = LIFE.modal.work, ph = 2 * Math.PI * MD.hz * st.lf.clock, o = aimOrigin(r, _tw3), h = MD.hands;
+    workV(yaw, h[0] + MD.amp * Math.sin(ph), h[1] + 0.6 * Math.cos(ph), h[2], _wR, o);
+    handQW(workV(yaw, 1, -0.6, -0.1, _hX), _hZ.set(0, -1, 0), true, _qR); _wR.sub(_tw2.set(0.3, -2.6, -1.1).applyQuaternion(_qR));
+    if (wOut < 1) { modalBaseHand(r, _wA, _qA); travel(r, _wA, _qA, _wR, _qR, wOut, _wB, _qB); _wR.copy(_wB); _qR.copy(_qB); }
+    workV(yaw, h[0] + MD.amp * Math.sin(ph + Math.PI), h[1] + 0.6 * Math.cos(ph + Math.PI), -h[2], _wL, o);
+    handQW(workV(yaw, 1, -0.6, 0.1, _hX), _hZ.set(0, -1, 0), false, _qL); _wL.sub(_tw2.set(0.3, -2.6, 1.1).applyQuaternion(_qL)); haveL = true;
   } else if (tool === 'axe') {
     axeFrames(r, p);
     _m1.compose(TOOL.p, TOOL.q, _gw2.set(1, 1, 1)); showPropAt(r, B.axe, _m1);
@@ -2363,9 +3074,15 @@ function toolHands(r, p) {
   st.lastRw = true; st.lastRwP.copy(_wR); st.lastRwQ.copy(_qR);
   let poleR = tool === 'axe' ? POLE_AXE_R : POLE_HAM_R;
   if (tool === 'hammer' && RP.on) { const h = (RP.t * REPAIR.rate) % 1, k = ss(0.25, 0.65, h) * (1 - ss(0.82, 0.97, h)); poleR = lerp3(POLE_HAM_R, REPAIR.poleApex, k, POLE_TMP); }
-  armIK(r, 'R', _wR, _qR, poleR, wOut, 1, tool === 'axe' ? 40 * DEG : 15 * DEG);
+  // (a modal's right hand stays on: the tool travels from the base hand, above)
+  armIK(r, 'R', _wR, _qR, poleR, tool === 'rod' || tool === 'work' ? 1 : wOut, 1, tool === 'axe' ? 40 * DEG : 15 * DEG);
   const wL = tool === 'hammer' && !RP.on ? clamp(RP.w * 2 - 1, 0, 1) : wOut; // (the plank stays on the opening as he lets go)
   if (haveL && wL > 0.001) armIK(r, 'L', _wL, _qL, tool === 'axe' ? POLE_AXE_L : POLE_HAM_L, wL, 1, tool === 'axe' ? 40 * DEG : 0);
+}
+/** A modal's base right hand (where the gun leaves it and takes it back): the relaxed hand (the pistol), or the slung long gun's grip. */
+function modalBaseHand(r, outP, outQ) {
+  const w = S.weapon;
+  if (LONG[w]) { stowGun(r, w, GT2); onFrame(GT2.p, GT2.q, H_GRIP, outP, outQ); } else { outP.copy(_fkRw); outQ.copy(_fkRq); }
 }
 /** Dead (§4.16): the gun rides the right hand until 0.12 s, then flies off as a physics prop (one bounce, rests flat) until the recovery. */
 const _dg = V(), _dq3 = new THREE.Quaternion();
@@ -2480,9 +3197,13 @@ function weapons(r, p) {
   // (M4) the actions on the gun: the draw back after a tool, the dash's tuck, the strike, the takedown, the flinch; a tool
   // in hand puts it away
   held = actionGun(r, p, held);
+  // (M5) the stroll: the pistol under the coat once the hand has put it there (lifeArms carried it)
+  LV.gunW = !LONG[w] && held === w ? LV.prowl * (1 - S.aimW) : 0;
+  LV.chkW = !LONG[w] && held === w ? LV.chk * (1 - S.aimW) : 0;
+  if (held === 'pistol' && LV.hol >= LIFE.stroll.holHide && S.aimW < 0.05 && !GC.sw && !GC.rl) held = null;
   st.inHand = held;
   const acting = MC.w > 0.5 || TC.w > 0.5 || (st.stateF === 'dodge' && !st.dg.hop);
-  st.gunDriver = !held ? (st.tool ? 'tool' : 'none') : GC.sw ? 'swap' : acting ? 'action' : S.aimW > 0.5 ? 'aim' : LONG[w] ? 'chest' : 'hand';
+  st.gunDriver = !held ? (st.tool ? 'tool' : LV.hol >= LIFE.stroll.holHide ? 'holster' : 'none') : GC.sw ? 'swap' : acting ? 'action' : S.aimW > 0.5 ? 'aim' : LONG[w] ? 'chest' : 'hand';
   if (held) {
     const gb = B[held];
     _m1.compose(GN.p, GN.q, _gw2.set(1, 1, 1)); showPropAt(r, gb, _m1);
@@ -2500,7 +3221,7 @@ function weapons(r, p) {
 function subBones(r, w) {
   const B = r.bones;
   if (w === 'pistol') {
-    const s = B.pistolSlide; s.position.copy(s.userData.bind); s.position.x += GC.slideX;
+    const s = B.pistolSlide; s.position.copy(s.userData.bind); s.position.x += GC.slideX + LV.chkSlide * (1 - S.aimW);
     const m = B.pistolMag; m.position.copy(m.userData.bind);
     if (!GC.magVis) { m.scale.set(0, 0, 0); } else if (GC.magX) m.position.addScaledVector(_gv.set(GA_AX[0], GA_AX[1], 0), GC.magX);
   } else if (w === 'shotgun') { const f = B.shotgunForend; f.position.copy(f.userData.bind); f.position.x += GC.forendX; }
@@ -2554,7 +3275,7 @@ function handsOnGun(r, p, held) {
   } else if (held) {
     wpRight(r, GC.rA, held, GN, _wA, _qA);
     if (GC.rU > 0 && GC.rB !== GC.rA) { wpRight(r, GC.rB, held, GN, _wB, _qB); travel(r, _wA, _qA, _wB, _qB, GC.rU, _wR, _qR); } else { _wR.copy(_wA); _qR.copy(_qA); }
-    rw = !LONG[held] && S.aimW <= 0.001 && GC.rl <= 0 && GC.rU <= 0 && st.port.x <= 0.001 && st.gunDriver !== 'action' && !(st.rp.w > 0) ? 0 : 1;
+    rw = !LONG[held] && S.aimW <= 0.001 && GC.rl <= 0 && GC.rU <= 0 && st.port.x <= 0.001 && st.gunDriver !== 'action' && !(st.rp.w > 0) && LV.gunW <= 0.001 && LV.chkW <= 0.001 && !(LV.modal > 0) ? 0 : 1;
   }
   st.lastRw = rw > 0; if (rw > 0) { st.lastRwP.copy(_wR); st.lastRwQ.copy(_qR); }
   // (the long guns' elbow poles blend relaxed → aimed with the aim weight: a switch at 0.5 popped the elbows mid-raise)
@@ -2570,11 +3291,12 @@ function handsOnGun(r, p, held) {
   // (the grip roll of the gun the hand is on or reaching for: a long gun's stock wrist lets the hand turn 40°)
   const gripW = held || (GC.sw ? st.sw.to : w);
   const rollR = lerp(LONG[gripW] ? TUNE.gripRoll.long : TUNE.gripRoll.pistol, TUNE.gripRoll.knob, GC.rB === WP.KNOB ? GC.rU : 0) * DEG;
-  if (rw > 0) armIK(r, 'R', _wR, _qR, poleR, 1, LONG[held] || GC.sw || st.gunDriver === 'action' ? 1 : Math.max(S.aimW, GC.rl, GC.rU), rollR);
+  if (rw > 0) armIK(r, 'R', _wR, _qR, poleR, 1, LONG[held] || GC.sw || st.gunDriver === 'action' ? 1 : Math.max(S.aimW, GC.rl, GC.rU, LV.gunW, LV.chkW), rollR);
   // the left hand: the support grip (pistol, aimed) or the forend (long guns), the reload's waypoints, the swap's drop
   let lw = 0, lb = WP.FK;
-  if (held === 'pistol') { lb = WP.SUPPORT; lw = S.aimW * S.supW; }
-  else if (held) { lb = WP.FOREND; lw = 1; }
+  // (M5: the prowl's low ready is two-handed; carrying the parcel, the pistol is one-handed)
+  if (held === 'pistol') { lb = WP.SUPPORT; lw = Math.max(S.aimW * S.supW, LV.gunW) * (1 - LV.carry); }
+  else if (held) { lb = WP.FOREND; lw = 1 - (LV.modal > 0 ? ES(clamp(LV.modal * 2, 0, 1)) : 0); } // (off the forend as it goes onto the sling for a modal)
   if (st.port.x > 0.01 && held === 'pistol') lw *= 1 - TUNE.highPort.pistolSupportOff * st.port.x;
   // (M4) the dash: the pistol is tucked one-handed and the free arm thrown back (its FK, dodgePose); a ram's stumble
   // throws the left arm out (its FK)
@@ -2864,7 +3586,8 @@ function fxAnchors(r, p, weapon) {
 const _cq = new THREE.Quaternion();
 function beam(r, p, ctx) {
   const fx = r.fx, dk = ctx && Number.isFinite(ctx.dk) ? ctx.dk : 0, on = dk > 0.25 && !p.dead, k = on ? Math.min(1, (dk - 0.25) * 2) : 0;
-  fx.lensOn = on && fx.valid && fx.aimed;
+  // (the lens glows whenever the beam comes from it: relaxed too, M5 fix)
+  fx.lensOn = on && fx.valid;
   FRANK_U.uLens.value = fx.lensOn ? k : 0;
   FRANK_U.uLensGun.value = (fx.weapon === 'shotgun' ? 253 : fx.weapon === 'rifle' ? 254 : 252) / 255; // (each gun's lens has its id in aSurf.z's lens band)
   const c = r.cone;
@@ -2872,7 +3595,9 @@ function beam(r, p, ctx) {
   c.visible = on && TUNE.enable.cone && fx.valid;
   if (!c.visible) return;
   const a = p.angle || 0;
-  if (fx.aimed) _v1.copy(fx.lightOrigin); else _v1.set(p.x + Math.cos(a) * 14, 46, p.y + Math.sin(a) * 14);
+  // (from the gun's lens, aimed or relaxed (M5 fix: relaxed it came from a fixed point at his chest, a 'chest lamp' through
+  // his forearm); onto the ground ahead either way)
+  _v1.copy(fx.lightOrigin);
   _v2.set(p.x + Math.cos(a) * 200, 0, p.y + Math.sin(a) * 200).sub(_v1).normalize();
   c.position.copy(_v1); c.quaternion.setFromUnitVectors(_v3.set(1, 0, 0), _v2);
   c.material.opacity = 0.09 * k; // (0.05 read as a barely visible grey wedge at night)
@@ -3267,6 +3992,10 @@ export function setFrankDebug(opts = {}) {
   if (opts.resetStats) DBG.resetStats = true; // harness: zero the drift statistics on the next frame
   if ('gizmos' in opts) DBG.gizmos = !!opts.gizmos;
   if ('twistLog' in opts) DBG.twistLog = opts.twistLog; // (harness: an array the swivel clamp logs its misses into)
+  if (opts.fidget) DBG.fidget = opts.fidget; // (harness: play this fidget now, if he may fidget)
+  if (opts.contra) DBG.contra = true; // (harness: switch the contrapposto's loaded side now)
+  if ('idleLife' in opts) TUNE.enable.idleLife = !!opts.idleLife; // (harness: the idle life's isolation switch)
+  if ('perfLog' in opts) DBG.perfLog = opts.perfLog; // (harness: an array every poseFrank's ms is pushed into, §6)
   return { ...DBG };
 }
 
@@ -3399,6 +4128,11 @@ export function frankDebug(r) {
       revive: st.rev < 2 ? round2(st.rev) : null, sinceRevive: round2(Math.min(99, st.sinceRevive)), visible: r.body.visible,
       death: p.dead ? { variant: st.dth.variant, F: round2(st.dth.F / DEG), t: round2(st.deathT), lift: round2(st.dth.lift), gun: st.dth.gun.on ? { rest: st.dth.gun.rest, p: st.dth.gun.p.map(round2) } : null } : null },
     lowest: lowestPoint(r),
+    // M5: life
+    life: { contra: [round2(LV.cw), round2(LV.cS), st.lf.c.phase], glance: [round2(LV.gYaw), round2(LV.gPitch), round2(LV.pW)], fid: LV.fid ? [LV.fid, round2(LV.fu), round2(LV.fw)] : null,
+      stroll: round2(LV.stroll), carry: round2(LV.carry), prowl: round2(LV.prowl), cover: LV.cover > 0 ? [round2(LV.cover), round2(LV.coverLow), round2(LV.pop)] : 0, low: round2(LV.low), hok: round2(LV.hok),
+      reach: LV.reachShort ? [LV.reachShort, round2(LV.reachE)] : null, kneel: round2(LV.kneel), talk: round2(LV.talkW), phone: round2(LV.phone), item: LV.itemW > 0 ? [LV.item, round2(LV.itemW)] : null,
+      abil: LV.abil || null, modal: LV.modal > 0 ? [LV.modalKind, round2(LV.modal)] : null, look: [round2(LV.lookYaw), round2(LV.lookPitch)], eye: LV.eye, chestYaw: round2(LV.chestYaw) },
     reachErr: st.reach.map(round2), debris: st.debrisN, debrisPts: Array.from({ length: Math.min(4, r.debris.count) }, (_, i) => { r.debris.getMatrixAt(i, _m1); return _v1.setFromMatrixPosition(_m1).toArray().map(round2); }), wrist: st.wrist.map((w) => w.map((v) => +v.toFixed(1))), wristMax: round2(st.wristMax), swivels: st.swivels, elbowClamps: st.elbowClamps, shots: st.shots,
     samples: {
       coatFront: P('spine1', 6.05, 41.6, 4.4), coatSide: P('pelvis', -3, 30, 10.6), trouser: P('shinR', 2.7, 6.5, 4.6), shirt: P('spine2', 6.2, 55.0, 0.4),
