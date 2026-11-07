@@ -40,7 +40,7 @@ than using simple beeps:
 loop per mood). See [`audio/README.md`](audio/README.md) for the sound names and
 recommended free sources.
 
-### Frank in 3D (v0.21, in progress)
+### Frank in 3D (v0.21.x, in progress)
 
 In the 3D view Frank is no longer a stick figure: he's a real articulated character, built entirely in code
 (`src/world/frank3d*.js`, no model files).
@@ -59,8 +59,14 @@ In the 3D view Frank is no longer a stick figure: he's a real articulated charac
   one comes out of his pocket, shells go in one at a time, the bolt opens and closes. Swapping draws from the
   holster or swings the long gun off his back (an owned long gun is slung there). At point-blank range he pulls
   the gun back to his chest. The muzzle flash, tracers, flashlight and spent casings all come from the gun itself.
-- **Still to come:** the dodge, melee strikes and takedowns, flinching, a proper death fall, and idle life
-  (fidgets, glances, head turns) are next; until then those moments use simple stand-in poses.
+- **Actions (v0.21.1):** the dodge is a low combat dash (forward or to the side) or a back-hop, with a skid and
+  a puff of dust. Melee is a pistol-whip or a long-gun butt-stroke that lands on the hit-stop frame; takedowns
+  slam down on the target. He flinches toward the side he was hit from. When he falls, he staggers, his knees
+  buckle and he goes down toward the shot, the gun drops and bounces, the coat spreads on the ground, and the
+  defeat screen waits for the fall to finish; he gets back up when he recovers. Repairing, chopping wood and
+  picking things up are acted out too.
+- **Still to come:** idle life (breathing, weight shifts, glances, fidgets, head turns toward the aim) and a final
+  polish pass.
 
 NPCs and attackers still use the old figures for now. The classic 2D view is unchanged.
 
