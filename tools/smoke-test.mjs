@@ -1848,6 +1848,8 @@ if (want('life')) {
   check('Life: the migrated Chapter 3 save loads on the farm, mid-chapter', await C(() => window.__cus.G.map.id === 'farm' && window.__cus.G.s.story.step === 'ch3_fortify' && window.__cus.G.s.version === 3));
 
   // --- Phase B: make it home ---
+  // No random quiet-day events during these counting checks (one could count as a moment by chance); restored below.
+  await C(() => { window.__cusNoEvents = true; });
   await C(() => window.__cus.newGame('normal')); await sleep(500); await skipDialogues(page);
   // Let the intro finish completely before setting the story up: under load a dialogue can still be open after the fixed
   // wait, and then the setup below races the intro.
@@ -1860,6 +1862,7 @@ if (want('life')) {
   check('Life: earning the town\'s trust opens "Make Pine Hollow home" (phase B)', pb.step === 'ch1_life' && /Make Pine Hollow home \(0\/3\)/.test(pb.obj), JSON.stringify(pb));
   await C(() => { window.__cus.G.events.emit('cooked', 'stew'); window.__cus.G.events.emit('cooked', 'stew'); });
   check('Life: the same kind of moment only counts once', await mod('./src/game/life.js', (m) => m.lifeMomentsDone().length) === 1);
+  await C(() => { window.__cusNoEvents = false; });
   await C(() => { window.__cus.G.events.emit('gift', 'dee'); window.__cus.G.events.emit('supper'); });
   await sleep(1200); await skipDialogues(page); await sleep(400); await skipDialogues(page);
   check('Life: three different everyday moments complete the step and the story moves on', (await step(page)) === 'rest');
