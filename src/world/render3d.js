@@ -16,7 +16,6 @@ import { FLASH_ANGLE, FLASH_RANGE } from './shadowcast.js';
 import { facadeOf, LOOKS, ENEMY_LOOK, treeVariant } from './render.js';
 import { seasonId } from '../game/season-core.js';
 import { lowQuality } from '../game/difficulty.js';
-import { vehicleSprite } from './vehicles.js';
 import { critterList, trafficList } from './ambient.js';
 import { homeMapId } from '../game/chapters.js';
 import { frankRig, poseFrank, frankFx, frankTracer, frankDebug, frankPipY, prewarmFrank } from './frank3d.js';
@@ -479,17 +478,75 @@ function quadRig(coat, dark, big = 1, antlers = false) {
   if (antlers) for (const s of [-1, 1]) { const a = new THREE.Mesh(new THREE.BoxGeometry(1.4, 10, 1.4), mat('#d8c8a0')); a.position.set(13 * big, 26 * big, s * 3); a.rotation.x = s * 0.5; body.add(a); }
   return { g, body, legs, torso, mats: [cm], kind: 'quad' };
 }
+/* Cars: real low-poly 3D bodies built from side profiles (rear -> front along +x in profile space), extruded across
+   the width and turned so the front faces local -Z (render3d's convention: rotation.y = -PI/2 drives east). */
+const CAR_SHAPES = {
+  //        length, width, body profile (lower), cabin (glass) profile, roof height, wheel radius, wheel x
+  sedan:  { L: 96, W: 44, body: [[-48, 5], [48, 5], [48, 15], [44, 19], [16, 21], [-28, 21], [-44, 20], [-48, 16]], cab: [[-30, 21], [15, 21], [4, 33], [-22, 33]], wr: 8.5, wx: 30 },
+  muscle: { L: 98, W: 46, body: [[-49, 4.5], [49, 4.5], [49, 12], [45, 16.5], [8, 19], [-34, 19], [-47, 18], [-49, 13.5]], cab: [[-40, 19], [8, 19], [-3, 29.5], [-19, 29.5]], wr: 9, wx: 31, spoiler: true },
+  suv:    { L: 98, W: 46, body: [[-49, 7], [49, 7], [49, 19], [45, 24], [20, 25], [-46, 25], [-49, 22]], cab: [[-46, 25], [19, 25], [10, 41], [-44, 41]], wr: 10, wx: 31 },
+  pickup: { L: 104, W: 46, body: [[-52, 7], [52, 7], [52, 19], [48, 23], [22, 24], [-52, 24]], cab: [[-6, 24], [20, 24], [13, 39], [-4, 39]], wr: 10, wx: 34, bed: true },
+  hatch:  { L: 84, W: 42, body: [[-42, 5], [42, 5], [42, 15], [38, 19], [14, 21], [-40, 21], [-42, 17]], cab: [[-40, 21], [13, 21], [2, 33], [-37, 32]], wr: 8, wx: 26 },
+};
+const carGeoCache = new Map();
+function profileGeo(pts, w, bevel) {
+  const sh = new THREE.Shape(); sh.moveTo(pts[0][0], pts[0][1]); for (let k = 1; k < pts.length; k++) sh.lineTo(pts[k][0], pts[k][1]); sh.closePath();
+  const g = new THREE.ExtrudeGeometry(sh, { depth: w - bevel * 2, bevelEnabled: bevel > 0, bevelThickness: bevel, bevelSize: bevel, bevelSegments: 2, curveSegments: 1 });
+  g.translate(0, 0, -(w - bevel * 2) / 2); g.rotateY(Math.PI / 2); // profile x (rear->front) -> local -Z front... after rotateY(+90): x' = z, z' = -x
+  g.computeVertexNormals();
+  return g;
+}
+// Pull a geometry's sides in toward the centre line as it rises (car bodies curve in: the belt line and the greenhouse).
+function taperX(g, y0, y1, k) {
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) { const y = p.getY(i); const t = Math.min(1, Math.max(0, (y - y0) / (y1 - y0))); p.setX(i, p.getX(i) * (1 - (1 - k) * t * t)); }
+  p.needsUpdate = true; g.computeVertexNormals(); return g;
+}
+function carGeos(model) {
+  const key = CAR_SHAPES[model] ? model : 'sedan';
+  if (carGeoCache.has(key)) return carGeoCache.get(key);
+  const S = CAR_SHAPES[key];
+  const roofY = Math.max(...S.cab.map((q) => q[1]));
+  const roofPts = S.cab.filter((q) => q[1] === roofY).map((q) => q[0]);
+  const r0 = Math.min(...roofPts) + 1, r1 = Math.max(...roofPts) - 1;
+  const out = {
+    S, body: taperX(profileGeo(S.body, S.W, 2.6), S.cab[0][1] - 7, S.cab[0][1] + 1, 0.9),
+    cab: taperX(profileGeo(S.cab, S.W - 5, 1.2), S.cab[0][1], roofY, 0.72),
+    roof: taperX(profileGeo([[r0, roofY - 0.2], [r1, roofY - 0.2], [r1 - 1, roofY + 1.4], [r0 + 1, roofY + 1.4]], (S.W - 5) * 0.74, 0.6), roofY, roofY + 2, 0.92),
+    tire: new THREE.CylinderGeometry(S.wr, S.wr, 7, 16), hub: new THREE.CylinderGeometry(S.wr * 0.55, S.wr * 0.55, 7.4, 10),
+    light: new THREE.BoxGeometry(7, 3, 1.4), grille: new THREE.BoxGeometry(S.W * 0.42, 4, 1), bumper: new THREE.BoxGeometry(S.W - 2, 3.4, 3),
+    bed: S.bed ? new THREE.BoxGeometry(S.W - 9, 1.2, 40) : null, spoiler: S.spoiler ? new THREE.BoxGeometry(S.W - 6, 1.2, 4) : null,
+  };
+  carGeoCache.set(key, out);
+  return out;
+}
 function carRig(model, color, lit) {
   const g = new THREE.Group();
-  const sprite = vehicleSprite(model, color, lit);
-  const tex = new THREE.CanvasTexture(sprite); tex.colorSpace = THREE.SRGBColorSpace;
-  const top = new THREE.Mesh(new THREE.PlaneGeometry(64, 112), new THREE.MeshStandardMaterial({ map: tex, transparent: true, roughness: 0.35, metalness: 0.3, alphaTest: 0.05 }));
-  top.material.userData.own = true; top.material.userData.ownMap = true;
-  top.rotation.x = -Math.PI / 2; top.position.y = 27; top.receiveShadow = true; g.add(top);
-  const bodyM = new THREE.MeshStandardMaterial({ color: col(color), roughness: 0.35, metalness: 0.4 }); bodyM.userData.own = true;
-  const shell = new THREE.Mesh(new THREE.BoxGeometry(44, 20, 92), bodyM); shell.position.y = 15; shell.castShadow = true; g.add(shell);
-  for (const [x, z] of [[-21, -30], [21, -30], [-21, 30], [21, 30]]) { const w = new THREE.Mesh(new THREE.CylinderGeometry(8.5, 8.5, 7, 14), mat('#101012')); w.rotation.z = Math.PI / 2; w.position.set(x, 8.5, z); w.castShadow = true; g.add(w); }
-  return { g, kind: 'car', mats: [bodyM, top.material], key: `${model}|${color}|${lit}` };
+  const C = carGeos(model), S = C.S;
+  const bodyM = new THREE.MeshStandardMaterial({ color: col(color), roughness: 0.28, metalness: 0.55 }); bodyM.userData.own = true;
+  const glassM = mat('#7f97ad', { roughness: 0.06, metalness: 0.85 }); // reflects the sky, so it reads as glass
+  const add = (geo, m, x, y, z, cast = true) => { const o = new THREE.Mesh(geo, m); o.position.set(x, y, z); o.castShadow = cast; o.receiveShadow = true; g.add(o); return o; };
+  add(C.body, bodyM, 0, 0, 0);
+  add(C.cab, glassM, 0, 0, 0);
+  add(C.roof, bodyM, 0, 0, 0);
+  const fz = -S.L / 2, rz = S.L / 2, hw = S.W / 2;
+  const front = S.body[2][1] - 2;
+  // bumpers, grille, lights (emissive when lit)
+  add(C.bumper, mat('#1a1a1c', { roughness: 0.6 }), 0, 7, fz - 0.4, false);
+  add(C.bumper, mat('#1a1a1c', { roughness: 0.6 }), 0, 7, rz + 0.4, false);
+  add(C.grille, mat('#0d0d0e', { roughness: 0.5, metalness: 0.4 }), 0, front - 2, fz - 0.6, false);
+  const headM = new THREE.MeshStandardMaterial({ color: 0xf2f0e6, emissive: lit ? 0xfff2cc : 0x222222, emissiveIntensity: lit ? 2.2 : 0.3, roughness: 0.2 }); headM.userData.own = true;
+  const tailM = new THREE.MeshStandardMaterial({ color: 0x8a1010, emissive: 0xff2a1a, emissiveIntensity: lit ? 1.8 : 0.35, roughness: 0.3 }); tailM.userData.own = true;
+  for (const sx of [-1, 1]) { add(C.light, headM, sx * (hw - 6), front, fz - 0.7, false); add(C.light, tailM, sx * (hw - 6), front, rz + 0.7, false); }
+  // wheels with hubs
+  for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+    const x = sx * (hw - 2), z = sz * S.wx;
+    const t = add(C.tire, mat('#111113', { roughness: 0.9 }), x, S.wr, z); t.rotation.z = Math.PI / 2;
+    const h = add(C.hub, mat('#9aa0a8', { roughness: 0.3, metalness: 0.8 }), x, S.wr, z, false); h.rotation.z = Math.PI / 2;
+  }
+  if (C.bed) add(C.bed, mat('#2a2a2c', { roughness: 0.8 }), 0, S.body[4][1] - 0.6, rz - 24, false);
+  if (C.spoiler) add(C.spoiler, bodyM, 0, S.body[5][1] + 1.6, rz - 3, false);
+  return { g, kind: 'car', mats: [bodyM, headM, tailM], key: `${model}|${color}|${lit}` };
 }
 
 function rigFor(e, make) {
