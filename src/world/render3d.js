@@ -341,8 +341,9 @@ function buildWorld(m) {
   const canopy = { pine: [new THREE.InstancedMesh(pineG, leafMat, n), new THREE.InstancedMesh(pineG, fadeMat, n)], oak: [new THREE.InstancedMesh(oakG, leafMat, n), new THREE.InstancedMesh(oakG, fadeMat, n)], fruit: [new THREE.InstancedMesh(fruitG, leafMat, n), new THREE.InstancedMesh(fruitG, fadeMat, n)] };
   trunk.castShadow = true; trunk.receiveShadow = true; group.add(trunk);
   for (const pair of Object.values(canopy)) { pair[0].castShadow = true; pair[0].receiveShadow = true; group.add(pair[0], pair[1]); }
-  world = { map: m, group, groundTex, groundSrc: m.groundCanvas, roofs, openings, trees, trunk, canopy, season: seasonId(), perB };
-  paintTrees();
+  const veg = buildVegetation(m, group);
+  world = { map: m, group, groundTex, groundSrc: m.groundCanvas, roofs, openings, trees, trunk, canopy, season: seasonId(), perB, veg };
+  paintTrees(); paintVegetation();
   scene.add(group);
 }
 
@@ -372,6 +373,68 @@ const LEAVES = {
   autumn: { oak: ['#c8642a', '#d89a2c', '#a8401f', '#8a8a2a'], pine: ['#23502b', '#1d4426'], fruit: ['#c8862a', '#9a8a30'] },
   winter: { oak: ['#6b5a48', '#5e5040'], pine: ['#3e5e48', '#4c6a56'], fruit: ['#6b5a48'] },
 };
+/* Vegetation: grass tufts that lean in the wind, wildflowers and bushes on open grass (instanced, one draw each).
+   The 2D view draws its own grass; this is the 3D view's. Thinner on Low graphics; none under snow. */
+const GRASS_U = { uTime: { value: 0 } };
+const TUFT_COLS = { spring: ['#5a9238', '#6aa440', '#4c8430'], summer: ['#64923a', '#74a042', '#577f32'], autumn: ['#7a823a', '#8a8240', '#667234'], winter: ['#8a9078', '#7c8270', '#949a84'] };
+const FLOWER_COLS = { spring: ['#f4f0f8', '#f4d84a', '#c88ad8', '#f29ab8'], summer: ['#f4d84a', '#ffffff', '#e86a4a'], autumn: ['#c88a3a', '#b8702a'], winter: null };
+const BUSH_COLS = { spring: ['#3e7a2c', '#4a8a34'], summer: ['#3a6e28', '#46802e'], autumn: ['#6e6a2c', '#8a5a24', '#5a6a28'], winter: ['#5a5e4c', '#4c5244'] };
+function tuftGeometry() {
+  const pos = [];
+  for (let k = 0; k < 6; k++) {
+    const a = (k / 6) * Math.PI * 2 + k * 0.7, lean = 0.25 + (k % 3) * 0.12, h = 7 + (k % 3) * 2.5, w = 1.6;
+    const bx = Math.cos(a) * 1.6, bz = Math.sin(a) * 1.6, px = Math.cos(a + Math.PI / 2) * w, pz = Math.sin(a + Math.PI / 2) * w;
+    pos.push(bx - px, 0, bz - pz, bx + px, 0, bz + pz, bx + Math.cos(a) * h * lean, h, bz + Math.sin(a) * h * lean);
+  }
+  const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.computeVertexNormals();
+  // Grass normals point up so the blades take the sky light like the ground they grow from.
+  const n = g.attributes.normal; for (let i = 0; i < n.count; i++) n.setXYZ(i, 0, 1, 0);
+  return g;
+}
+let tuftGeo = null;
+function buildVegetation(m, group) {
+  const lq = lowQuality();
+  const tufts = [], flowers = [], bushes = [];
+  for (let cy = 0; cy < m.h; cy++) for (let cx = 0; cx < m.w; cx++) {
+    const i = m.idx(cx, cy);
+    if (m.ground[i] !== GR.GRASS || m.solid[i] !== SO.NONE || m.buildingAt(cx * TILE + 16, cy * TILE + 16)) continue;
+    const h = hash2(cx * 7 + 3, cy * 11 + 5);
+    const per = lq ? (h < 0.5 ? 1 : 0) : (h < 0.35 ? 3 : h < 0.85 ? 2 : 1);
+    for (let k = 0; k < per; k++) tufts.push([cx * TILE + 3 + hash2(cx + k * 13, cy * 3 + k) * 26, cy * TILE + 3 + hash2(cx * 3 + k, cy + k * 17) * 26, hash2(cx - k, cy + k * 5)]);
+    if (h > 0.9) flowers.push([cx * TILE + 8 + hash2(cx, cy * 5) * 16, cy * TILE + 8 + hash2(cx * 5, cy) * 16, hash2(cx * 9, cy * 9)]);
+    if (!lq && hash2(cx * 13 + 1, cy * 17 + 2) < 0.022) bushes.push([cx * TILE + 16, cy * TILE + 16, hash2(cx * 19, cy * 23)]);
+  }
+  if (!tuftGeo) tuftGeo = tuftGeometry();
+  const tuftMat = new THREE.MeshLambertMaterial({ side: THREE.DoubleSide });
+  tuftMat.userData.own = true;
+  tuftMat.onBeforeCompile = (sh) => {
+    sh.uniforms.uTime = GRASS_U.uTime;
+    sh.vertexShader = 'uniform float uTime;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+      #ifdef USE_INSTANCING
+        vec3 ip = vec3(instanceMatrix[3][0], 0.0, instanceMatrix[3][2]);
+        float gw = sin(uTime * 1.6 - (ip.x * 0.9 + ip.z * 0.36) * 0.012) * 0.6 + 0.4;
+        transformed.x += gw * position.y * 0.22; transformed.z += gw * position.y * 0.08;
+      #endif`);
+  };
+  const o = new THREE.Object3D();
+  const mk = (geo, mtl, list, place) => { if (!list.length) return null; const im = new THREE.InstancedMesh(geo, mtl, list.length); list.forEach((q, k) => { place(o, q); o.updateMatrix(); im.setMatrixAt(k, o.matrix); }); im.receiveShadow = true; group.add(im); return im; };
+  const tuft = mk(tuftGeo, tuftMat, tufts, (ob, [x, z, r]) => { ob.position.set(x, 0, z); ob.rotation.set(0, r * 6.28, 0); const sc = 0.8 + r * 0.6; ob.scale.set(sc, sc * (0.85 + r * 0.4), sc); });
+  const flowerMat = new THREE.MeshLambertMaterial(); flowerMat.userData.own = true;
+  const flower = mk(new THREE.IcosahedronGeometry(1.7, 0), flowerMat, flowers, (ob, [x, z, r]) => { ob.position.set(x, 8 + r * 3, z); ob.rotation.set(0, 0, 0); ob.scale.setScalar(1); });
+  const bushMat = new THREE.MeshStandardMaterial({ roughness: 0.9, flatShading: true }); bushMat.userData.own = true;
+  const bush = mk(new THREE.DodecahedronGeometry(10, 1), bushMat, bushes, (ob, [x, z, r]) => { ob.position.set(x, 6, z); ob.rotation.set(r * 2, r * 9, r * 4); ob.scale.set(1.1 + r * 0.6, 0.75 + r * 0.3, 1.1 + (1 - r) * 0.5); });
+  if (bush) bush.castShadow = true;
+  return { tuft, flower, bush, tufts, flowers, bushes };
+}
+function paintVegetation() {
+  const v = world && world.veg; if (!v) return;
+  const sid = seasonId(), c = new THREE.Color();
+  const tint = (im, list, cols) => { if (!im) return; im.visible = !!cols; if (!cols) return; list.forEach((q, k) => { c.set(cols[Math.floor(q[2] * 97) % cols.length]); im.setColorAt(k, c); }); if (im.instanceColor) im.instanceColor.needsUpdate = true; };
+  tint(v.tuft, v.tufts, TUFT_COLS[sid]);
+  if (v.tuft && sid === 'winter') v.tuft.visible = false; // under snow
+  tint(v.flower, v.flowers, FLOWER_COLS[sid]);
+  tint(v.bush, v.bushes, BUSH_COLS[sid]);
+}
 function paintTrees() {
   const w = world, sid = seasonId();
   const o = new THREE.Object3D(), c = new THREE.Color();
@@ -883,7 +946,8 @@ export function render3d() {
     if (switched) prewarmFrank(R, scene, camera, !!q);
   }
   if (!world || world.map !== m || world.groundSrc !== m.groundCanvas) buildWorld(m);
-  if (world.season !== seasonId()) { world.season = seasonId(); paintTrees(); }
+  if (world.season !== seasonId()) { world.season = seasonId(); paintTrees(); paintVegetation(); }
+  GRASS_U.uTime.value = G.time;
   const dk = darkness();
   // Camera: an angled view from the south, following the 2D camera (which already leads and clamps).
   const cam = G.camera;
